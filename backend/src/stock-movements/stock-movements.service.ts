@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import {
   CreateStockMovementDto,
   StockMovementType,
@@ -106,24 +107,30 @@ export class StockMovementsService {
       referenceId?: string;
     } = {},
     modules: string[] = [],
-  ) {
+    page = 1,
+    limit = 50,
+  ): Promise<PaginatedResult<any>> {
     this.assertCanUseMovementType(filters.type, modules);
-    return this.prisma.stockMovement.findMany({
-      where: {
-        businessId,
-        ...(filters.itemId ? { itemId: filters.itemId } : {}),
-        ...(filters.locationId ? { locationId: filters.locationId } : {}),
-        ...(this.isStockMovementType(filters.type) ? { type: filters.type } : {}),
-        ...(filters.referenceType ? { referenceType: filters.referenceType } : {}),
-        ...(filters.referenceId ? { referenceId: filters.referenceId } : {}),
-      },
-      include: {
-        item: true,
-        location: true,
-        createdBy: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const where = {
+      businessId,
+      ...(filters.itemId ? { itemId: filters.itemId } : {}),
+      ...(filters.locationId ? { locationId: filters.locationId } : {}),
+      ...(this.isStockMovementType(filters.type) ? { type: filters.type } : {}),
+      ...(filters.referenceType ? { referenceType: filters.referenceType } : {}),
+      ...(filters.referenceId ? { referenceId: filters.referenceId } : {}),
+    };
+    const include = { item: true, location: true, createdBy: true };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.stockMovement.findMany({
+        where,
+        include,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.stockMovement.count({ where }),
+    ]);
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string, businessId: string) {

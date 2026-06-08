@@ -39,8 +39,15 @@ export class RecipesController {
   findAll(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query('active') active?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.recipesService.findAll(currentUser.businessId, active);
+    return this.recipesService.findAll(
+      currentUser.businessId,
+      active,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Get(':id')

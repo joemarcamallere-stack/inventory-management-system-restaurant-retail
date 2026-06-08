@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { LocationsService } from './locations.service';
@@ -32,8 +33,16 @@ export class LocationsController {
   }
 
   @Get()
-  findAll(@CurrentUser() currentUser: AuthenticatedUser) {
-    return this.locationsService.findAll(currentUser.businessId);
+  findAll(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.locationsService.findAll(
+      currentUser.businessId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Get(':id')

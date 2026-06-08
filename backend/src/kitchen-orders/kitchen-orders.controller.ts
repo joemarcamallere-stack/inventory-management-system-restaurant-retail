@@ -42,8 +42,15 @@ export class KitchenOrdersController {
   findAll(
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.kitchenOrdersService.findAll(currentUser.businessId, status);
+    return this.kitchenOrdersService.findAll(
+      currentUser.businessId,
+      status,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
   }
 
   @Get(':id')

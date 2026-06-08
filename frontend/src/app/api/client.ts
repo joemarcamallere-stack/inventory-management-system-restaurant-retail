@@ -1,28 +1,13 @@
-const TOKEN_KEY = 'inventory_access_token';
+type RequestOptions = Omit<RequestInit, 'credentials'>;
 
-type RequestOptions = RequestInit & {
-  token?: string | null;
-};
-
-export function getStoredToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function storeToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearStoredToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
+type PagedResponse<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const token = options.token ?? getStoredToken();
   const response = await fetch(path, {
     ...options,
+    credentials: 'include', // sends the HttpOnly cookie automatically
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });
@@ -39,26 +24,39 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return response.json() as Promise<T>;
 }
 
+export type AuthUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+  businessId: string;
+  modules: string[];
+  lastLogin: string;
+};
+
 export type AuthResponse = {
   accessToken: string;
-  user: {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    status: string;
-    businessId: string;
-    modules: string[];
-    lastLogin: string;
-  };
+  user: AuthUser;
 };
+
+export function storeToken(_token: string) {
+  // Auth is handled by the HttpOnly cookie set by the backend.
+}
+
+export function clearStoredToken() {
+  // Auth is handled by the HttpOnly cookie set by the backend.
+}
 
 export function loginUser(email: string, password: string) {
   return request<AuthResponse>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password }),
-    token: null,
   });
+}
+
+export function logoutUser() {
+  return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
 }
 
 export function getInventory(params?: { search?: string; itemType?: string }) {
@@ -66,7 +64,7 @@ export function getInventory(params?: { search?: string; itemType?: string }) {
   if (params?.search) query.set('search', params.search);
   if (params?.itemType) query.set('itemType', params.itemType);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<any[]>(`/api/inventory${suffix}`);
+  return request<PagedResponse<any>>(`/api/inventory${suffix}`).then((r) => r.data);
 }
 
 export function createInventoryItem(data: unknown) {
@@ -103,7 +101,7 @@ export function getStockMovements(params?: {
   if (params?.referenceType) query.set('referenceType', params.referenceType);
   if (params?.referenceId) query.set('referenceId', params.referenceId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<any[]>(`/api/stock-movements${suffix}`);
+  return request<PagedResponse<any>>(`/api/stock-movements${suffix}`).then((r) => r.data);
 }
 
 export function createStockMovement(data: unknown) {
@@ -117,7 +115,7 @@ export function getRecipes(params?: { active?: boolean }) {
   const query = new URLSearchParams();
   if (params?.active !== undefined) query.set('active', String(params.active));
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<any[]>(`/api/recipes${suffix}`);
+  return request<PagedResponse<any>>(`/api/recipes${suffix}`).then((r) => r.data);
 }
 
 export function createRecipe(data: unknown) {
@@ -144,7 +142,7 @@ export function getKitchenOrders(params?: { status?: 'COMPLETED' | 'VOIDED' }) {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<any[]>(`/api/kitchen-orders${suffix}`);
+  return request<PagedResponse<any>>(`/api/kitchen-orders${suffix}`).then((r) => r.data);
 }
 
 export function completeKitchenOrder(data: unknown) {
@@ -162,7 +160,7 @@ export function voidKitchenOrder(id: string, voidReason: string) {
 }
 
 export function getLocations() {
-  return request<any[]>('/api/locations');
+  return request<PagedResponse<any>>('/api/locations').then((r) => r.data);
 }
 
 export function createLocation(data: unknown) {
@@ -186,7 +184,7 @@ export function deleteLocation(id: string) {
 }
 
 export function getUsers() {
-  return request<any[]>('/api/users');
+  return request<PagedResponse<any>>('/api/users').then((r) => r.data);
 }
 
 export function createUser(data: unknown) {

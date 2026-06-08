@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -7,6 +8,7 @@ async function bootstrap() {
   
   // Set a global prefix for all API routes
   app.setGlobalPrefix('api');
+  app.use(cookieParser());
 
   app.useGlobalPipes(
     new ValidationPipe({

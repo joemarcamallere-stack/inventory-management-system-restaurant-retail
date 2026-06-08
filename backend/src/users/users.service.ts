@@ -1,6 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as bcrypt from 'bcryptjs';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -11,18 +13,31 @@ export class UsersService {
   async create(createUserDto: CreateUserDto, businessId: string) {
     const { password, ...userData } = createUserDto;
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await this.prisma.user.create({
-      data: { ...userData, passwordHash, businessId },
-    });
-    return this.sanitizeUser(user);
+    try {
+      const user = await this.prisma.user.create({
+        data: { ...userData, passwordHash, businessId },
+      });
+      return this.sanitizeUser(user);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A user with this email already exists');
+      }
+      throw error;
+    }
   }
 
-  async findAll(businessId: string) {
-    const users = await this.prisma.user.findMany({
-      where: { businessId },
-      orderBy: { createdAt: 'desc' },
-    });
-    return users.map((user) => this.sanitizeUser(user));
+  async findAll(businessId: string, page = 1, limit = 50): Promise<PaginatedResult<any>> {
+    const where = { businessId };
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+    return paginate(users.map((u) => this.sanitizeUser(u)), total, page, limit);
   }
 
   async findOne(id: string, businessId: string) {

@@ -8,6 +8,7 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
+import { IsFutureDate } from '../../common/validators/is-future-date.validator';
 
 export enum TargetCustomer {
   Male = 'Male',
@@ -96,6 +97,7 @@ export class CreateInventoryDto {
 
   @IsOptional()
   @IsISO8601()
+  @IsFutureDate({ message: 'expiryDate must be a future date' })
   expiryDate?: string;
 
   @IsOptional()

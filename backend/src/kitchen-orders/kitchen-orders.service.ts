@@ -1,9 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { KitchenOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateKitchenOrderDto } from './dto/create-kitchen-order.dto';
 import { VoidKitchenOrderDto } from './dto/void-kitchen-order.dto';
 
@@ -17,6 +20,15 @@ export class KitchenOrdersService {
     completedById?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      // Lock ingredient rows so concurrent orders cannot double-deduct the same stock
+      await tx.$queryRaw`
+        SELECT id FROM "InventoryItem"
+        WHERE id IN (
+          SELECT "itemId" FROM "RecipeIngredient" WHERE "recipeId" = ${createKitchenOrderDto.recipeId}
+        )
+        FOR UPDATE
+      `;
+
       const recipe = await tx.recipe.findFirst({
         where: {
           id: createKitchenOrderDto.recipeId,
@@ -59,16 +71,24 @@ export class KitchenOrdersService {
         );
       }
 
-      const order = await tx.kitchenOrder.create({
-        data: {
-          receiptNo: createKitchenOrderDto.receiptNo,
-          recipeId: recipe.id,
-          quantity: createKitchenOrderDto.quantity,
-          notes: createKitchenOrderDto.notes,
-          businessId,
-          completedById,
-        },
-      });
+      let order;
+      try {
+        order = await tx.kitchenOrder.create({
+          data: {
+            receiptNo: createKitchenOrderDto.receiptNo,
+            recipeId: recipe.id,
+            quantity: createKitchenOrderDto.quantity,
+            notes: createKitchenOrderDto.notes,
+            businessId,
+            completedById,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new ConflictException(`Receipt number "${createKitchenOrderDto.receiptNo}" already exists`);
+        }
+        throw error;
+      }
 
       for (const { ingredient, requiredQuantity } of deductions) {
         const previousQuantity = ingredient.item.quantity;
@@ -102,18 +122,34 @@ export class KitchenOrdersService {
         where: { id: order.id },
         include: this.kitchenOrderInclude,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async findAll(businessId: string, status?: string) {
-    return this.prisma.kitchenOrder.findMany({
-      where: {
-        businessId,
-        ...(status === 'COMPLETED' || status === 'VOIDED' ? { status } : {}),
-      },
-      include: this.kitchenOrderInclude,
-      orderBy: { createdAt: 'desc' },
-    });
+  async findAll(
+    businessId: string,
+    status?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<PaginatedResult<any>> {
+    const validStatus =
+      status === 'COMPLETED' || status === 'VOIDED'
+        ? (status as KitchenOrderStatus)
+        : undefined;
+    const where = {
+      businessId,
+      ...(validStatus ? { status: validStatus } : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.kitchenOrder.findMany({
+        where,
+        include: this.kitchenOrderInclude,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.kitchenOrder.count({ where }),
+    ]);
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string, businessId: string) {
@@ -136,6 +172,15 @@ export class KitchenOrdersService {
       if (order.status === 'VOIDED') {
         throw new BadRequestException('Kitchen order is already voided');
       }
+
+      // Lock the affected inventory rows before restocking
+      await tx.$queryRaw`
+        SELECT "itemId" FROM "StockMovement"
+        WHERE "referenceType" = 'KITCHEN_ORDER'
+          AND "referenceId" = ${order.id}
+          AND "type" = 'RECIPE_CONSUMPTION'
+        FOR UPDATE
+      `;
 
       const sourceMovements = await tx.stockMovement.findMany({
         where: {
@@ -188,7 +233,7 @@ export class KitchenOrdersService {
         where: { id: order.id },
         include: this.kitchenOrderInclude,
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   private readonly kitchenOrderInclude = {

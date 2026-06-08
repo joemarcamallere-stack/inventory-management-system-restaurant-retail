@@ -1,5 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { InventoryItemType } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
@@ -19,10 +21,17 @@ export class InventoryService {
       businessId,
     );
 
-    return this.prisma.inventoryItem.create({
-      data: { ...createInventoryDto, businessId },
-      include: { location: true },
-    });
+    try {
+      return await this.prisma.inventoryItem.create({
+        data: { ...createInventoryDto, businessId },
+        include: { location: true },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('An item with this SKU already exists in your business');
+      }
+      throw error;
+    }
   }
 
   async findAll(
@@ -30,25 +39,34 @@ export class InventoryService {
     search?: string,
     itemType?: string,
     modules: string[] = [],
-  ) {
+    page = 1,
+    limit = 50,
+  ): Promise<PaginatedResult<any>> {
     this.assertCanUseItemType(itemType, modules);
-    return this.prisma.inventoryItem.findMany({
-      where: {
-        businessId,
-        ...(this.isInventoryItemType(itemType) ? { itemType } : {}),
-        ...(search
-          ? {
-              OR: [
-                { name: { contains: search, mode: 'insensitive' } },
-                { category: { contains: search, mode: 'insensitive' } },
-                { subcategory: { contains: search, mode: 'insensitive' } },
-              ],
-            }
-          : {}),
-      },
-      include: { location: true },
-      orderBy: { dateAdded: 'desc' },
-    });
+    const where = {
+      businessId,
+      ...(this.isInventoryItemType(itemType) ? { itemType } : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { category: { contains: search, mode: 'insensitive' as const } },
+              { subcategory: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.inventoryItem.findMany({
+        where,
+        include: { location: true },
+        orderBy: { dateAdded: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.inventoryItem.count({ where }),
+    ]);
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string, businessId: string) {

@@ -41,12 +41,16 @@ export class InventoryController {
     @CurrentUser() currentUser: AuthenticatedUser,
     @Query('search') search?: string,
     @Query('itemType') itemType?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.inventoryService.findAll(
       currentUser.businessId,
       search,
       itemType,
       currentUser.modules,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
     );
   }
 

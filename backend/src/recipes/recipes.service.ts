@@ -1,9 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateRecipeDto, RecipeIngredientDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
@@ -14,37 +17,56 @@ export class RecipesService {
   async create(createRecipeDto: CreateRecipeDto, businessId: string) {
     await this.assertRecipeItemsInBusiness(createRecipeDto, businessId);
 
-    return this.prisma.recipe.create({
-      data: {
-        name: createRecipeDto.name,
-        category: createRecipeDto.category,
-        servings: createRecipeDto.servings,
-        yieldPercentage: createRecipeDto.yieldPercentage ?? 100,
-        prepTimeMinutes: createRecipeDto.prepTimeMinutes,
-        instructions: createRecipeDto.instructions,
-        targetFoodCost: createRecipeDto.targetFoodCost,
-        sellingPrice: createRecipeDto.sellingPrice,
-        isActive: createRecipeDto.isActive ?? true,
-        menuItemId: createRecipeDto.menuItemId,
-        businessId,
-        ingredients: {
-          create: this.mapIngredientInputs(createRecipeDto.ingredients),
+    try {
+      return await this.prisma.recipe.create({
+        data: {
+          name: createRecipeDto.name,
+          category: createRecipeDto.category,
+          servings: createRecipeDto.servings,
+          yieldPercentage: createRecipeDto.yieldPercentage ?? 100,
+          prepTimeMinutes: createRecipeDto.prepTimeMinutes,
+          instructions: createRecipeDto.instructions,
+          targetFoodCost: createRecipeDto.targetFoodCost,
+          sellingPrice: createRecipeDto.sellingPrice,
+          isActive: createRecipeDto.isActive ?? true,
+          menuItemId: createRecipeDto.menuItemId,
+          businessId,
+          ingredients: {
+            create: this.mapIngredientInputs(createRecipeDto.ingredients),
+          },
         },
-      },
-      include: this.recipeInclude,
-    });
+        include: this.recipeInclude,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`A recipe named "${createRecipeDto.name}" already exists`);
+      }
+      throw error;
+    }
   }
 
-  async findAll(businessId: string, active?: string) {
-    return this.prisma.recipe.findMany({
-      where: {
-        businessId,
-        ...(active === 'true' ? { isActive: true } : {}),
-        ...(active === 'false' ? { isActive: false } : {}),
-      },
-      include: this.recipeInclude,
-      orderBy: { name: 'asc' },
-    });
+  async findAll(
+    businessId: string,
+    active?: string,
+    page = 1,
+    limit = 50,
+  ): Promise<PaginatedResult<any>> {
+    const where = {
+      businessId,
+      ...(active === 'true' ? { isActive: true } : {}),
+      ...(active === 'false' ? { isActive: false } : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.recipe.findMany({
+        where,
+        include: this.recipeInclude,
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.recipe.count({ where }),
+    ]);
+    return paginate(data, total, page, limit);
   }
 
   async findOne(id: string, businessId: string) {

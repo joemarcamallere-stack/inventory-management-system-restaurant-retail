@@ -1,4 +1,5 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 
@@ -7,7 +8,25 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  login(@Body() loginDto: LoginDto) {
-    return this.authService.login(loginDto);
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(ThrottlerGuard)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: any) {
+    const result = await this.authService.login(loginDto);
+    res.cookie('access_token', result.accessToken, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 8 * 60 * 60 * 1000,
+    });
+    return result;
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.OK)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  logout(@Res({ passthrough: true }) res: any) {
+    res.clearCookie('access_token');
+    return { message: 'Logged out' };
   }
 }

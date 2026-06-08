@@ -42,17 +42,15 @@ export class StockMovementsController {
     @Query('type') type?: string,
     @Query('referenceType') referenceType?: string,
     @Query('referenceId') referenceId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     return this.stockMovementsService.findAll(
       currentUser.businessId,
-      {
-        itemId,
-        locationId,
-        type,
-        referenceType,
-        referenceId,
-      },
+      { itemId, locationId, type, referenceType, referenceId },
       currentUser.modules,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
     );
   }
 

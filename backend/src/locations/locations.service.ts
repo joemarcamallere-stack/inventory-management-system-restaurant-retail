@@ -1,5 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 
@@ -8,20 +10,36 @@ export class LocationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createLocationDto: CreateLocationDto, businessId: string) {
-    const location = await this.prisma.location.create({
-      data: { ...createLocationDto, businessId },
-    });
-    return this.withItemCount(location, 0);
+    try {
+      const location = await this.prisma.location.create({
+        data: { ...createLocationDto, businessId },
+      });
+      return this.withItemCount(location, 0);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`A location named "${createLocationDto.name}" already exists`);
+      }
+      throw error;
+    }
   }
 
-  async findAll(businessId: string) {
-    const locations = await this.prisma.location.findMany({
-      where: { businessId },
-      include: { _count: { select: { items: true } } },
-      orderBy: { name: 'asc' },
-    });
-    return locations.map((location) =>
-      this.withItemCount(location, location._count.items),
+  async findAll(businessId: string, page = 1, limit = 50): Promise<PaginatedResult<any>> {
+    const where = { businessId };
+    const [locations, total] = await this.prisma.$transaction([
+      this.prisma.location.findMany({
+        where,
+        include: { _count: { select: { items: true } } },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.location.count({ where }),
+    ]);
+    return paginate(
+      locations.map((loc) => this.withItemCount(loc, loc._count.items)),
+      total,
+      page,
+      limit,
     );
   }
 
