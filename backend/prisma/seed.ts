@@ -402,6 +402,138 @@ async function main() {
       },
     ],
   });
+
+  // --- Ukay-only business ---
+  const ukayBusiness = await prisma.business.upsert({
+    where: { name: 'Ukay-Only Demo' },
+    update: { modules: ['UKAY'] },
+    create: { name: 'Ukay-Only Demo', modules: ['UKAY'] },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'admin@ukay.com' },
+    update: {
+      name: 'Ukay Admin',
+      role: 'Admin',
+      status: 'Active',
+      passwordHash: adminPasswordHash,
+      businessId: ukayBusiness.id,
+    },
+    create: {
+      name: 'Ukay Admin',
+      email: 'admin@ukay.com',
+      role: 'Admin',
+      status: 'Active',
+      passwordHash: adminPasswordHash,
+      businessId: ukayBusiness.id,
+    },
+  });
+
+  await prisma.location.upsert({
+    where: { businessId_name: { businessId: ukayBusiness.id, name: 'Main Store' } },
+    update: { address: 'Downtown', manager: 'Ukay Admin', phone: '+63 900 100 0001' },
+    create: {
+      name: 'Main Store',
+      address: 'Downtown',
+      manager: 'Ukay Admin',
+      phone: '+63 900 100 0001',
+      businessId: ukayBusiness.id,
+    },
+  });
+
+  // --- Restaurant-only business ---
+  const restaurantBusiness = await prisma.business.upsert({
+    where: { name: 'Restaurant-Only Demo' },
+    update: { modules: ['RESTAURANT'] },
+    create: { name: 'Restaurant-Only Demo', modules: ['RESTAURANT'] },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'admin@restaurant.com' },
+    update: {
+      name: 'Restaurant Admin',
+      role: 'Admin',
+      status: 'Active',
+      passwordHash: adminPasswordHash,
+      businessId: restaurantBusiness.id,
+    },
+    create: {
+      name: 'Restaurant Admin',
+      email: 'admin@restaurant.com',
+      role: 'Admin',
+      status: 'Active',
+      passwordHash: adminPasswordHash,
+      businessId: restaurantBusiness.id,
+    },
+  });
+
+  const restKitchen = await prisma.location.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Kitchen' } },
+    update: { address: 'Main Kitchen', manager: 'Restaurant Admin', phone: '+63 900 200 0001' },
+    create: {
+      name: 'Kitchen',
+      address: 'Main Kitchen',
+      manager: 'Restaurant Admin',
+      phone: '+63 900 200 0001',
+      businessId: restaurantBusiness.id,
+    },
+  });
+
+  await prisma.location.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Cold Storage' } },
+    update: { address: 'Cold Storage Room', manager: 'Restaurant Admin', phone: '+63 900 200 0002' },
+    create: {
+      name: 'Cold Storage',
+      address: 'Cold Storage Room',
+      manager: 'Restaurant Admin',
+      phone: '+63 900 200 0002',
+      businessId: restaurantBusiness.id,
+    },
+  });
+
+  await prisma.location.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dry Storage' } },
+    update: { address: 'Dry Storage Room', manager: 'Restaurant Admin', phone: '+63 900 200 0003' },
+    create: {
+      name: 'Dry Storage',
+      address: 'Dry Storage Room',
+      manager: 'Restaurant Admin',
+      phone: '+63 900 200 0003',
+      businessId: restaurantBusiness.id,
+    },
+  });
+
+  const restChicken = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-001' } },
+    update: { name: 'Chicken Breast', itemType: 'INGREDIENT', category: 'Meat & Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id },
+    create: { name: 'Chicken Breast', itemType: 'INGREDIENT', sku: 'REST2-ING-001', category: 'Meat & Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const restRice = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-002' } },
+    update: { name: 'White Rice', itemType: 'INGREDIENT', category: 'Grains', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id },
+    create: { name: 'White Rice', itemType: 'INGREDIENT', sku: 'REST2-ING-002', category: 'Grains', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const chickenRiceMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-001' } },
+    update: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', category: 'Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', sku: 'REST2-MENU-001', category: 'Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const chickenRiceRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Chicken Rice Bowl' } },
+    update: { category: 'Main Course', servings: 2, yieldPercentage: 100, prepTimeMinutes: 20, sellingPrice: 150, targetFoodCost: 40, isActive: true, menuItemId: chickenRiceMenu.id, instructions: 'Cook rice, grill chicken, plate together.' },
+    create: { name: 'Chicken Rice Bowl', category: 'Main Course', servings: 2, yieldPercentage: 100, prepTimeMinutes: 20, sellingPrice: 150, targetFoodCost: 40, isActive: true, menuItemId: chickenRiceMenu.id, instructions: 'Cook rice, grill chicken, plate together.', businessId: restaurantBusiness.id },
+  });
+
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: chickenRiceRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: chickenRiceRecipe.id, itemId: restChicken.id, quantity: 0.3, unit: 'kg', unitCost: 185, totalCost: 55.5 },
+      { recipeId: chickenRiceRecipe.id, itemId: restRice.id, quantity: 0.2, unit: 'kg', unitCost: 48, totalCost: 9.6 },
+    ],
+  });
 }
 
 main()

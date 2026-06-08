@@ -1,7 +1,10 @@
 export declare enum UserRole {
     Admin = "Admin",
     Manager = "Manager",
-    Staff = "Staff"
+    Staff = "Staff",
+    Cashier = "Cashier",
+    KitchenStaff = "KitchenStaff",
+    UkayStaff = "UkayStaff"
 }
 export declare enum UserStatus {
     Active = "Active",

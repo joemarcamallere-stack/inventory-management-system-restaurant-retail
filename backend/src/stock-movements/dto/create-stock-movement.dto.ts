@@ -23,18 +23,18 @@ export enum StockMovementType {
 
 export class CreateStockMovementDto {
   @IsUUID()
-  itemId: string;
+  itemId!: string;
 
   @IsOptional()
   @IsUUID()
   locationId?: string;
 
   @IsEnum(StockMovementType)
-  type: StockMovementType;
+  type!: StockMovementType;
 
   @IsNumber()
   @Min(0)
-  quantity: number;
+  quantity!: number;
 
   @IsOptional()
   @IsString()

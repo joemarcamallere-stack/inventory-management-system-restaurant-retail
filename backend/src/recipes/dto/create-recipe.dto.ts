@@ -14,11 +14,11 @@ import { Type } from 'class-transformer';
 
 export class RecipeIngredientDto {
   @IsUUID()
-  itemId: string;
+  itemId!: string;
 
   @IsNumber()
   @Min(0)
-  quantity: number;
+  quantity!: number;
 
   @IsOptional()
   @IsString()
@@ -34,15 +34,15 @@ export class RecipeIngredientDto {
 export class CreateRecipeDto {
   @IsString()
   @MinLength(2)
-  name: string;
+  name!: string;
 
   @IsString()
   @MinLength(2)
-  category: string;
+  category!: string;
 
   @IsNumber()
   @Min(1)
-  servings: number;
+  servings!: number;
 
   @IsOptional()
   @IsNumber()
@@ -79,5 +79,5 @@ export class CreateRecipeDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => RecipeIngredientDto)
-  ingredients: RecipeIngredientDto[];
+  ingredients!: RecipeIngredientDto[];
 }

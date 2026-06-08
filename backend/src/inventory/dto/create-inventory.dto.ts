@@ -33,7 +33,7 @@ export enum InventoryItemType {
 export class CreateInventoryDto {
   @IsString()
   @MinLength(2)
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsEnum(InventoryItemType)
@@ -46,7 +46,7 @@ export class CreateInventoryDto {
 
   @IsString()
   @MinLength(2)
-  category: string;
+  category!: string;
 
   @IsOptional()
   @IsEnum(TargetCustomer)
@@ -68,11 +68,11 @@ export class CreateInventoryDto {
 
   @IsNumber()
   @Min(0)
-  quantity: number;
+  quantity!: number;
 
   @IsNumber()
   @Min(0)
-  price: number;
+  price!: number;
 
   @IsOptional()
   @IsString()
@@ -104,5 +104,5 @@ export class CreateInventoryDto {
   storageTemperature?: string;
 
   @IsUUID()
-  locationId: string;
+  locationId!: string;
 }

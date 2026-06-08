@@ -10,14 +10,14 @@ import {
 export class CreateKitchenOrderDto {
   @IsString()
   @MinLength(1)
-  receiptNo: string;
+  receiptNo!: string;
 
   @IsUUID()
-  recipeId: string;
+  recipeId!: string;
 
   @IsNumber()
   @Min(1)
-  quantity: number;
+  quantity!: number;
 
   @IsOptional()
   @IsString()

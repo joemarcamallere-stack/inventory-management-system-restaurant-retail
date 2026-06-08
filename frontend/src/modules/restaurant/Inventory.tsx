@@ -1,0 +1,640 @@
+import { useState } from "react";
+import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
+import { useLocalStorageState } from "../lib/localStorage";
+import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
+
+type Product = {
+  id: number;
+  name: string;
+  sku: string;
+  category: string;
+  stock: number;
+  maxStock: number;
+  price: number;
+  expiry: string;
+  location?: string;
+  unit: string;
+  storageTemperature?: string;
+};
+
+export function Inventory() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [expandedMainCategories, setExpandedMainCategories] = useState<Set<string>>(new Set());
+  const [expandedSubCategories, setExpandedSubCategories] = useState<Set<string>>(new Set());
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferProduct, setTransferProduct] = useState<Product | null>(null);
+  const [editMainCategory, setEditMainCategory] = useState("");
+  const [editSubCategory, setEditSubCategory] = useState("");
+
+  // Hierarchical category structure
+  const categoryHierarchy = getCategoryHierarchy();
+  const storageTemperatureOptions = getStorageTemperatureOptions();
+
+  const [products, setProducts] = useLocalStorageState<Product[]>("inventory.products", defaultInventoryProducts);
+
+  const locations = ["Cold Storage A", "Cold Storage B", "Refrigerator 1", "Refrigerator 2", "Dry Storage", "Produce Section", "Bakery Shelf", "Freezer"];
+
+  const mainCategories = Object.keys(categoryHierarchy);
+
+  const toggleMainCategory = (category: string) => {
+    const newExpanded = new Set(expandedMainCategories);
+    if (newExpanded.has(category)) {
+      newExpanded.delete(category);
+      // Also collapse all subcategories under this main category
+      const newSubExpanded = new Set(expandedSubCategories);
+      categoryHierarchy[category]?.forEach(sub => {
+        newSubExpanded.delete(`${category} > ${sub}`);
+      });
+      setExpandedSubCategories(newSubExpanded);
+    } else {
+      newExpanded.add(category);
+    }
+    setExpandedMainCategories(newExpanded);
+  };
+
+  const toggleSubCategory = (mainCategory: string, subCategory: string) => {
+    const key = `${mainCategory} > ${subCategory}`;
+    const newExpanded = new Set(expandedSubCategories);
+    if (newExpanded.has(key)) {
+      newExpanded.delete(key);
+    } else {
+      newExpanded.add(key);
+    }
+    setExpandedSubCategories(newExpanded);
+  };
+
+  const getProductsInCategory = (mainCategory: string, subCategory: string) => {
+    return products.filter(p => {
+      const categoryKey = `${mainCategory} > ${subCategory}`;
+      const matchesCategory = p.category === categoryKey;
+      const matchesSearch = searchQuery === "" ||
+        (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (p.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  };
+
+  const getProductCountInSubCategory = (mainCategory: string, subCategory: string) => {
+    return getProductsInCategory(mainCategory, subCategory).length;
+  };
+
+  const getProductCountInMainCategory = (mainCategory: string) => {
+    return products.filter(p => p.category.startsWith(mainCategory + " > ")).length;
+  };
+
+  const handleEdit = (product: Product) => {
+    const [main, sub] = product.category.split(" > ");
+    setEditMainCategory(main);
+    setEditSubCategory(sub);
+    setEditingProduct({ ...product });
+    setShowEditModal(true);
+  };
+
+  const handleEditMainCategoryChange = (newMainCategory: string) => {
+    setEditMainCategory(newMainCategory);
+    setEditSubCategory("");
+  };
+
+  const handleSaveEdit = () => {
+    if (editingProduct && editMainCategory && editSubCategory) {
+      const updatedProduct = {
+        ...editingProduct,
+        category: `${editMainCategory} > ${editSubCategory}`
+      };
+      setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
+      setShowEditModal(false);
+      setEditingProduct(null);
+      setEditMainCategory("");
+      setEditSubCategory("");
+    }
+  };
+
+  const handleTransfer = (product: Product) => {
+    const [main, sub] = product.category.split(" > ");
+    setEditMainCategory(main);
+    setEditSubCategory(sub);
+    setTransferProduct({ ...product });
+    setShowTransferModal(true);
+  };
+
+  const handleSaveTransfer = () => {
+    if (transferProduct && editMainCategory && editSubCategory) {
+      const updatedProduct = {
+        ...transferProduct,
+        category: `${editMainCategory} > ${editSubCategory}`
+      };
+      setProducts(products.map(p => p.id === transferProduct.id ? updatedProduct : p));
+      setShowTransferModal(false);
+      setTransferProduct(null);
+      setEditMainCategory("");
+      setEditSubCategory("");
+    }
+  };
+
+  const handleDelete = (id: number) => {
+    if (confirm("Are you sure you want to delete this item?")) {
+      setProducts(products.filter(p => p.id !== id));
+    }
+  };
+
+  const getStockStatus = (stock: number, maxStock: number) => {
+    if (stock === 0) {
+      return {
+        color: "bg-black text-white border-black",
+        label: "Out of Stock",
+        textColor: "text-black"
+      };
+    }
+
+    const percentage = (stock / maxStock) * 100;
+
+    if (percentage <= 10) {
+      return {
+        color: "bg-red-100 text-red-700 border-red-200",
+        label: "Critical Stock",
+        textColor: "text-red-600"
+      };
+    } else if (percentage <= 30) {
+      return {
+        color: "bg-orange-100 text-orange-700 border-orange-200",
+        label: "Low Stock",
+        textColor: "text-orange-600"
+      };
+    } else if (percentage <= 70) {
+      return {
+        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
+        label: "Medium Stock",
+        textColor: "text-yellow-700"
+      };
+    } else {
+      return {
+        color: "bg-green-100 text-green-700 border-green-200",
+        label: "Healthy Stock",
+        textColor: "text-green-600"
+      };
+    }
+  };
+
+  return (
+    <div className="p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-foreground">Inventory</h1>
+      </div>
+
+      {/* Search Bar */}
+      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border mb-8">
+        <div className="flex items-center gap-2">
+          {/* Search */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-7 pr-2 py-1 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Stats Row */}
+        <div className="grid grid-cols-6 gap-1.5 mt-2 pt-2 border-t border-border">
+          <div className="text-center">
+            <p className="text-sm font-bold text-foreground">{products.length}</p>
+            <p className="text-muted-foreground text-sm">Total</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-black">{products.filter(p => p.stock === 0).length}</p>
+            <p className="text-muted-foreground text-sm">Out</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-red-600">{products.filter(p => {
+              const pct = (p.stock / p.maxStock) * 100;
+              return p.stock > 0 && pct <= 10;
+            }).length}</p>
+            <p className="text-muted-foreground text-sm">Critical</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-orange-600">{products.filter(p => {
+              const pct = (p.stock / p.maxStock) * 100;
+              return pct > 10 && pct <= 30;
+            }).length}</p>
+            <p className="text-muted-foreground text-sm">Low</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-yellow-700">{products.filter(p => {
+              const pct = (p.stock / p.maxStock) * 100;
+              return pct > 30 && pct <= 70;
+            }).length}</p>
+            <p className="text-muted-foreground text-sm">Medium</p>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-bold text-green-600">{products.filter(p => {
+              const pct = (p.stock / p.maxStock) * 100;
+              return pct > 70 && pct <= 100;
+            }).length}</p>
+            <p className="text-muted-foreground text-sm">Healthy</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Folder Tree View */}
+      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden p-2">
+        <div className="space-y-4">
+          {mainCategories.map((mainCategory) => {
+            const isMainExpanded = expandedMainCategories.has(mainCategory);
+            const mainCategoryCount = getProductCountInMainCategory(mainCategory);
+
+            return (
+              <div key={mainCategory} className="border border-border rounded-2xl overflow-hidden">
+                {/* Main Category Folder */}
+                <div
+                  className="flex items-center gap-1.5 p-1.5 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                  onClick={() => toggleMainCategory(mainCategory)}
+                >
+                  {isMainExpanded ? (
+                    <ChevronDown className="w-5 h-5 text-primary flex-shrink-0" />
+                  ) : (
+                    <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  )}
+                  {isMainExpanded ? (
+                    <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
+                  ) : (
+                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                  )}
+                  <span className="font-semibold text-foreground flex-1 text-sm">{mainCategory}</span>
+                  <span className="text-sm text-muted-foreground bg-background px-1.5 py-2 rounded-full">
+                    {mainCategoryCount}
+                  </span>
+                </div>
+
+                {/* Subcategories */}
+                {isMainExpanded && (
+                  <div className="bg-background">
+                    {categoryHierarchy[mainCategory].map((subCategory) => {
+                      const subKey = `${mainCategory} > ${subCategory}`;
+                      const isSubExpanded = expandedSubCategories.has(subKey);
+                      const subCategoryProducts = getProductsInCategory(mainCategory, subCategory);
+                      const subCount = subCategoryProducts.length;
+
+                      if (searchQuery && subCount === 0) return null;
+
+                      return (
+                        <div key={subKey} className="border-l border-primary/20 ml-4">
+                          {/* Subcategory Folder */}
+                          <div
+                            className="flex items-center gap-1.5 p-1 hover:bg-muted/30 cursor-pointer transition-colors"
+                            onClick={() => toggleSubCategory(mainCategory, subCategory)}
+                          >
+                            {isSubExpanded ? (
+                              <ChevronDown className="w-5 h-5 text-primary flex-shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                            )}
+                            {isSubExpanded ? (
+                              <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
+                            ) : (
+                              <Folder className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                            )}
+                            <span className="font-medium text-foreground flex-1 text-sm">{subCategory}</span>
+                            <span className="text-[8px] text-muted-foreground bg-muted px-1 py-2 rounded-full">
+                              {subCount}
+                            </span>
+                          </div>
+
+                          {/* Products in Subcategory */}
+                          {isSubExpanded && (
+                            <div className="ml-3 space-y-4 py-1">
+                              {subCategoryProducts.map((product) => (
+                                <div
+                                  key={product.id}
+                                  className="flex items-center gap-1.5 p-1.5 bg-card border border-border rounded hover:shadow-md transition-all"
+                                >
+                                  <Package className="w-5 h-5 text-primary flex-shrink-0" />
+
+                                  <div className="flex-1 grid grid-cols-6 gap-1.5 items-center">
+                                    <div className="col-span-2">
+                                      <p className="font-medium text-foreground text-sm truncate">{product.name}</p>
+                                      <p className="text-[8px] text-muted-foreground truncate">{product.sku}</p>
+                                    </div>
+
+                                    <div>
+                                      <p className="text-[8px] text-muted-foreground truncate">{product.location}</p>
+                                    </div>
+
+                                    <div>
+                                      <p className={`text-sm font-bold ${getStockStatus(product.stock, product.maxStock).textColor}`}>
+                                        {formatQuantity(product.stock, product.unit)} / {formatQuantity(product.maxStock, product.unit)}
+                                      </p>
+                                    </div>
+
+                                    <div>
+                                      <p className="text-sm font-medium text-foreground">₱{product.price}</p>
+                                    </div>
+
+                                    <div>
+                                      <p className="text-[8px] text-foreground truncate">{product.expiry}</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                    <span className={`px-1 py-2 rounded text-[8px] font-medium border ${getStockStatus(product.stock, product.maxStock).color}`}>
+                                      {getStockStatus(product.stock, product.maxStock).label}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                    <button
+                                      onClick={() => handleTransfer(product)}
+                                      className="p-0.5 hover:bg-blue-50 text-blue-600 rounded transition-colors"
+                                      title="Transfer"
+                                    >
+                                      <ArrowRight className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEdit(product)}
+                                      className="p-0.5 hover:bg-green-50 text-green-600 rounded transition-colors"
+                                      title="Edit"
+                                    >
+                                      <Edit className="w-5 h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDelete(product.id)}
+                                      className="p-0.5 hover:bg-red-50 text-red-600 rounded transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-5 h-5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                              {subCategoryProducts.length === 0 && (
+                                <div className="p-6 text-center text-muted-foreground text-sm">
+                                  No items found
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {mainCategories.length === 0 && (
+          <div className="p-8 text-center text-muted-foreground">
+            No categories available
+          </div>
+        )}
+      </div>
+
+      {/* Edit Modal */}
+      {showEditModal && editingProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+          <div className="bg-card rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-card">
+              <h2 className="text-sm font-bold text-foreground">Edit Food Item</h2>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="p-6 hover:bg-muted rounded-2xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm mb-2 text-foreground">Food Item Name</label>
+                <input
+                  type="text"
+                  value={editingProduct.name}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
+                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm mb-2 text-foreground">SKU</label>
+                <input
+                  type="text"
+                  value={editingProduct.sku}
+                  onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
+                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Main Category</label>
+                  <select
+                    value={editMainCategory}
+                    onChange={(e) => handleEditMainCategoryChange(e.target.value)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  >
+                    <option value="">Select Category</option>
+                    {mainCategories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Sub Category</label>
+                  <select
+                    value={editSubCategory}
+                    onChange={(e) => setEditSubCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    disabled={!editMainCategory}
+                  >
+                    <option value="">Select Subcategory</option>
+                    {editMainCategory && categoryHierarchy[editMainCategory]?.map((subCat) => (
+                      <option key={subCat} value={subCat}>{subCat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Current Stock</label>
+                  <input
+                    type="number"
+                    value={editingProduct.stock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Max Stock</label>
+                  <input
+                    type="number"
+                    value={editingProduct.maxStock}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editingProduct.price}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Expiry Date</label>
+                  <input
+                    type="date"
+                    value={editingProduct.expiry}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, expiry: e.target.value })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Location</label>
+                  <select
+                    value={editingProduct.location}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, location: e.target.value })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  >
+                    {locations.map((loc) => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Storage Temperature</label>
+                  <select
+                    value={editingProduct.storageTemperature || ""}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, storageTemperature: e.target.value })}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  >
+                    <option value="">Select storage temperature</option>
+                    {storageTemperatureOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border flex gap-3 justify-end">
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
+              >
+                <Save className="w-5 h-5" />
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Transfer Modal */}
+      {showTransferModal && transferProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl max-w-md w-full">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-foreground">Transfer Item</h2>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="p-6 hover:bg-muted rounded-2xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-muted/50 rounded-xl p-4">
+                <p className="text-sm text-muted-foreground mb-6">Transferring</p>
+                <p className="font-semibold text-foreground">{transferProduct.name}</p>
+                <p className="text-sm text-muted-foreground mt-2">Current Location: {transferProduct.location}</p>
+              </div>
+
+              <div>
+                <label className="block text-sm mb-2 text-foreground">New Location</label>
+                <select
+                  value={transferProduct.location}
+                  onChange={(e) => setTransferProduct({ ...transferProduct, location: e.target.value })}
+                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                >
+                  {locations.map((loc) => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Main Category</label>
+                  <select
+                    value={editMainCategory}
+                    onChange={(e) => handleEditMainCategoryChange(e.target.value)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  >
+                    {mainCategories.map((cat) => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Sub Category</label>
+                  <select
+                    value={editSubCategory}
+                    onChange={(e) => setEditSubCategory(e.target.value)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    disabled={!editMainCategory}
+                  >
+                    <option value="">Select Subcategory</option>
+                    {editMainCategory && categoryHierarchy[editMainCategory]?.map((subCat) => (
+                      <option key={subCat} value={subCat}>{subCat}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border flex gap-3 justify-end">
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveTransfer}
+                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
+              >
+                <ArrowRight className="w-5 h-5" />
+                Transfer Item
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

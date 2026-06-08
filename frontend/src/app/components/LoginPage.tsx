@@ -116,7 +116,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               {/* Logo and Title */}
               <div className="absolute content-stretch flex gap-[12px] items-center left-[48px] top-[48px] w-[476px] z-[50]" style={{ animation: 'slide-in-left 0.6s ease-out' }}>
                 <div className="relative rounded-full shadow-lg shrink-0 size-[48px] bg-white flex items-center justify-center" style={{ animation: 'pulse-glow 3s ease-in-out infinite' }}>
-                  <p className="text-2xl">👕</p>
+                  <ShoppingBag className="w-7 h-7 text-[#007A5E]" strokeWidth={2.2} />
                 </div>
                 <div className="relative shrink-0 w-[208.65px]">
                   <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
