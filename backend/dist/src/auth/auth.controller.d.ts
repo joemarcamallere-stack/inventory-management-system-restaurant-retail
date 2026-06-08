@@ -3,7 +3,7 @@ import { LoginDto } from './dto/login.dto';
 export declare class AuthController {
     private readonly authService;
     constructor(authService: AuthService);
-    login(loginDto: LoginDto): Promise<{
+    login(loginDto: LoginDto, res: any): Promise<{
         accessToken: string;
         user: {
             modules: import("@prisma/client").$Enums.BusinessModule[];
@@ -18,4 +18,7 @@ export declare class AuthController {
             lastLogin: Date;
         };
     }>;
+    logout(res: any): {
+        message: string;
+    };
 }

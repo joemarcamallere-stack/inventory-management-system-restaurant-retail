@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 export declare class InventoryService {
@@ -40,42 +41,7 @@ export declare class InventoryService {
         dateAdded: Date;
         locationId: string;
     }>;
-    findAll(businessId: string, search?: string, itemType?: string, modules?: string[]): Promise<({
-        location: {
-            id: string;
-            name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            businessId: string;
-            address: string;
-            manager: string;
-            phone: string;
-            itemCount: number;
-        };
-    } & {
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        businessId: string;
-        itemType: import("@prisma/client").$Enums.InventoryItemType;
-        sku: string | null;
-        category: string;
-        targetCustomer: string | null;
-        subcategory: string | null;
-        size: string | null;
-        condition: string | null;
-        quantity: number;
-        price: number;
-        unit: string | null;
-        minStock: number | null;
-        maxStock: number | null;
-        reorderPoint: number | null;
-        expiryDate: Date | null;
-        storageTemperature: string | null;
-        dateAdded: Date;
-        locationId: string;
-    })[]>;
+    findAll(businessId: string, search?: string, itemType?: string, modules?: string[], page?: number, limit?: number): Promise<PaginatedResult<any>>;
     findOne(id: string, businessId: string): Promise<{
         location: {
             id: string;

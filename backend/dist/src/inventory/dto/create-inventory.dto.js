@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CreateInventoryDto = exports.InventoryItemType = exports.InventoryCondition = exports.TargetCustomer = void 0;
 const class_validator_1 = require("class-validator");
+const is_future_date_validator_1 = require("../../common/validators/is-future-date.validator");
 var TargetCustomer;
 (function (TargetCustomer) {
     TargetCustomer["Male"] = "Male";
@@ -132,6 +133,7 @@ __decorate([
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsISO8601)(),
+    (0, is_future_date_validator_1.IsFutureDate)({ message: 'expiryDate must be a future date' }),
     __metadata("design:type", String)
 ], CreateInventoryDto.prototype, "expiryDate", void 0);
 __decorate([

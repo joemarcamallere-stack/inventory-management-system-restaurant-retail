@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
+const throttler_1 = require("@nestjs/throttler");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
 const prisma_module_1 = require("./prisma/prisma.module");
@@ -19,6 +20,11 @@ const auth_module_1 = require("./auth/auth.module");
 const stock_movements_module_1 = require("./stock-movements/stock-movements.module");
 const recipes_module_1 = require("./recipes/recipes.module");
 const kitchen_orders_module_1 = require("./kitchen-orders/kitchen-orders.module");
+const suppliers_module_1 = require("./suppliers/suppliers.module");
+const purchase_orders_module_1 = require("./purchase-orders/purchase-orders.module");
+const transfers_module_1 = require("./transfers/transfers.module");
+const sales_module_1 = require("./sales/sales.module");
+const bundles_module_1 = require("./bundles/bundles.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -26,6 +32,7 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             config_1.ConfigModule.forRoot({ isGlobal: true }),
+            throttler_1.ThrottlerModule.forRoot([{ ttl: 60000, limit: 10 }]),
             prisma_module_1.PrismaModule,
             auth_module_1.AuthModule,
             users_module_1.UsersModule,
@@ -34,6 +41,11 @@ exports.AppModule = AppModule = __decorate([
             stock_movements_module_1.StockMovementsModule,
             recipes_module_1.RecipesModule,
             kitchen_orders_module_1.KitchenOrdersModule,
+            suppliers_module_1.SuppliersModule,
+            purchase_orders_module_1.PurchaseOrdersModule,
+            transfers_module_1.TransfersModule,
+            sales_module_1.SalesModule,
+            bundles_module_1.BundlesModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

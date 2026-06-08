@@ -29,8 +29,8 @@ let InventoryController = class InventoryController {
     create(createInventoryDto, currentUser) {
         return this.inventoryService.create(createInventoryDto, currentUser.businessId, currentUser.modules);
     }
-    findAll(currentUser, search, itemType) {
-        return this.inventoryService.findAll(currentUser.businessId, search, itemType, currentUser.modules);
+    findAll(currentUser, search, itemType, page, limit) {
+        return this.inventoryService.findAll(currentUser.businessId, search, itemType, currentUser.modules, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 50);
     }
     getStats(currentUser) {
         return this.inventoryService.getStats(currentUser.businessId);
@@ -59,8 +59,10 @@ __decorate([
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('search')),
     __param(2, (0, common_1.Query)('itemType')),
+    __param(3, (0, common_1.Query)('page')),
+    __param(4, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "findAll", null);
 __decorate([

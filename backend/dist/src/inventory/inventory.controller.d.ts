@@ -41,42 +41,7 @@ export declare class InventoryController {
         dateAdded: Date;
         locationId: string;
     }>;
-    findAll(currentUser: AuthenticatedUser, search?: string, itemType?: string): Promise<({
-        location: {
-            id: string;
-            name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            businessId: string;
-            address: string;
-            manager: string;
-            phone: string;
-            itemCount: number;
-        };
-    } & {
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        businessId: string;
-        itemType: import("@prisma/client").$Enums.InventoryItemType;
-        sku: string | null;
-        category: string;
-        targetCustomer: string | null;
-        subcategory: string | null;
-        size: string | null;
-        condition: string | null;
-        quantity: number;
-        price: number;
-        unit: string | null;
-        minStock: number | null;
-        maxStock: number | null;
-        reorderPoint: number | null;
-        expiryDate: Date | null;
-        storageTemperature: string | null;
-        dateAdded: Date;
-        locationId: string;
-    })[]>;
+    findAll(currentUser: AuthenticatedUser, search?: string, itemType?: string, page?: string, limit?: string): Promise<import("../common/dto/pagination.dto").PaginatedResult<any>>;
     getStats(currentUser: AuthenticatedUser): Promise<{
         totalItems: number;
         availableStock: number;

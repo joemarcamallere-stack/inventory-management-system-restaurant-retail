@@ -45,7 +45,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.UsersService = void 0;
 const common_1 = require("@nestjs/common");
 const bcrypt = __importStar(require("bcryptjs"));
+const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let UsersService = class UsersService {
     prisma;
     constructor(prisma) {
@@ -54,17 +56,31 @@ let UsersService = class UsersService {
     async create(createUserDto, businessId) {
         const { password, ...userData } = createUserDto;
         const passwordHash = await bcrypt.hash(password, 12);
-        const user = await this.prisma.user.create({
-            data: { ...userData, passwordHash, businessId },
-        });
-        return this.sanitizeUser(user);
+        try {
+            const user = await this.prisma.user.create({
+                data: { ...userData, passwordHash, businessId },
+            });
+            return this.sanitizeUser(user);
+        }
+        catch (error) {
+            if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                throw new common_1.ConflictException('A user with this email already exists');
+            }
+            throw error;
+        }
     }
-    async findAll(businessId) {
-        const users = await this.prisma.user.findMany({
-            where: { businessId },
-            orderBy: { createdAt: 'desc' },
-        });
-        return users.map((user) => this.sanitizeUser(user));
+    async findAll(businessId, page = 1, limit = 50) {
+        const where = { businessId };
+        const [users, total] = await this.prisma.$transaction([
+            this.prisma.user.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            this.prisma.user.count({ where }),
+        ]);
+        return (0, pagination_dto_1.paginate)(users.map((u) => this.sanitizeUser(u)), total, page, limit);
     }
     async findOne(id, businessId) {
         const user = await this.prisma.user.findFirst({

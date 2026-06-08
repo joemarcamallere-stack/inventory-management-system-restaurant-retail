@@ -17,18 +17,7 @@ export declare class UsersController {
         businessId: string;
         lastLogin: Date;
     }, "passwordHash">>;
-    findAll(currentUser: AuthenticatedUser): Promise<Omit<{
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        email: string;
-        passwordHash: string;
-        role: string;
-        status: string;
-        businessId: string;
-        lastLogin: Date;
-    }, "passwordHash">[]>;
+    findAll(currentUser: AuthenticatedUser, page?: string, limit?: string): Promise<import("../common/dto/pagination.dto").PaginatedResult<any>>;
     findOne(id: string, currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
         name: string;

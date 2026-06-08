@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 export declare class RecipesService {
@@ -81,83 +82,7 @@ export declare class RecipesService {
         isActive: boolean;
         menuItemId: string | null;
     }>;
-    findAll(businessId: string, active?: string): Promise<({
-        menuItem: {
-            id: string;
-            name: string;
-            createdAt: Date;
-            updatedAt: Date;
-            businessId: string;
-            itemType: import("@prisma/client").$Enums.InventoryItemType;
-            sku: string | null;
-            category: string;
-            targetCustomer: string | null;
-            subcategory: string | null;
-            size: string | null;
-            condition: string | null;
-            quantity: number;
-            price: number;
-            unit: string | null;
-            minStock: number | null;
-            maxStock: number | null;
-            reorderPoint: number | null;
-            expiryDate: Date | null;
-            storageTemperature: string | null;
-            dateAdded: Date;
-            locationId: string;
-        } | null;
-        ingredients: ({
-            item: {
-                id: string;
-                name: string;
-                createdAt: Date;
-                updatedAt: Date;
-                businessId: string;
-                itemType: import("@prisma/client").$Enums.InventoryItemType;
-                sku: string | null;
-                category: string;
-                targetCustomer: string | null;
-                subcategory: string | null;
-                size: string | null;
-                condition: string | null;
-                quantity: number;
-                price: number;
-                unit: string | null;
-                minStock: number | null;
-                maxStock: number | null;
-                reorderPoint: number | null;
-                expiryDate: Date | null;
-                storageTemperature: string | null;
-                dateAdded: Date;
-                locationId: string;
-            };
-        } & {
-            id: string;
-            createdAt: Date;
-            updatedAt: Date;
-            quantity: number;
-            unit: string | null;
-            recipeId: string;
-            itemId: string;
-            unitCost: number | null;
-            totalCost: number | null;
-        })[];
-    } & {
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        businessId: string;
-        category: string;
-        servings: number;
-        yieldPercentage: number;
-        prepTimeMinutes: number | null;
-        instructions: string | null;
-        targetFoodCost: number | null;
-        sellingPrice: number | null;
-        isActive: boolean;
-        menuItemId: string | null;
-    })[]>;
+    findAll(businessId: string, active?: string, page?: number, limit?: number): Promise<PaginatedResult<any>>;
     findOne(id: string, businessId: string): Promise<{
         menuItem: {
             id: string;

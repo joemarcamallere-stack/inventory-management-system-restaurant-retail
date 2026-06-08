@@ -22,9 +22,11 @@ let JwtAuthGuard = class JwtAuthGuard {
     }
     async canActivate(context) {
         const request = context.switchToHttp().getRequest();
+        const cookieToken = request.cookies?.access_token;
         const authHeader = request.headers.authorization;
-        const [type, token] = authHeader?.split(' ') ?? [];
-        if (type !== 'Bearer' || !token) {
+        const [type, bearerToken] = authHeader?.split(' ') ?? [];
+        const token = cookieToken ?? (type === 'Bearer' ? bearerToken : undefined);
+        if (!token) {
             throw new common_1.UnauthorizedException('Missing access token');
         }
         try {

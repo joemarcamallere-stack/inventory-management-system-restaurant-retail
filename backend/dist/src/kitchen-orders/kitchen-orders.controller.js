@@ -31,8 +31,8 @@ let KitchenOrdersController = class KitchenOrdersController {
     complete(createKitchenOrderDto, currentUser) {
         return this.kitchenOrdersService.complete(createKitchenOrderDto, currentUser.businessId, currentUser.id);
     }
-    findAll(currentUser, status) {
-        return this.kitchenOrdersService.findAll(currentUser.businessId, status);
+    findAll(currentUser, status, page, limit) {
+        return this.kitchenOrdersService.findAll(currentUser.businessId, status, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 50);
     }
     findOne(id, currentUser) {
         return this.kitchenOrdersService.findOne(id, currentUser.businessId);
@@ -54,8 +54,10 @@ __decorate([
     (0, common_1.Get)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('status')),
+    __param(2, (0, common_1.Query)('page')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", void 0)
 ], KitchenOrdersController.prototype, "findAll", null);
 __decorate([
