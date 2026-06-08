@@ -1,26 +1,39 @@
-﻿import { useState, useMemo } from 'react';
-import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, XCircle, Clock, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
-import type { Transfer, Adjustment, InventoryItem, Location } from '../../app/utils/generateSampleData';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
+import {
+  getTransfers,
+  createTransfer,
+  dispatchTransfer,
+  completeTransfer,
+  cancelTransfer,
+  getLocations,
+  getInventory,
+  createStockMovement,
+} from '../../app/api/client';
+
+const TRANSFER_STATUS_LABEL: Record<string, string> = {
+  PENDING: 'Pending',
+  IN_TRANSIT: 'In Transit',
+  COMPLETED: 'Completed',
+  CANCELLED: 'Cancelled',
+};
+
+const TRANSFER_STATUS_CLASS: Record<string, string> = {
+  PENDING: 'bg-[#fff4e6] text-[#FFA500]',
+  IN_TRANSIT: 'bg-[#E0F2F2] text-[#007A5E]',
+  COMPLETED: 'bg-[#E0F5F1] text-[#008967]',
+  CANCELLED: 'bg-[#ffe2e2] text-[#E7000B]',
+};
 
 export default function TransfersView({
-  transfers,
-  setTransfers,
-  adjustments,
-  setAdjustments,
-  inventory,
-  setInventory,
-  locations,
-  currentUser
+  currentUser,
 }: {
-  transfers: Transfer[];
-  setTransfers: React.Dispatch<React.SetStateAction<Transfer[]>>;
-  adjustments: Adjustment[];
-  setAdjustments: React.Dispatch<React.SetStateAction<Adjustment[]>>;
-  inventory: InventoryItem[];
-  setInventory: React.Dispatch<React.SetStateAction<InventoryItem[]>>;
-  locations: Location[];
   currentUser: { email: string; role: string } | null;
 }) {
+  const [transfers, setTransfers] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'transfers' | 'adjustments'>('transfers');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
@@ -29,293 +42,185 @@ export default function TransfersView({
   const [itemSearchTerm, setItemSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
+  const [saving, setSaving] = useState(false);
 
   const [transferForm, setTransferForm] = useState({
-    fromLocation: '',
-    toLocation: '',
-    items: [] as { itemId: string; name: string; quantity: number; maxQuantity: number }[],
-    notes: ''
+    fromLocationId: '',
+    toLocationId: '',
+    notes: '',
+    items: [] as { inventoryItemId: string; name: string; quantity: number; maxQuantity: number; locationId: string }[],
   });
 
   const [adjustmentForm, setAdjustmentForm] = useState({
     type: 'Add' as 'Add' | 'Remove' | 'Damage' | 'Lost' | 'Found' | 'Recount',
     reason: '',
-    items: [] as { itemId: string; name: string; quantityChange: number; location: string; currentQuantity: number }[]
+    items: [] as { inventoryItemId: string; name: string; quantityChange: number; locationId: string; currentQuantity: number }[],
   });
 
-  const [selectedTransfer, setSelectedTransfer] = useState<Transfer | null>(null);
-
-  const filteredTransfers = transfers.filter(transfer =>
-    filterStatus === 'all' || transfer.status === filterStatus
-  );
-
-  const filteredAdjustments = adjustments.filter(adj =>
-    filterStatus === 'all' || adj.status === filterStatus
-  );
-
-  // Get available items for transfer from source location
-  const availableItemsForTransfer = inventory.filter(
-    item => item.location === transferForm.fromLocation && item.quantity > 0 && item.condition !== 'Damaged'
-  );
-
-  // Get all inventory items for adjustments
-  const availableItemsForAdjustment = inventory.filter(item => item.quantity > 0 || adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found');
-
-  // Toggle functions for item selector
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [transfersData, locationsData, inventoryData] = await Promise.all([
+        getTransfers(),
+        getLocations(),
+        getInventory({ itemType: 'UKAY_ITEM' }),
+      ]);
+      setTransfers(transfersData);
+      setLocations(locationsData);
+      setInventory(inventoryData);
+    } catch (err) {
+      console.error('Failed to load transfers data', err);
+    } finally {
+      setLoading(false);
     }
-    setExpandedCategories(newExpanded);
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const availableItemsForTransfer = inventory.filter(
+    (item: any) => item.locationId === transferForm.fromLocationId && item.quantity > 0
+  );
+
+  const availableItemsForAdjustment = inventory.filter(
+    (item: any) => item.quantity > 0 || adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found'
+  );
+
+  const toggleCategory = (cat: string) => {
+    const n = new Set(expandedCategories);
+    n.has(cat) ? n.delete(cat) : n.add(cat);
+    setExpandedCategories(n);
   };
 
   const toggleSubcategory = (key: string) => {
-    const newExpanded = new Set(expandedSubcategories);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedSubcategories(newExpanded);
+    const n = new Set(expandedSubcategories);
+    n.has(key) ? n.delete(key) : n.add(key);
+    setExpandedSubcategories(n);
   };
 
-  // Group available items by category and subcategory
   const groupedAvailableItems = useMemo(() => {
     const items = activeTab === 'transfers' ? availableItemsForTransfer : availableItemsForAdjustment;
-
-    // Filter by search term
-    const filtered = items.filter(item =>
+    const filtered = items.filter((item: any) =>
       item.name.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
-      item.category.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
-      item.subcategory.toLowerCase().includes(itemSearchTerm.toLowerCase())
+      item.category.toLowerCase().includes(itemSearchTerm.toLowerCase())
     );
-
-    const grouped: {
-      [category: string]: {
-        [subcategory: string]: InventoryItem[]
-      }
-    } = {};
-
-    filtered.forEach((item: InventoryItem) => {
-      if (!grouped[item.category]) {
-        grouped[item.category] = {};
-      }
-      if (!grouped[item.category][item.subcategory]) {
-        grouped[item.category][item.subcategory] = [];
-      }
-      grouped[item.category][item.subcategory].push(item);
+    const grouped: Record<string, Record<string, any[]>> = {};
+    filtered.forEach((item: any) => {
+      const cat = item.category || 'Uncategorized';
+      const sub = item.subcategory || 'Other';
+      if (!grouped[cat]) grouped[cat] = {};
+      if (!grouped[cat][sub]) grouped[cat][sub] = [];
+      grouped[cat][sub].push(item);
     });
-
     return grouped;
   }, [availableItemsForTransfer, availableItemsForAdjustment, activeTab, itemSearchTerm]);
 
-  const handleAddItemToTransfer = (item: InventoryItem) => {
-    const existing = transferForm.items.find(i => i.itemId === item.id);
-    if (!existing) {
-      setTransferForm({
-        ...transferForm,
-        items: [...transferForm.items, {
-          itemId: item.id,
-          name: item.name,
-          quantity: 1,
-          maxQuantity: item.quantity
-        }]
-      });
+  const handleAddItemToTransfer = (item: any) => {
+    if (!transferForm.items.find(i => i.inventoryItemId === item.id)) {
+      setTransferForm({ ...transferForm, items: [...transferForm.items, { inventoryItemId: item.id, name: item.name, quantity: 1, maxQuantity: item.quantity, locationId: item.locationId }] });
     }
     setShowItemSelector(false);
   };
 
-  const handleRemoveItemFromTransfer = (itemId: string) => {
-    setTransferForm({
-      ...transferForm,
-      items: transferForm.items.filter(i => i.itemId !== itemId)
-    });
+  const handleAddItemToAdjustment = (item: any) => {
+    if (!adjustmentForm.items.find(i => i.inventoryItemId === item.id)) {
+      const qChange = (adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found') ? 1 : -1;
+      setAdjustmentForm({ ...adjustmentForm, items: [...adjustmentForm.items, { inventoryItemId: item.id, name: item.name, quantityChange: qChange, locationId: item.locationId, currentQuantity: item.quantity }] });
+    }
+    setShowItemSelector(false);
   };
 
-  const handleUpdateTransferItemQuantity = (itemId: string, quantity: number) => {
-    setTransferForm({
-      ...transferForm,
-      items: transferForm.items.map(i =>
-        i.itemId === itemId ? { ...i, quantity: Math.min(Math.max(1, quantity), i.maxQuantity) } : i
-      )
-    });
-  };
-
-  const handleCreateTransfer = () => {
-    if (!transferForm.fromLocation || !transferForm.toLocation || transferForm.items.length === 0) {
-      alert('Please fill in all required fields and add at least one item');
+  const handleCreateTransfer = async () => {
+    if (!transferForm.fromLocationId || !transferForm.toLocationId || transferForm.items.length === 0) {
+      alert('Fill in all required fields and add at least one item');
       return;
     }
-
-    if (transferForm.fromLocation === transferForm.toLocation) {
-      alert('Source and destination locations must be different');
-      return;
+    setSaving(true);
+    try {
+      await createTransfer({
+        fromLocationId: transferForm.fromLocationId,
+        toLocationId: transferForm.toLocationId,
+        notes: transferForm.notes || undefined,
+        items: transferForm.items.map(i => ({ inventoryItemId: i.inventoryItemId, quantity: i.quantity })),
+      });
+      setTransferForm({ fromLocationId: '', toLocationId: '', notes: '', items: [] });
+      setShowTransferModal(false);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to create transfer');
+    } finally {
+      setSaving(false);
     }
-
-    const newTransfer: Transfer = {
-      id: Date.now().toString(),
-      transferNumber: `TR-2026-${String(transfers.length + 1).padStart(3, '0')}`,
-      fromLocation: transferForm.fromLocation,
-      toLocation: transferForm.toLocation,
-      date: new Date().toISOString().split('T')[0],
-      status: 'Pending',
-      items: transferForm.items.map(i => ({ itemId: i.itemId, name: i.name, quantity: i.quantity })),
-      createdBy: currentUser?.email.split('@')[0] || 'User',
-      notes: transferForm.notes
-    };
-
-    setTransfers([newTransfer, ...transfers]);
-    setTransferForm({ fromLocation: '', toLocation: '', items: [], notes: '' });
-    setShowTransferModal(false);
   };
 
-  const handleCompleteTransfer = (transfer: Transfer) => {
-    if (!confirm('Complete this transfer? Items will be moved to the destination location.')) return;
-
-    // Update inventory
-    const updatedInventory = [...inventory];
-
-    transfer.items.forEach(transferItem => {
-      // Remove from source location
-      const sourceItemIndex = updatedInventory.findIndex(
-        inv => inv.id === transferItem.itemId && inv.location === transfer.fromLocation
-      );
-      if (sourceItemIndex !== -1) {
-        updatedInventory[sourceItemIndex] = {
-          ...updatedInventory[sourceItemIndex],
-          quantity: updatedInventory[sourceItemIndex].quantity - transferItem.quantity
-        };
-      }
-
-      // Add to destination location (check if item already exists there)
-      const destItemIndex = updatedInventory.findIndex(
-        inv => inv.name === transferItem.name && inv.location === transfer.toLocation
-      );
-
-      if (destItemIndex !== -1) {
-        updatedInventory[destItemIndex] = {
-          ...updatedInventory[destItemIndex],
-          quantity: updatedInventory[destItemIndex].quantity + transferItem.quantity
-        };
-      } else {
-        const sourceItem = inventory.find(inv => inv.id === transferItem.itemId);
-        if (sourceItem) {
-          updatedInventory.push({
-            ...sourceItem,
-            id: `${sourceItem.id}-${transfer.toLocation}-${Date.now()}`,
-            location: transfer.toLocation,
-            quantity: transferItem.quantity,
-            dateAdded: new Date().toISOString().split('T')[0]
-          });
-        }
-      }
-    });
-
-    setInventory(updatedInventory.filter(item => item.quantity > 0));
-    setTransfers(transfers.map(t =>
-      t.id === transfer.id ? { ...t, status: 'Completed' } : t
-    ));
+  const handleDispatch = async (id: string) => {
+    try {
+      await dispatchTransfer(id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to dispatch transfer');
+    }
   };
 
-  const handleCancelTransfer = (transferId: string) => {
+  const handleComplete = async (id: string) => {
+    if (!confirm('Complete this transfer? Stock will be moved.')) return;
+    try {
+      await completeTransfer(id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to complete transfer');
+    }
+  };
+
+  const handleCancel = async (id: string) => {
     if (!confirm('Cancel this transfer?')) return;
-    setTransfers(transfers.map(t =>
-      t.id === transferId ? { ...t, status: 'Cancelled' } : t
-    ));
-  };
-
-  const handleStartTransit = (transferId: string) => {
-    setTransfers(transfers.map(t =>
-      t.id === transferId ? { ...t, status: 'In Transit' } : t
-    ));
-  };
-
-  // Adjustment handlers
-  const handleAddItemToAdjustment = (item: InventoryItem) => {
-    const existing = adjustmentForm.items.find(i => i.itemId === item.id);
-    if (!existing) {
-      setAdjustmentForm({
-        ...adjustmentForm,
-        items: [...adjustmentForm.items, {
-          itemId: item.id,
-          name: item.name,
-          quantityChange: adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found' ? 1 : -1,
-          location: item.location,
-          currentQuantity: item.quantity
-        }]
-      });
+    try {
+      await cancelTransfer(id);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to cancel transfer');
     }
-    setShowItemSelector(false);
   };
 
-  const handleRemoveItemFromAdjustment = (itemId: string) => {
-    setAdjustmentForm({
-      ...adjustmentForm,
-      items: adjustmentForm.items.filter(i => i.itemId !== itemId)
-    });
-  };
-
-  const handleUpdateAdjustmentQuantity = (itemId: string, quantityChange: number) => {
-    setAdjustmentForm({
-      ...adjustmentForm,
-      items: adjustmentForm.items.map(i =>
-        i.itemId === itemId ? { ...i, quantityChange } : i
-      )
-    });
-  };
-
-  const handleCreateAdjustment = () => {
+  const handleCreateAdjustment = async () => {
     if (!adjustmentForm.reason || adjustmentForm.items.length === 0) {
       alert('Please provide a reason and add at least one item');
       return;
     }
-
-    const newAdjustment: Adjustment = {
-      id: Date.now().toString(),
-      adjustmentNumber: `ADJ-2026-${String(adjustments.length + 1).padStart(3, '0')}`,
-      date: new Date().toISOString().split('T')[0],
-      type: adjustmentForm.type,
-      reason: adjustmentForm.reason,
-      items: adjustmentForm.items,
-      createdBy: currentUser?.email.split('@')[0] || 'User',
-      status: 'Pending'
-    };
-
-    setAdjustments([newAdjustment, ...adjustments]);
-    setAdjustmentForm({ type: 'Add', reason: '', items: [] });
-    setShowAdjustmentModal(false);
-  };
-
-  const handleApproveAdjustment = (adjustment: Adjustment) => {
-    if (!confirm('Approve this adjustment? Inventory will be updated.')) return;
-
-    // Update inventory
-    const updatedInventory = inventory.map(item => {
-      const adjItem = adjustment.items.find(ai => ai.itemId === item.id);
-      if (adjItem) {
-        return {
-          ...item,
-          quantity: Math.max(0, item.quantity + adjItem.quantityChange)
-        };
+    setSaving(true);
+    try {
+      for (const adjItem of adjustmentForm.items) {
+        const invItem = inventory.find((i: any) => i.id === adjItem.inventoryItemId);
+        if (!invItem) continue;
+        const qty = Math.abs(adjItem.quantityChange);
+        if (qty === 0) continue;
+        const movType = adjItem.quantityChange >= 0 ? 'STOCK_IN' : 'STOCK_OUT';
+        await createStockMovement({
+          type: 'ADJUSTMENT',
+          quantity: qty,
+          previousQuantity: invItem.quantity,
+          newQuantity: Math.max(0, invItem.quantity + adjItem.quantityChange),
+          unit: invItem.unit,
+          reason: adjustmentForm.reason,
+          notes: `${adjustmentForm.type} adjustment`,
+          itemId: invItem.id,
+          locationId: invItem.locationId,
+        });
       }
-      return item;
-    });
-
-    setInventory(updatedInventory.filter(item => item.quantity > 0));
-    setAdjustments(adjustments.map(adj =>
-      adj.id === adjustment.id ? { ...adj, status: 'Approved' } : adj
-    ));
+      setAdjustmentForm({ type: 'Add', reason: '', items: [] });
+      setShowAdjustmentModal(false);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to create adjustment');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleRejectAdjustment = (adjustmentId: string) => {
-    if (!confirm('Reject this adjustment?')) return;
-    setAdjustments(adjustments.map(adj =>
-      adj.id === adjustmentId ? { ...adj, status: 'Rejected' } : adj
-    ));
-  };
+  const filteredTransfers = transfers.filter(t => filterStatus === 'all' || t.status === filterStatus);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64 text-[#6b7280]">Loading transfers…</div>;
+  }
 
   return (
     <div>
@@ -325,17 +230,11 @@ export default function TransfersView({
           <p className="text-[#323B42] text-[14px] mt-1">Manage inventory transfers and stock adjustments</p>
         </div>
         <div className="flex gap-3">
-          <button
-            onClick={() => setShowTransferModal(true)}
-            className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#008967] transition-colors"
-          >
+          <button onClick={() => setShowTransferModal(true)} className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#008967]">
             <ArrowRightLeft className="size-4" />
             New Transfer
           </button>
-          <button
-            onClick={() => setShowAdjustmentModal(true)}
-            className="bg-[#008967] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#007A5E] transition-colors"
-          >
+          <button onClick={() => setShowAdjustmentModal(true)} className="bg-[#008967] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#007A5E]">
             <Plus className="size-4" />
             New Adjustment
           </button>
@@ -345,81 +244,39 @@ export default function TransfersView({
       {/* Tabs */}
       <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] overflow-hidden mb-4">
         <div className="flex border-b border-[rgba(0,0,0,0.1)]">
-          <button
-            onClick={() => setActiveTab('transfers')}
-            className={`flex-1 px-6 py-3 text-[16px] font-medium transition-colors relative ${
-              activeTab === 'transfers'
-                ? 'bg-[#E0F2F2] text-[#007A5E]'
-                : 'text-[#323B42] hover:bg-[#F8FAFB]'
-            }`}
-          >
-            {activeTab === 'transfers' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#007A5E]" />
-            )}
+          <button onClick={() => setActiveTab('transfers')} className={`flex-1 px-6 py-3 text-[16px] font-medium transition-colors relative ${activeTab === 'transfers' ? 'bg-[#E0F2F2] text-[#007A5E]' : 'text-[#323B42] hover:bg-[#F8FAFB]'}`}>
+            {activeTab === 'transfers' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#007A5E]" />}
             <div className="flex items-center justify-center gap-2">
               <ArrowRightLeft className="size-5" />
               Transfers
-              <span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${
-                activeTab === 'transfers'
-                  ? 'bg-[#007A5E] text-white'
-                  : 'bg-[#F8FAFB] text-[#323B42]'
-              }`}>
-                {transfers.length}
-              </span>
+              <span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${activeTab === 'transfers' ? 'bg-[#007A5E] text-white' : 'bg-[#F8FAFB] text-[#323B42]'}`}>{transfers.length}</span>
             </div>
           </button>
-          <button
-            onClick={() => setActiveTab('adjustments')}
-            className={`flex-1 px-6 py-3 text-[16px] font-medium transition-colors relative ${
-              activeTab === 'adjustments'
-                ? 'bg-[#E0F5F1] text-[#008967]'
-                : 'text-[#323B42] hover:bg-[#F8FAFB]'
-            }`}
-          >
-            {activeTab === 'adjustments' && (
-              <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#008967]" />
-            )}
+          <button onClick={() => setActiveTab('adjustments')} className={`flex-1 px-6 py-3 text-[16px] font-medium transition-colors relative ${activeTab === 'adjustments' ? 'bg-[#E0F5F1] text-[#008967]' : 'text-[#323B42] hover:bg-[#F8FAFB]'}`}>
+            {activeTab === 'adjustments' && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#008967]" />}
             <div className="flex items-center justify-center gap-2">
               <RefreshCw className="size-5" />
               Adjustments
-              <span className={`px-2 py-0.5 rounded text-[12px] font-semibold ${
-                activeTab === 'adjustments'
-                  ? 'bg-[#008967] text-white'
-                  : 'bg-[#F8FAFB] text-[#323B42]'
-              }`}>
-                {adjustments.length}
-              </span>
             </div>
           </button>
         </div>
       </div>
 
-      {/* Filter */}
-      <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] mb-4 p-4">
-        <div className="flex items-center gap-2">
-          <label className="text-[14px] text-[#323B42] font-medium">Status:</label>
-          <select
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-[6px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]"
-          >
-            <option value="all">All</option>
-            <option value="Pending">Pending</option>
-            {activeTab === 'transfers' ? (
-              <>
-                <option value="In Transit">In Transit</option>
-                <option value="Completed">Completed</option>
-                <option value="Cancelled">Cancelled</option>
-              </>
-            ) : (
-              <>
-                <option value="Approved">Approved</option>
-                <option value="Rejected">Rejected</option>
-              </>
-            )}
-          </select>
+      {/* Filter — only for transfers tab */}
+      {activeTab === 'transfers' && (
+        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] mb-4 p-4">
+          <div className="flex items-center gap-2">
+            <label className="text-[14px] text-[#323B42] font-medium">Status:</label>
+            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-[6px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]">
+              <option value="all">All</option>
+              <option value="PENDING">Pending</option>
+              <option value="IN_TRANSIT">In Transit</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
       {activeTab === 'transfers' ? (
@@ -431,34 +288,27 @@ export default function TransfersView({
               <p className="text-[14px] text-[#6b7280] mt-1">Create a transfer to move items between locations</p>
             </div>
           ) : (
-            filteredTransfers.map(transfer => (
+            filteredTransfers.map((transfer: any) => (
               <div key={transfer.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="text-[18px] font-semibold text-[#323B42]">{transfer.transferNumber}</h3>
-                      <span className={`px-3 py-1 rounded text-[12px] font-semibold ${
-                        transfer.status === 'Pending' ? 'bg-[#fff4e6] text-[#FFA500]' :
-                        transfer.status === 'In Transit' ? 'bg-[#E0F2F2] text-[#007A5E]' :
-                        transfer.status === 'Completed' ? 'bg-[#E0F5F1] text-[#008967]' :
-                        'bg-[#ffe2e2] text-[#E7000B]'
-                      }`}>
-                        {transfer.status}
+                      <span className={`px-3 py-1 rounded text-[12px] font-semibold ${TRANSFER_STATUS_CLASS[transfer.status] ?? ''}`}>
+                        {TRANSFER_STATUS_LABEL[transfer.status] ?? transfer.status}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-[14px] text-[#323B42] mb-2">
-                      <span className="font-medium text-[#323B42]">{transfer.fromLocation}</span>
+                      <span className="font-medium">{transfer.fromLocation?.name}</span>
                       <ArrowRightLeft className="size-4 text-[#007A5E]" />
-                      <span className="font-medium text-[#323B42]">{transfer.toLocation}</span>
+                      <span className="font-medium">{transfer.toLocation?.name}</span>
                     </div>
-                    <p className="text-[13px] text-[#6b7280]">Date: {transfer.date}</p>
-                    <p className="text-[13px] text-[#6b7280]">Created by: {transfer.createdBy}</p>
-                    {transfer.notes && (
-                      <p className="text-[13px] text-[#6b7280] mt-1">Notes: {transfer.notes}</p>
-                    )}
+                    <p className="text-[13px] text-[#6b7280]">Date: {new Date(transfer.createdAt).toLocaleDateString()}</p>
+                    {transfer.createdBy && <p className="text-[13px] text-[#6b7280]">Created by: {transfer.createdBy.name}</p>}
+                    {transfer.notes && <p className="text-[13px] text-[#6b7280] mt-1">Notes: {transfer.notes}</p>}
                   </div>
                   <div className="text-right">
-                    <p className="text-[20px] font-bold text-[#323B42]">{transfer.items.length}</p>
+                    <p className="text-[20px] font-bold text-[#323B42]">{transfer.items?.length}</p>
                     <p className="text-[12px] text-[#6b7280]">items</p>
                   </div>
                 </div>
@@ -466,39 +316,33 @@ export default function TransfersView({
                 <div className="border-t border-[rgba(0,0,0,0.1)] pt-4 mb-4">
                   <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
                   <div className="space-y-2">
-                    {transfer.items.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] rounded px-3 py-2">
-                        <span className="text-[#323B42] font-medium">{item.name}</span>
+                    {transfer.items?.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] rounded px-3 py-2">
+                        <span className="text-[#323B42] font-medium">{item.inventoryItem?.name ?? item.inventoryItemId}</span>
                         <span className="text-[#323B42]">Qty: <span className="font-semibold text-[#007A5E]">{item.quantity}</span></span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {transfer.status === 'Pending' && (
+                {transfer.status === 'PENDING' && (
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleStartTransit(transfer.id)}
-                      className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
-                    >
+                    <button onClick={() => handleDispatch(transfer.id)} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967]">
                       Start Transit
                     </button>
-                    <button
-                      onClick={() => handleCancelTransfer(transfer.id)}
-                      className="flex-1 px-4 py-2 border border-[#E7000B] text-[#E7000B] rounded-[8px] text-[14px] font-medium hover:bg-[#ffe2e2] transition-colors"
-                    >
+                    <button onClick={() => handleCancel(transfer.id)} className="flex-1 px-4 py-2 border border-[#E7000B] text-[#E7000B] rounded-[8px] text-[14px] font-medium hover:bg-[#ffe2e2]">
                       Cancel
                     </button>
                   </div>
                 )}
 
-                {transfer.status === 'In Transit' && (
+                {transfer.status === 'IN_TRANSIT' && (
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => handleCompleteTransfer(transfer)}
-                      className="flex-1 px-4 py-2 bg-[#008967] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#007A5E] transition-colors"
-                    >
+                    <button onClick={() => handleComplete(transfer.id)} className="flex-1 px-4 py-2 bg-[#008967] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#007A5E]">
                       Complete Transfer
+                    </button>
+                    <button onClick={() => handleCancel(transfer.id)} className="flex-1 px-4 py-2 border border-[#E7000B] text-[#E7000B] rounded-[8px] text-[14px] font-medium hover:bg-[#ffe2e2]">
+                      Cancel
                     </button>
                   </div>
                 )}
@@ -507,81 +351,10 @@ export default function TransfersView({
           )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {filteredAdjustments.length === 0 ? (
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-12 text-center">
-              <RefreshCw className="size-16 text-[#d1d5dc] mx-auto mb-4" />
-              <p className="text-[16px] text-[#323B42] font-medium">No adjustments found</p>
-              <p className="text-[14px] text-[#6b7280] mt-1">Create an adjustment to modify inventory levels</p>
-            </div>
-          ) : (
-            filteredAdjustments.map(adjustment => (
-              <div key={adjustment.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-[18px] font-semibold text-[#323B42]">{adjustment.adjustmentNumber}</h3>
-                      <span className={`px-3 py-1 rounded text-[12px] font-semibold ${
-                        adjustment.type === 'Add' || adjustment.type === 'Found' ? 'bg-[#E0F5F1] text-[#008967]' :
-                        adjustment.type === 'Damage' || adjustment.type === 'Lost' ? 'bg-[#ffe2e2] text-[#E7000B]' :
-                        'bg-[#fff4e6] text-[#FFA500]'
-                      }`}>
-                        {adjustment.type}
-                      </span>
-                      <span className={`px-3 py-1 rounded text-[12px] font-semibold ${
-                        adjustment.status === 'Pending' ? 'bg-[#fff4e6] text-[#FFA500]' :
-                        adjustment.status === 'Approved' ? 'bg-[#E0F5F1] text-[#008967]' :
-                        'bg-[#ffe2e2] text-[#E7000B]'
-                      }`}>
-                        {adjustment.status}
-                      </span>
-                    </div>
-                    <p className="text-[13px] text-[#6b7280]">Date: {adjustment.date}</p>
-                    <p className="text-[13px] text-[#6b7280]">Created by: {adjustment.createdBy}</p>
-                    <p className="text-[13px] text-[#323B42] mt-1 font-medium">Reason: {adjustment.reason}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[20px] font-bold text-[#323B42]">{adjustment.items.length}</p>
-                    <p className="text-[12px] text-[#6b7280]">items</p>
-                  </div>
-                </div>
-
-                <div className="border-t border-[rgba(0,0,0,0.1)] pt-4 mb-4">
-                  <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
-                  <div className="space-y-2">
-                    {adjustment.items.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] rounded px-3 py-2">
-                        <div className="flex-1">
-                          <p className="text-[#323B42] font-medium">{item.name}</p>
-                          <p className="text-[#6b7280] text-[12px]">{item.location}</p>
-                        </div>
-                        <span className={`font-semibold ${item.quantityChange >= 0 ? 'text-[#008967]' : 'text-[#E7000B]'}`}>
-                          {item.quantityChange >= 0 ? '+' : ''}{item.quantityChange}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {adjustment.status === 'Pending' && currentUser?.role === 'Admin' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleApproveAdjustment(adjustment)}
-                      className="flex-1 px-4 py-2 bg-[#008967] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#007A5E] transition-colors"
-                    >
-                      Approve
-                    </button>
-                    <button
-                      onClick={() => handleRejectAdjustment(adjustment.id)}
-                      className="flex-1 px-4 py-2 border border-[#E7000B] text-[#E7000B] rounded-[8px] text-[14px] font-medium hover:bg-[#ffe2e2] transition-colors"
-                    >
-                      Reject
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-12 text-center">
+          <RefreshCw className="size-12 text-[#d1d5dc] mx-auto mb-3" />
+          <p className="text-[16px] text-[#323B42] font-medium">Stock Adjustments</p>
+          <p className="text-[14px] text-[#6b7280] mt-1">Use "New Adjustment" to record stock changes. Each adjustment is immediately saved as a stock movement.</p>
         </div>
       )}
 
@@ -591,108 +364,55 @@ export default function TransfersView({
           <div className="bg-white rounded-[14px] p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-[24px] font-bold text-[#323B42]">Create Transfer</h3>
-              <button
-                onClick={() => {
-                  setShowTransferModal(false);
-                  setTransferForm({ fromLocation: '', toLocation: '', items: [], notes: '' });
-                }}
-                className="p-2 hover:bg-[#F8FAFB] rounded"
-              >
+              <button onClick={() => { setShowTransferModal(false); setTransferForm({ fromLocationId: '', toLocationId: '', notes: '', items: [] }); }} className="p-2 hover:bg-[#F8FAFB] rounded">
                 <X className="size-5 text-[#323B42]" />
               </button>
             </div>
-
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">From Location *</label>
-                  <select
-                    value={transferForm.fromLocation}
-                    onChange={(e) => setTransferForm({ ...transferForm, fromLocation: e.target.value, items: [] })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  >
+                  <select value={transferForm.fromLocationId} onChange={(e) => setTransferForm({ ...transferForm, fromLocationId: e.target.value, items: [] })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="">Select location</option>
-                    {locations.map(loc => (
-                      <option key={loc.id} value={loc.name}>{loc.name}</option>
-                    ))}
+                    {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">To Location *</label>
-                  <select
-                    value={transferForm.toLocation}
-                    onChange={(e) => setTransferForm({ ...transferForm, toLocation: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  >
+                  <select value={transferForm.toLocationId} onChange={(e) => setTransferForm({ ...transferForm, toLocationId: e.target.value })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="">Select location</option>
-                    {locations.filter(loc => loc.name !== transferForm.fromLocation).map(loc => (
-                      <option key={loc.id} value={loc.name}>{loc.name}</option>
-                    ))}
+                    {locations.filter((loc: any) => loc.id !== transferForm.fromLocationId).map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                   </select>
                 </div>
               </div>
-
               <div>
                 <label className="block text-[14px] font-medium text-[#323B42] mb-2">Notes</label>
-                <textarea
-                  value={transferForm.notes}
-                  onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  rows={2}
-                  placeholder="Optional notes about this transfer"
-                />
+                <textarea value={transferForm.notes} onChange={(e) => setTransferForm({ ...transferForm, notes: e.target.value })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" rows={2} placeholder="Optional notes" />
               </div>
-
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-[16px] font-semibold text-[#323B42]">Items ({transferForm.items.length})</h4>
-                  <button
-                    onClick={() => setShowItemSelector(true)}
-                    disabled={!transferForm.fromLocation}
-                    className="px-3 py-1.5 bg-[#007A5E] text-white rounded-[6px] text-[13px] font-medium flex items-center gap-2 hover:bg-[#008967] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <Plus className="size-3" />
-                    Add Item
+                  <button onClick={() => setShowItemSelector(true)} disabled={!transferForm.fromLocationId} className="px-3 py-1.5 bg-[#007A5E] text-white rounded-[6px] text-[13px] font-medium flex items-center gap-2 hover:bg-[#008967] disabled:opacity-50 disabled:cursor-not-allowed">
+                    <Plus className="size-3" /> Add Item
                   </button>
                 </div>
-
                 {transferForm.items.length === 0 ? (
-                  <p className="text-[14px] text-[#6b7280] text-center py-8">
-                    {!transferForm.fromLocation ? 'Select a source location first' : 'No items added yet'}
-                  </p>
+                  <p className="text-[14px] text-[#6b7280] text-center py-8">{!transferForm.fromLocationId ? 'Select a source location first' : 'No items added yet'}</p>
                 ) : (
                   <div className="space-y-2">
                     {transferForm.items.map((item) => (
-                      <div key={item.itemId} className="flex items-center justify-between bg-[#F8FAFB] rounded-[8px] px-4 py-3">
+                      <div key={item.inventoryItemId} className="flex items-center justify-between bg-[#F8FAFB] rounded-[8px] px-4 py-3">
                         <div className="flex-1">
                           <p className="text-[14px] font-medium text-[#323B42]">{item.name}</p>
                           <p className="text-[12px] text-[#6b7280]">Available: {item.maxQuantity}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleUpdateTransferItemQuantity(item.itemId, item.quantity - 1)}
-                              className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]"
-                            >
-                              -
-                            </button>
-                            <span className="text-[14px] font-medium text-[#323B42] w-8 text-center">
-                              {item.quantity}
-                            </span>
-                            <button
-                              onClick={() => handleUpdateTransferItemQuantity(item.itemId, item.quantity + 1)}
-                              className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]"
-                              disabled={item.quantity >= item.maxQuantity}
-                            >
-                              +
-                            </button>
+                            <button onClick={() => setTransferForm({ ...transferForm, items: transferForm.items.map(i => i.inventoryItemId === item.inventoryItemId ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i) })} className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]">-</button>
+                            <span className="text-[14px] font-medium text-[#323B42] w-8 text-center">{item.quantity}</span>
+                            <button onClick={() => setTransferForm({ ...transferForm, items: transferForm.items.map(i => i.inventoryItemId === item.inventoryItemId ? { ...i, quantity: Math.min(i.maxQuantity, i.quantity + 1) } : i) })} disabled={item.quantity >= item.maxQuantity} className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]">+</button>
                           </div>
-                          <button
-                            onClick={() => handleRemoveItemFromTransfer(item.itemId)}
-                            className="text-[#E7000B] hover:bg-[#ffe2e2] p-1 rounded"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
+                          <button onClick={() => setTransferForm({ ...transferForm, items: transferForm.items.filter(i => i.inventoryItemId !== item.inventoryItemId) })} className="text-[#E7000B] hover:bg-[#ffe2e2] p-1 rounded"><Trash2 className="size-4" /></button>
                         </div>
                       </div>
                     ))}
@@ -700,23 +420,9 @@ export default function TransfersView({
                 )}
               </div>
             </div>
-
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowTransferModal(false);
-                  setTransferForm({ fromLocation: '', toLocation: '', items: [], notes: '' });
-                }}
-                className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateTransfer}
-                className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
-              >
-                Create Transfer
-              </button>
+              <button onClick={() => { setShowTransferModal(false); setTransferForm({ fromLocationId: '', toLocationId: '', notes: '', items: [] }); }} className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB]">Cancel</button>
+              <button onClick={handleCreateTransfer} disabled={saving} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] disabled:opacity-60">{saving ? 'Creating…' : 'Create Transfer'}</button>
             </div>
           </div>
         </div>
@@ -728,26 +434,13 @@ export default function TransfersView({
           <div className="bg-white rounded-[14px] p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-[24px] font-bold text-[#323B42]">Create Adjustment</h3>
-              <button
-                onClick={() => {
-                  setShowAdjustmentModal(false);
-                  setAdjustmentForm({ type: 'Add', reason: '', items: [] });
-                }}
-                className="p-2 hover:bg-[#F8FAFB] rounded"
-              >
-                <X className="size-5 text-[#323B42]" />
-              </button>
+              <button onClick={() => { setShowAdjustmentModal(false); setAdjustmentForm({ type: 'Add', reason: '', items: [] }); }} className="p-2 hover:bg-[#F8FAFB] rounded"><X className="size-5 text-[#323B42]" /></button>
             </div>
-
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Adjustment Type *</label>
-                  <select
-                    value={adjustmentForm.type}
-                    onChange={(e) => setAdjustmentForm({ ...adjustmentForm, type: e.target.value as any, items: [] })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  >
+                  <select value={adjustmentForm.type} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, type: e.target.value as any, items: [] })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="Add">Add Stock</option>
                     <option value="Remove">Remove Stock</option>
                     <option value="Damage">Damage</option>
@@ -758,66 +451,31 @@ export default function TransfersView({
                 </div>
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Reason *</label>
-                  <input
-                    type="text"
-                    value={adjustmentForm.reason}
-                    onChange={(e) => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                    placeholder="e.g., Damaged during display"
-                  />
+                  <input type="text" value={adjustmentForm.reason} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, reason: e.target.value })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="e.g., Damaged during display" />
                 </div>
               </div>
-
               <div>
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-[16px] font-semibold text-[#323B42]">Items ({adjustmentForm.items.length})</h4>
-                  <button
-                    onClick={() => setShowItemSelector(true)}
-                    className="px-3 py-1.5 bg-[#008967] text-white rounded-[6px] text-[13px] font-medium flex items-center gap-2 hover:bg-[#007A5E] transition-colors"
-                  >
-                    <Plus className="size-3" />
-                    Add Item
-                  </button>
+                  <button onClick={() => setShowItemSelector(true)} className="px-3 py-1.5 bg-[#008967] text-white rounded-[6px] text-[13px] font-medium flex items-center gap-2 hover:bg-[#007A5E]"><Plus className="size-3" /> Add Item</button>
                 </div>
-
                 {adjustmentForm.items.length === 0 ? (
                   <p className="text-[14px] text-[#6b7280] text-center py-8">No items added yet</p>
                 ) : (
                   <div className="space-y-2">
                     {adjustmentForm.items.map((item) => (
-                      <div key={item.itemId} className="flex items-center justify-between bg-[#F8FAFB] rounded-[8px] px-4 py-3">
+                      <div key={item.inventoryItemId} className="flex items-center justify-between bg-[#F8FAFB] rounded-[8px] px-4 py-3">
                         <div className="flex-1">
                           <p className="text-[14px] font-medium text-[#323B42]">{item.name}</p>
-                          <p className="text-[12px] text-[#6b7280]">
-                            {item.location} â€¢ Current: {item.currentQuantity}
-                          </p>
+                          <p className="text-[12px] text-[#6b7280]">Current qty: {item.currentQuantity}</p>
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleUpdateAdjustmentQuantity(item.itemId, item.quantityChange - 1)}
-                              className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]"
-                            >
-                              -
-                            </button>
-                            <span className={`text-[14px] font-medium w-12 text-center ${
-                              item.quantityChange >= 0 ? 'text-[#008967]' : 'text-[#E7000B]'
-                            }`}>
-                              {item.quantityChange >= 0 ? '+' : ''}{item.quantityChange}
-                            </span>
-                            <button
-                              onClick={() => handleUpdateAdjustmentQuantity(item.itemId, item.quantityChange + 1)}
-                              className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]"
-                            >
-                              +
-                            </button>
+                            <button onClick={() => setAdjustmentForm({ ...adjustmentForm, items: adjustmentForm.items.map(i => i.inventoryItemId === item.inventoryItemId ? { ...i, quantityChange: i.quantityChange - 1 } : i) })} className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]">-</button>
+                            <span className={`text-[14px] font-medium w-12 text-center ${item.quantityChange >= 0 ? 'text-[#008967]' : 'text-[#E7000B]'}`}>{item.quantityChange >= 0 ? '+' : ''}{item.quantityChange}</span>
+                            <button onClick={() => setAdjustmentForm({ ...adjustmentForm, items: adjustmentForm.items.map(i => i.inventoryItemId === item.inventoryItemId ? { ...i, quantityChange: i.quantityChange + 1 } : i) })} className="w-6 h-6 flex items-center justify-center bg-white border border-[rgba(0,0,0,0.1)] rounded text-[#323B42] hover:bg-[#F8FAFB]">+</button>
                           </div>
-                          <button
-                            onClick={() => handleRemoveItemFromAdjustment(item.itemId)}
-                            className="text-[#E7000B] hover:bg-[#ffe2e2] p-1 rounded"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
+                          <button onClick={() => setAdjustmentForm({ ...adjustmentForm, items: adjustmentForm.items.filter(i => i.inventoryItemId !== item.inventoryItemId) })} className="text-[#E7000B] hover:bg-[#ffe2e2] p-1 rounded"><Trash2 className="size-4" /></button>
                         </div>
                       </div>
                     ))}
@@ -825,23 +483,9 @@ export default function TransfersView({
                 )}
               </div>
             </div>
-
             <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowAdjustmentModal(false);
-                  setAdjustmentForm({ type: 'Add', reason: '', items: [] });
-                }}
-                className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreateAdjustment}
-                className="flex-1 px-4 py-2 bg-[#008967] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#007A5E] transition-colors"
-              >
-                Create Adjustment
-              </button>
+              <button onClick={() => { setShowAdjustmentModal(false); setAdjustmentForm({ type: 'Add', reason: '', items: [] }); }} className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB]">Cancel</button>
+              <button onClick={handleCreateAdjustment} disabled={saving} className="flex-1 px-4 py-2 bg-[#008967] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#007A5E] disabled:opacity-60">{saving ? 'Saving…' : 'Create Adjustment'}</button>
             </div>
           </div>
         </div>
@@ -854,155 +498,64 @@ export default function TransfersView({
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-[20px] font-bold text-[#323B42]">Select Items</h3>
-                <p className="text-[14px] text-[#6b7280] mt-1">
-                  {activeTab === 'transfers'
-                    ? `Browse items from ${transferForm.fromLocation}`
-                    : 'Browse all inventory items'}
-                </p>
+                <p className="text-[14px] text-[#6b7280] mt-1">{activeTab === 'transfers' ? `Items from ${locations.find((l: any) => l.id === transferForm.fromLocationId)?.name ?? 'selected location'}` : 'All inventory items'}</p>
               </div>
-              <button
-                onClick={() => {
-                  setShowItemSelector(false);
-                  setItemSearchTerm('');
-                  setExpandedCategories(new Set());
-                  setExpandedSubcategories(new Set());
-                }}
-                className="p-2 hover:bg-[#F8FAFB] rounded"
-              >
-                <X className="size-5 text-[#323B42]" />
-              </button>
+              <button onClick={() => { setShowItemSelector(false); setItemSearchTerm(''); setExpandedCategories(new Set()); setExpandedSubcategories(new Set()); }} className="p-2 hover:bg-[#F8FAFB] rounded"><X className="size-5 text-[#323B42]" /></button>
             </div>
-
-            {/* Search Bar */}
             <div className="mb-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#6b7280]" />
-                <input
-                  type="text"
-                  value={itemSearchTerm}
-                  onChange={(e) => setItemSearchTerm(e.target.value)}
-                  placeholder="Search items by name, category, or subcategory..."
-                  className="w-full pl-10 pr-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                />
+                <input type="text" value={itemSearchTerm} onChange={(e) => setItemSearchTerm(e.target.value)} placeholder="Search items…" className="w-full pl-10 pr-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
               </div>
             </div>
-
-            {/* Grouped Items */}
             <div className="space-y-2 max-h-[500px] overflow-y-auto">
               {Object.keys(groupedAvailableItems).length === 0 ? (
                 <div className="text-center py-12">
                   <Package className="size-16 text-[#d1d5dc] mx-auto mb-3" />
                   <p className="text-[16px] text-[#323B42] font-medium">No items found</p>
-                  <p className="text-[14px] text-[#6b7280] mt-1">
-                    {itemSearchTerm
-                      ? 'Try adjusting your search terms'
-                      : activeTab === 'transfers'
-                      ? 'No items available in the selected location'
-                      : 'No items available for adjustment'}
-                  </p>
+                  <p className="text-[14px] text-[#6b7280] mt-1">{itemSearchTerm ? 'Try adjusting your search' : activeTab === 'transfers' ? 'No items in the selected location' : 'No items available'}</p>
                 </div>
               ) : (
                 Object.entries(groupedAvailableItems).map(([category, subcategories]) => {
-                  const isCategoryExpanded = expandedCategories.has(category);
-                  const categoryItemCount = Object.values(subcategories).flat().length;
-
+                  const isExpanded = expandedCategories.has(category);
+                  const count = Object.values(subcategories).flat().length;
                   return (
                     <div key={category} className="border border-[rgba(0,0,0,0.1)] rounded-[10px] overflow-hidden">
-                      {/* Category Header */}
-                      <button
-                        onClick={() => toggleCategory(category)}
-                        className="w-full flex items-center gap-3 px-4 py-3 bg-[#F8FAFB] hover:bg-[#e9ecef] transition-colors"
-                      >
-                        {isCategoryExpanded ? (
-                          <ChevronDown className="size-5 text-[#323B42]" />
-                        ) : (
-                          <ChevronRight className="size-5 text-[#323B42]" />
-                        )}
+                      <button onClick={() => toggleCategory(category)} className="w-full flex items-center gap-3 px-4 py-3 bg-[#F8FAFB] hover:bg-[#e9ecef]">
+                        {isExpanded ? <ChevronDown className="size-5 text-[#323B42]" /> : <ChevronRight className="size-5 text-[#323B42]" />}
                         <Package className="size-5 text-[#007A5E]" />
                         <span className="text-[16px] font-semibold text-[#323B42]">{category}</span>
-                        <span className="ml-auto text-[13px] text-[#323B42] bg-white px-3 py-1 rounded-full font-medium">
-                          {categoryItemCount} items
-                        </span>
+                        <span className="ml-auto text-[13px] text-[#323B42] bg-white px-3 py-1 rounded-full font-medium">{count} items</span>
                       </button>
-
-                      {/* Subcategories */}
-                      {isCategoryExpanded && (
+                      {isExpanded && (
                         <div className="bg-white">
-                          {Object.entries(subcategories).map(([subcategory, items]) => {
-                            const subcategoryKey = `${category}-${subcategory}`;
-                            const isSubcategoryExpanded = expandedSubcategories.has(subcategoryKey);
-
+                          {Object.entries(subcategories).map(([sub, items]) => {
+                            const key = `${category}-${sub}`;
+                            const isSubExpanded = expandedSubcategories.has(key);
                             return (
-                              <div key={subcategoryKey} className="border-t border-[rgba(0,0,0,0.1)]">
-                                {/* Subcategory Header */}
-                                <button
-                                  onClick={() => toggleSubcategory(subcategoryKey)}
-                                  className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-[#F8FAFB] transition-colors"
-                                >
-                                  {isSubcategoryExpanded ? (
-                                    <ChevronDown className="size-4 text-[#323B42]" />
-                                  ) : (
-                                    <ChevronRight className="size-4 text-[#323B42]" />
-                                  )}
-                                  <span className="text-[14px] font-medium text-[#323B42]">{subcategory}</span>
-                                  <span className="ml-auto text-[12px] text-[#6b7280] bg-[#F8FAFB] px-2 py-0.5 rounded-full">
-                                    {items.length}
-                                  </span>
+                              <div key={key} className="border-t border-[rgba(0,0,0,0.1)]">
+                                <button onClick={() => toggleSubcategory(key)} className="w-full flex items-center gap-3 px-6 py-2.5 hover:bg-[#F8FAFB]">
+                                  {isSubExpanded ? <ChevronDown className="size-4 text-[#323B42]" /> : <ChevronRight className="size-4 text-[#323B42]" />}
+                                  <span className="text-[14px] font-medium text-[#323B42]">{sub}</span>
+                                  <span className="ml-auto text-[12px] text-[#6b7280] bg-[#F8FAFB] px-2 py-0.5 rounded-full">{items.length}</span>
                                 </button>
-
-                                {/* Items */}
-                                {isSubcategoryExpanded && (
+                                {isSubExpanded && (
                                   <div className="bg-[#F8FAFB] px-6 py-2 space-y-2">
-                                    {items.map((item: InventoryItem) => {
+                                    {items.map((item: any) => {
                                       const isAdded = activeTab === 'transfers'
-                                        ? transferForm.items.some(i => i.itemId === item.id)
-                                        : adjustmentForm.items.some(i => i.itemId === item.id);
-
+                                        ? transferForm.items.some(i => i.inventoryItemId === item.id)
+                                        : adjustmentForm.items.some(i => i.inventoryItemId === item.id);
                                       return (
-                                        <div
-                                          key={item.id}
-                                          className="flex items-center justify-between p-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] hover:border-[#007A5E] transition-colors"
-                                        >
+                                        <div key={item.id} className="flex items-center justify-between p-3 bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] hover:border-[#007A5E]">
                                           <div className="flex-1">
                                             <p className="text-[14px] font-medium text-[#323B42]">{item.name}</p>
                                             <div className="flex items-center gap-3 mt-1">
-                                              <span className="text-[12px] text-[#6b7280]">
-                                                <span className="font-medium">Size:</span> {item.size}
-                                              </span>
-                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
-                                              <span className="text-[12px] text-[#6b7280]">
-                                                <span className="font-medium">Location:</span> {item.location}
-                                              </span>
-                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
-                                              <span className="text-[12px] text-[#6b7280]">
-                                                <span className="font-medium">Qty:</span> {item.quantity}
-                                              </span>
-                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
-                                              <span className={`text-[12px] font-medium ${
-                                                item.condition === 'Excellent' ? 'text-[#00a63e]' :
-                                                item.condition === 'Good' ? 'text-[#007A5E]' :
-                                                item.condition === 'Fair' ? 'text-[#FFA500]' :
-                                                'text-[#E7000B]'
-                                              }`}>
-                                                {item.condition}
-                                              </span>
+                                              <span className="text-[12px] text-[#6b7280]"><span className="font-medium">Location:</span> {item.location?.name}</span>
+                                              <span className="text-[12px] text-[#6b7280]">•</span>
+                                              <span className="text-[12px] text-[#6b7280]"><span className="font-medium">Qty:</span> {item.quantity}</span>
                                             </div>
                                           </div>
-                                          <button
-                                            onClick={() => {
-                                              if (activeTab === 'transfers') {
-                                                handleAddItemToTransfer(item);
-                                              } else {
-                                                handleAddItemToAdjustment(item);
-                                              }
-                                            }}
-                                            disabled={isAdded}
-                                            className={`px-4 py-2 rounded-[6px] text-[13px] font-medium transition-colors ml-4 ${
-                                              isAdded
-                                                ? 'bg-[#e9ecef] text-[#6b7280] cursor-not-allowed'
-                                                : 'bg-[#007A5E] text-white hover:bg-[#008967]'
-                                            }`}
-                                          >
+                                          <button onClick={() => activeTab === 'transfers' ? handleAddItemToTransfer(item) : handleAddItemToAdjustment(item)} disabled={isAdded} className={`px-4 py-2 rounded-[6px] text-[13px] font-medium ml-4 ${isAdded ? 'bg-[#e9ecef] text-[#6b7280] cursor-not-allowed' : 'bg-[#007A5E] text-white hover:bg-[#008967]'}`}>
                                             {isAdded ? 'Added' : 'Add Item'}
                                           </button>
                                         </div>
@@ -1020,27 +573,9 @@ export default function TransfersView({
                 })
               )}
             </div>
-
-            {/* Footer */}
-            <div className="mt-6 pt-4 border-t border-[rgba(0,0,0,0.1)]">
-              <div className="flex items-center justify-between">
-                <p className="text-[14px] text-[#6b7280]">
-                  {activeTab === 'transfers'
-                    ? `${transferForm.items.length} item(s) selected`
-                    : `${adjustmentForm.items.length} item(s) selected`}
-                </p>
-                <button
-                  onClick={() => {
-                    setShowItemSelector(false);
-                    setItemSearchTerm('');
-                    setExpandedCategories(new Set());
-                    setExpandedSubcategories(new Set());
-                  }}
-                  className="px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
-                >
-                  Done
-                </button>
-              </div>
+            <div className="mt-6 pt-4 border-t border-[rgba(0,0,0,0.1)] flex items-center justify-between">
+              <p className="text-[14px] text-[#6b7280]">{activeTab === 'transfers' ? transferForm.items.length : adjustmentForm.items.length} item(s) selected</p>
+              <button onClick={() => { setShowItemSelector(false); setItemSearchTerm(''); setExpandedCategories(new Set()); setExpandedSubcategories(new Set()); }} className="px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967]">Done</button>
             </div>
           </div>
         </div>
@@ -1048,5 +583,3 @@ export default function TransfersView({
     </div>
   );
 }
-
-// Multilocation View

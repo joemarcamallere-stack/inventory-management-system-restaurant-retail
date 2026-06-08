@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.StockMovementsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 const create_stock_movement_dto_1 = require("./dto/create-stock-movement.dto");
 let StockMovementsService = class StockMovementsService {
     prisma;
@@ -80,24 +81,28 @@ let StockMovementsService = class StockMovementsService {
             });
         });
     }
-    async findAll(businessId, filters = {}, modules = []) {
+    async findAll(businessId, filters = {}, modules = [], page = 1, limit = 50) {
         this.assertCanUseMovementType(filters.type, modules);
-        return this.prisma.stockMovement.findMany({
-            where: {
-                businessId,
-                ...(filters.itemId ? { itemId: filters.itemId } : {}),
-                ...(filters.locationId ? { locationId: filters.locationId } : {}),
-                ...(this.isStockMovementType(filters.type) ? { type: filters.type } : {}),
-                ...(filters.referenceType ? { referenceType: filters.referenceType } : {}),
-                ...(filters.referenceId ? { referenceId: filters.referenceId } : {}),
-            },
-            include: {
-                item: true,
-                location: true,
-                createdBy: true,
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+        const where = {
+            businessId,
+            ...(filters.itemId ? { itemId: filters.itemId } : {}),
+            ...(filters.locationId ? { locationId: filters.locationId } : {}),
+            ...(this.isStockMovementType(filters.type) ? { type: filters.type } : {}),
+            ...(filters.referenceType ? { referenceType: filters.referenceType } : {}),
+            ...(filters.referenceId ? { referenceId: filters.referenceId } : {}),
+        };
+        const include = { item: true, location: true, createdBy: true };
+        const [data, total] = await this.prisma.$transaction([
+            this.prisma.stockMovement.findMany({
+                where,
+                include,
+                orderBy: { createdAt: 'desc' },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            this.prisma.stockMovement.count({ where }),
+        ]);
+        return (0, pagination_dto_1.paginate)(data, total, page, limit);
     }
     async findOne(id, businessId) {
         const movement = await this.prisma.stockMovement.findFirst({

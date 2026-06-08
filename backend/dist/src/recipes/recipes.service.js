@@ -11,7 +11,9 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RecipesService = void 0;
 const common_1 = require("@nestjs/common");
+const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let RecipesService = class RecipesService {
     prisma;
     constructor(prisma) {
@@ -19,36 +21,51 @@ let RecipesService = class RecipesService {
     }
     async create(createRecipeDto, businessId) {
         await this.assertRecipeItemsInBusiness(createRecipeDto, businessId);
-        return this.prisma.recipe.create({
-            data: {
-                name: createRecipeDto.name,
-                category: createRecipeDto.category,
-                servings: createRecipeDto.servings,
-                yieldPercentage: createRecipeDto.yieldPercentage ?? 100,
-                prepTimeMinutes: createRecipeDto.prepTimeMinutes,
-                instructions: createRecipeDto.instructions,
-                targetFoodCost: createRecipeDto.targetFoodCost,
-                sellingPrice: createRecipeDto.sellingPrice,
-                isActive: createRecipeDto.isActive ?? true,
-                menuItemId: createRecipeDto.menuItemId,
-                businessId,
-                ingredients: {
-                    create: this.mapIngredientInputs(createRecipeDto.ingredients),
+        try {
+            return await this.prisma.recipe.create({
+                data: {
+                    name: createRecipeDto.name,
+                    category: createRecipeDto.category,
+                    servings: createRecipeDto.servings,
+                    yieldPercentage: createRecipeDto.yieldPercentage ?? 100,
+                    prepTimeMinutes: createRecipeDto.prepTimeMinutes,
+                    instructions: createRecipeDto.instructions,
+                    targetFoodCost: createRecipeDto.targetFoodCost,
+                    sellingPrice: createRecipeDto.sellingPrice,
+                    isActive: createRecipeDto.isActive ?? true,
+                    menuItemId: createRecipeDto.menuItemId,
+                    businessId,
+                    ingredients: {
+                        create: this.mapIngredientInputs(createRecipeDto.ingredients),
+                    },
                 },
-            },
-            include: this.recipeInclude,
-        });
+                include: this.recipeInclude,
+            });
+        }
+        catch (error) {
+            if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                throw new common_1.ConflictException(`A recipe named "${createRecipeDto.name}" already exists`);
+            }
+            throw error;
+        }
     }
-    async findAll(businessId, active) {
-        return this.prisma.recipe.findMany({
-            where: {
-                businessId,
-                ...(active === 'true' ? { isActive: true } : {}),
-                ...(active === 'false' ? { isActive: false } : {}),
-            },
-            include: this.recipeInclude,
-            orderBy: { name: 'asc' },
-        });
+    async findAll(businessId, active, page = 1, limit = 50) {
+        const where = {
+            businessId,
+            ...(active === 'true' ? { isActive: true } : {}),
+            ...(active === 'false' ? { isActive: false } : {}),
+        };
+        const [data, total] = await this.prisma.$transaction([
+            this.prisma.recipe.findMany({
+                where,
+                include: this.recipeInclude,
+                orderBy: { name: 'asc' },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            this.prisma.recipe.count({ where }),
+        ]);
+        return (0, pagination_dto_1.paginate)(data, total, page, limit);
     }
     async findOne(id, businessId) {
         const recipe = await this.prisma.recipe.findFirst({

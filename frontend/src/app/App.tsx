@@ -682,21 +682,12 @@ export default function App() {
               locations={locations}
             />
           )}
-          {currentView === 'pos' && <POSView sales={sales} setSales={setSales} inventory={inventory} setInventory={setInventory} currentUser={currentUser} />}
-          {currentView === 'purchase-orders' && <PurchaseOrdersView orders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} inventory={inventory} setInventory={setInventory} currentUser={currentUser} />}
-          {currentView === 'products-received' && <ProductsReceivedView received={productsReceived} setReceived={setProductsReceived} purchaseOrders={purchaseOrders} setPurchaseOrders={setPurchaseOrders} inventory={inventory} setInventory={setInventory} />}
-          {currentView === 'item-bundling' && <ItemBundlingView bundles={bundles} setBundles={setBundles} inventory={inventory} currentUser={currentUser} />}
+          {currentView === 'pos' && <POSView currentUser={currentUser} />}
+          {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
+          {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
+          {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
           {currentView === 'transfers' && (
-            <TransfersView
-              transfers={transfers}
-              setTransfers={setTransfers}
-              adjustments={adjustments}
-              setAdjustments={setAdjustments}
-              inventory={inventory}
-              setInventory={setInventory}
-              locations={locations}
-              currentUser={currentUser}
-            />
+            <TransfersView currentUser={currentUser} />
           )}
           {currentView === 'multilocation' && (
             <MultilocationView

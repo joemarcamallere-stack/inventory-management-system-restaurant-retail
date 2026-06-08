@@ -11,6 +11,11 @@ import { AuthModule } from './auth/auth.module';
 import { StockMovementsModule } from './stock-movements/stock-movements.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { KitchenOrdersModule } from './kitchen-orders/kitchen-orders.module';
+import { SuppliersModule } from './suppliers/suppliers.module';
+import { PurchaseOrdersModule } from './purchase-orders/purchase-orders.module';
+import { TransfersModule } from './transfers/transfers.module';
+import { SalesModule } from './sales/sales.module';
+import { BundlesModule } from './bundles/bundles.module';
 
 @Module({
   imports: [
@@ -24,6 +29,11 @@ import { KitchenOrdersModule } from './kitchen-orders/kitchen-orders.module';
     StockMovementsModule,
     RecipesModule,
     KitchenOrdersModule,
+    SuppliersModule,
+    PurchaseOrdersModule,
+    TransfersModule,
+    SalesModule,
+    BundlesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -11,25 +11,41 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.LocationsService = void 0;
 const common_1 = require("@nestjs/common");
+const client_1 = require("@prisma/client");
 const prisma_service_1 = require("../prisma/prisma.service");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let LocationsService = class LocationsService {
     prisma;
     constructor(prisma) {
         this.prisma = prisma;
     }
     async create(createLocationDto, businessId) {
-        const location = await this.prisma.location.create({
-            data: { ...createLocationDto, businessId },
-        });
-        return this.withItemCount(location, 0);
+        try {
+            const location = await this.prisma.location.create({
+                data: { ...createLocationDto, businessId },
+            });
+            return this.withItemCount(location, 0);
+        }
+        catch (error) {
+            if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+                throw new common_1.ConflictException(`A location named "${createLocationDto.name}" already exists`);
+            }
+            throw error;
+        }
     }
-    async findAll(businessId) {
-        const locations = await this.prisma.location.findMany({
-            where: { businessId },
-            include: { _count: { select: { items: true } } },
-            orderBy: { name: 'asc' },
-        });
-        return locations.map((location) => this.withItemCount(location, location._count.items));
+    async findAll(businessId, page = 1, limit = 50) {
+        const where = { businessId };
+        const [locations, total] = await this.prisma.$transaction([
+            this.prisma.location.findMany({
+                where,
+                include: { _count: { select: { items: true } } },
+                orderBy: { name: 'asc' },
+                skip: (page - 1) * limit,
+                take: limit,
+            }),
+            this.prisma.location.count({ where }),
+        ]);
+        return (0, pagination_dto_1.paginate)(locations.map((loc) => this.withItemCount(loc, loc._count.items)), total, page, limit);
     }
     async findOne(id, businessId) {
         const location = await this.prisma.location.findFirst({

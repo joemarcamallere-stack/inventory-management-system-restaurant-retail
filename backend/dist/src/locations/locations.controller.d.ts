@@ -18,23 +18,7 @@ export declare class LocationsController {
     }, "_count"> & {
         itemCount: number;
     }>;
-    findAll(currentUser: AuthenticatedUser): Promise<(Omit<{
-        _count: {
-            items: number;
-        };
-    } & {
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        businessId: string;
-        address: string;
-        manager: string;
-        phone: string;
-        itemCount: number;
-    }, "_count"> & {
-        itemCount: number;
-    })[]>;
+    findAll(currentUser: AuthenticatedUser, page?: string, limit?: string): Promise<import("../common/dto/pagination.dto").PaginatedResult<any>>;
     findOne(id: string, currentUser: AuthenticatedUser): Promise<Omit<{
         _count: {
             items: number;

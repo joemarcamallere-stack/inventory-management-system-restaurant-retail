@@ -31,8 +31,8 @@ let RecipesController = class RecipesController {
     create(createRecipeDto, currentUser) {
         return this.recipesService.create(createRecipeDto, currentUser.businessId);
     }
-    findAll(currentUser, active) {
-        return this.recipesService.findAll(currentUser.businessId, active);
+    findAll(currentUser, active, page, limit) {
+        return this.recipesService.findAll(currentUser.businessId, active, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 50);
     }
     findOne(id, currentUser) {
         return this.recipesService.findOne(id, currentUser.businessId);
@@ -57,8 +57,10 @@ __decorate([
     (0, common_1.Get)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __param(1, (0, common_1.Query)('active')),
+    __param(2, (0, common_1.Query)('page')),
+    __param(3, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", void 0)
 ], RecipesController.prototype, "findAll", null);
 __decorate([

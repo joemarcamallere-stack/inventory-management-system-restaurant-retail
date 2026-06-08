@@ -34,6 +34,11 @@ model Business {
   stockMovements StockMovement[]
   recipes   Recipe[]
   kitchenOrders KitchenOrder[]
+  suppliers      Supplier[]
+  purchaseOrders PurchaseOrder[]
+  transfers      Transfer[]
+  sales          Sale[]
+  bundles        BundlePackage[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 }
@@ -49,6 +54,12 @@ model User {
   business   Business @relation(fields: [businessId], references: [id])
   stockMovements StockMovement[]
   kitchenOrders KitchenOrder[]
+  purchaseOrders         PurchaseOrder[]  @relation("POCreatedBy")
+  receivedPurchaseOrders PurchaseOrder[]  @relation("POReceivedBy")
+  transfers              Transfer[]
+  sales                  Sale[]
+  createdBundles         BundlePackage[]  @relation("BundleCreatedBy")
+  approvedBundles        BundlePackage[]  @relation("BundleApprovedBy")
   lastLogin DateTime @default(now())
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -65,6 +76,9 @@ model Location {
   business   Business @relation(fields: [businessId], references: [id])
   items     InventoryItem[]
   stockMovements StockMovement[]
+  transfersFrom  Transfer[] @relation("TransferFrom")
+  transfersTo    Transfer[] @relation("TransferTo")
+  sales          Sale[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -97,6 +111,10 @@ model InventoryItem {
   stockMovements StockMovement[]
   recipeIngredients RecipeIngredient[]
   menuRecipes Recipe[] @relation("RecipeMenuItem")
+  purchaseOrderItems PurchaseOrderItem[]
+  transferItems      TransferItem[]
+  saleItems          SaleItem[]
+  bundleItems        BundleItem[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -213,4 +231,219 @@ model StockMovement {
   @@index([businessId, itemId])
   @@index([businessId, locationId])
   @@index([businessId, type])
+}
+
+// ─── Supplier ────────────────────────────────────────────────────────────────
+
+model Supplier {
+  id            String          @id @default(uuid())
+  name          String
+  contactPerson String?
+  email         String?
+  phone         String?
+  address       String?
+  category      String?
+  isActive      Boolean         @default(true)
+  businessId    String
+  business      Business        @relation(fields: [businessId], references: [id])
+  purchaseOrders PurchaseOrder[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+// ─── Purchase Orders ─────────────────────────────────────────────────────────
+
+enum PurchaseOrderStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  RECEIVED
+  CANCELLED
+}
+
+model PurchaseOrder {
+  id            String              @id @default(uuid())
+  orderNumber   String
+  supplierId    String?
+  supplier      Supplier?           @relation(fields: [supplierId], references: [id])
+  status        PurchaseOrderStatus @default(DRAFT)
+  notes         String?
+  paymentMethod String?
+  paymentTerms  String?
+  totalAmount   Float               @default(0)
+  businessId    String
+  business      Business            @relation(fields: [businessId], references: [id])
+  createdById   String?
+  createdBy     User?               @relation("POCreatedBy", fields: [createdById], references: [id])
+  receivedById  String?
+  receivedBy    User?               @relation("POReceivedBy", fields: [receivedById], references: [id])
+  receivedAt    DateTime?
+  items         PurchaseOrderItem[]
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  @@unique([businessId, orderNumber])
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model PurchaseOrderItem {
+  id              String         @id @default(uuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  name            String
+  quantity        Float
+  receivedQty     Float          @default(0)
+  rejectedQty     Float          @default(0)
+  unitPrice       Float
+  totalPrice      Float
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([purchaseOrderId])
+}
+
+// ─── Transfers ───────────────────────────────────────────────────────────────
+
+enum TransferStatus {
+  PENDING
+  IN_TRANSIT
+  COMPLETED
+  CANCELLED
+}
+
+model Transfer {
+  id             String         @id @default(uuid())
+  transferNumber String
+  fromLocationId String
+  fromLocation   Location       @relation("TransferFrom", fields: [fromLocationId], references: [id])
+  toLocationId   String
+  toLocation     Location       @relation("TransferTo", fields: [toLocationId], references: [id])
+  status         TransferStatus @default(PENDING)
+  notes          String?
+  businessId     String
+  business       Business       @relation(fields: [businessId], references: [id])
+  createdById    String?
+  createdBy      User?          @relation(fields: [createdById], references: [id])
+  completedAt    DateTime?
+  items          TransferItem[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([businessId, transferNumber])
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model TransferItem {
+  id              String        @id @default(uuid())
+  transferId      String
+  transfer        Transfer      @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  quantity        Float
+  createdAt       DateTime      @default(now())
+
+  @@index([transferId])
+}
+
+// ─── Sales ───────────────────────────────────────────────────────────────────
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+  PARTIAL_REFUND
+}
+
+model Sale {
+  id                String     @id @default(uuid())
+  transactionNumber String
+  locationId        String
+  location          Location   @relation(fields: [locationId], references: [id])
+  cashierId         String?
+  cashier           User?      @relation(fields: [cashierId], references: [id])
+  subtotal          Float
+  discount          Float      @default(0)
+  tax               Float      @default(0)
+  total             Float
+  paymentMethod     String
+  amountPaid        Float
+  change            Float      @default(0)
+  customer          String?
+  status            SaleStatus @default(COMPLETED)
+  refundReason      String?
+  businessId        String
+  business          Business   @relation(fields: [businessId], references: [id])
+  items             SaleItem[]
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([businessId, transactionNumber])
+  @@index([businessId, createdAt])
+  @@index([businessId, locationId])
+  @@index([businessId, status])
+}
+
+model SaleItem {
+  id              String        @id @default(uuid())
+  saleId          String
+  sale            Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  name            String
+  quantity        Float
+  unitPrice       Float
+  totalPrice      Float
+  createdAt       DateTime      @default(now())
+
+  @@index([saleId])
+}
+
+// ─── Bundles ─────────────────────────────────────────────────────────────────
+
+enum BundleStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  ACTIVE
+  INACTIVE
+}
+
+model BundlePackage {
+  id              String       @id @default(uuid())
+  name            String
+  discount        Float        @default(0)
+  price           Float        @default(0)
+  status          BundleStatus @default(PENDING)
+  rejectionReason String?
+  businessId      String
+  business        Business     @relation(fields: [businessId], references: [id])
+  createdById     String?
+  createdBy       User?        @relation("BundleCreatedBy", fields: [createdById], references: [id])
+  approvedById    String?
+  approvedBy      User?        @relation("BundleApprovedBy", fields: [approvedById], references: [id])
+  approvedAt      DateTime?
+  items           BundleItem[]
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([businessId])
+  @@index([businessId, status])
+}
+
+model BundleItem {
+  id              String        @id @default(uuid())
+  bundleId        String
+  bundle          BundlePackage @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  quantity        Float
+  createdAt       DateTime      @default(now())
+
+  @@index([bundleId])
 }

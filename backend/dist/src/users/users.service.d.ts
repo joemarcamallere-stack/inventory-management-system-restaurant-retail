@@ -1,4 +1,5 @@
 import { PrismaService } from '../prisma/prisma.service';
+import { PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 export declare class UsersService {
@@ -16,18 +17,7 @@ export declare class UsersService {
         businessId: string;
         lastLogin: Date;
     }, "passwordHash">>;
-    findAll(businessId: string): Promise<Omit<{
-        id: string;
-        name: string;
-        createdAt: Date;
-        updatedAt: Date;
-        email: string;
-        passwordHash: string;
-        role: string;
-        status: string;
-        businessId: string;
-        lastLogin: Date;
-    }, "passwordHash">[]>;
+    findAll(businessId: string, page?: number, limit?: number): Promise<PaginatedResult<any>>;
     findOne(id: string, businessId: string): Promise<Omit<{
         id: string;
         name: string;

@@ -29,8 +29,8 @@ let LocationsController = class LocationsController {
     create(createLocationDto, currentUser) {
         return this.locationsService.create(createLocationDto, currentUser.businessId);
     }
-    findAll(currentUser) {
-        return this.locationsService.findAll(currentUser.businessId);
+    findAll(currentUser, page, limit) {
+        return this.locationsService.findAll(currentUser.businessId, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 50);
     }
     findOne(id, currentUser) {
         return this.locationsService.findOne(id, currentUser.businessId);
@@ -54,8 +54,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)(),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String, String]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "findAll", null);
 __decorate([

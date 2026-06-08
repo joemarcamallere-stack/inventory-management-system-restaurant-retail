@@ -28,14 +28,8 @@ let StockMovementsController = class StockMovementsController {
     create(createStockMovementDto, currentUser) {
         return this.stockMovementsService.create(createStockMovementDto, currentUser.businessId, currentUser.id, currentUser.modules);
     }
-    findAll(currentUser, itemId, locationId, type, referenceType, referenceId) {
-        return this.stockMovementsService.findAll(currentUser.businessId, {
-            itemId,
-            locationId,
-            type,
-            referenceType,
-            referenceId,
-        }, currentUser.modules);
+    findAll(currentUser, itemId, locationId, type, referenceType, referenceId, page, limit) {
+        return this.stockMovementsService.findAll(currentUser.businessId, { itemId, locationId, type, referenceType, referenceId }, currentUser.modules, page ? parseInt(page, 10) : 1, limit ? parseInt(limit, 10) : 50);
     }
     findOne(id, currentUser) {
         return this.stockMovementsService.findOne(id, currentUser.businessId);
@@ -58,8 +52,10 @@ __decorate([
     __param(3, (0, common_1.Query)('type')),
     __param(4, (0, common_1.Query)('referenceType')),
     __param(5, (0, common_1.Query)('referenceId')),
+    __param(6, (0, common_1.Query)('page')),
+    __param(7, (0, common_1.Query)('limit')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
     __metadata("design:returntype", void 0)
 ], StockMovementsController.prototype, "findAll", null);
 __decorate([

@@ -1,0 +1,64 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { SuppliersService } from './suppliers.service';
+import { CreateSupplierDto } from './dto/create-supplier.dto';
+import { UpdateSupplierDto } from './dto/update-supplier.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/current-user.decorator';
+
+@Controller('suppliers')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class SuppliersController {
+  constructor(private readonly suppliersService: SuppliersService) {}
+
+  @Post()
+  create(@Body() dto: CreateSupplierDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.suppliersService.create(dto, user.businessId);
+  }
+
+  @Get()
+  findAll(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('isActive') isActive?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const active = isActive === 'true' ? true : isActive === 'false' ? false : undefined;
+    return this.suppliersService.findAll(
+      user.businessId,
+      active,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.suppliersService.findOne(id, user.businessId);
+  }
+
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateSupplierDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.suppliersService.update(id, dto, user.businessId);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.suppliersService.remove(id, user.businessId);
+  }
+}
