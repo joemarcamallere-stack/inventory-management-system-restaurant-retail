@@ -1,62 +1,68 @@
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import type { AuthenticatedUser } from '../auth/current-user.decorator';
 export declare class UsersController {
     private readonly usersService;
     constructor(usersService: UsersService);
-    create(createUserDto: CreateUserDto): Promise<Omit<{
+    create(createUserDto: CreateUserDto, currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
-        email: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        email: string;
         passwordHash: string;
         role: string;
         status: string;
+        businessId: string;
         lastLogin: Date;
-        createdAt: Date;
-        updatedAt: Date;
     }, "passwordHash">>;
-    findAll(): Promise<Omit<{
+    findAll(currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
-        email: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        email: string;
         passwordHash: string;
         role: string;
         status: string;
+        businessId: string;
         lastLogin: Date;
-        createdAt: Date;
-        updatedAt: Date;
     }, "passwordHash">[]>;
-    findOne(id: string): Promise<Omit<{
+    findOne(id: string, currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
-        email: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        email: string;
         passwordHash: string;
         role: string;
         status: string;
+        businessId: string;
         lastLogin: Date;
-        createdAt: Date;
-        updatedAt: Date;
     }, "passwordHash">>;
-    update(id: string, updateUserDto: UpdateUserDto): Promise<Omit<{
+    update(id: string, updateUserDto: UpdateUserDto, currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
-        email: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        email: string;
         passwordHash: string;
         role: string;
         status: string;
+        businessId: string;
         lastLogin: Date;
-        createdAt: Date;
-        updatedAt: Date;
     }, "passwordHash">>;
-    remove(id: string): Promise<Omit<{
+    remove(id: string, currentUser: AuthenticatedUser): Promise<Omit<{
         id: string;
-        email: string;
         name: string;
+        createdAt: Date;
+        updatedAt: Date;
+        email: string;
         passwordHash: string;
         role: string;
         status: string;
+        businessId: string;
         lastLogin: Date;
-        createdAt: Date;
-        updatedAt: Date;
     }, "passwordHash">>;
 }

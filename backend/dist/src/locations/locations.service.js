@@ -17,39 +17,42 @@ let LocationsService = class LocationsService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async create(createLocationDto) {
-        const location = await this.prisma.location.create({ data: createLocationDto });
+    async create(createLocationDto, businessId) {
+        const location = await this.prisma.location.create({
+            data: { ...createLocationDto, businessId },
+        });
         return this.withItemCount(location, 0);
     }
-    async findAll() {
+    async findAll(businessId) {
         const locations = await this.prisma.location.findMany({
+            where: { businessId },
             include: { _count: { select: { items: true } } },
             orderBy: { name: 'asc' },
         });
         return locations.map((location) => this.withItemCount(location, location._count.items));
     }
-    async findOne(id) {
-        const location = await this.prisma.location.findUnique({
-            where: { id },
+    async findOne(id, businessId) {
+        const location = await this.prisma.location.findFirst({
+            where: { id, businessId },
             include: { _count: { select: { items: true } } },
         });
         if (!location)
             throw new common_1.NotFoundException(`Location #${id} not found`);
         return this.withItemCount(location, location._count.items);
     }
-    async update(id, updateLocationDto) {
-        await this.findOne(id);
+    async update(id, updateLocationDto, businessId) {
+        await this.findOne(id, businessId);
         const location = await this.prisma.location.update({
             where: { id },
             data: updateLocationDto,
         });
         const itemCount = await this.prisma.inventoryItem.count({
-            where: { locationId: id },
+            where: { locationId: id, businessId },
         });
         return this.withItemCount(location, itemCount);
     }
-    async remove(id) {
-        const location = await this.findOne(id);
+    async remove(id, businessId) {
+        const location = await this.findOne(id, businessId);
         if (location.itemCount > 0) {
             throw new common_1.BadRequestException('Cannot delete a location that still has inventory items');
         }

@@ -7,16 +7,17 @@ export declare class AuthService {
     constructor(usersService: UsersService, jwtService: JwtService);
     login(loginDto: LoginDto): Promise<{
         accessToken: string;
-        user: Omit<{
+        user: {
+            modules: import("@prisma/client").$Enums.BusinessModule[];
             id: string;
-            email: string;
             name: string;
-            passwordHash: string;
-            role: string;
-            status: string;
-            lastLogin: Date;
             createdAt: Date;
             updatedAt: Date;
-        }, "passwordHash">;
+            email: string;
+            role: string;
+            status: string;
+            businessId: string;
+            lastLogin: Date;
+        };
     }>;
 }

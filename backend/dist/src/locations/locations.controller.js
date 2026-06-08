@@ -20,61 +20,67 @@ const update_location_dto_1 = require("./dto/update-location.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
 const roles_guard_1 = require("../auth/roles.guard");
+const current_user_decorator_1 = require("../auth/current-user.decorator");
 let LocationsController = class LocationsController {
     locationsService;
     constructor(locationsService) {
         this.locationsService = locationsService;
     }
-    create(createLocationDto) {
-        return this.locationsService.create(createLocationDto);
+    create(createLocationDto, currentUser) {
+        return this.locationsService.create(createLocationDto, currentUser.businessId);
     }
-    findAll() {
-        return this.locationsService.findAll();
+    findAll(currentUser) {
+        return this.locationsService.findAll(currentUser.businessId);
     }
-    findOne(id) {
-        return this.locationsService.findOne(id);
+    findOne(id, currentUser) {
+        return this.locationsService.findOne(id, currentUser.businessId);
     }
-    update(id, updateLocationDto) {
-        return this.locationsService.update(id, updateLocationDto);
+    update(id, updateLocationDto, currentUser) {
+        return this.locationsService.update(id, updateLocationDto, currentUser.businessId);
     }
-    remove(id) {
-        return this.locationsService.remove(id);
+    remove(id, currentUser) {
+        return this.locationsService.remove(id, currentUser.businessId);
     }
 };
 exports.LocationsController = LocationsController;
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_location_dto_1.CreateLocationDto]),
+    __metadata("design:paramtypes", [create_location_dto_1.CreateLocationDto, Object]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_location_dto_1.UpdateLocationDto]),
+    __metadata("design:paramtypes", [String, update_location_dto_1.UpdateLocationDto, Object]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], LocationsController.prototype, "remove", null);
 exports.LocationsController = LocationsController = __decorate([

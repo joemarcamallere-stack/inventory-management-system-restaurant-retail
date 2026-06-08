@@ -35,6 +35,8 @@ let JwtAuthGuard = class JwtAuthGuard {
                 id: payload.sub,
                 email: payload.email,
                 role: payload.role,
+                businessId: payload.businessId,
+                modules: payload.modules ?? [],
             };
             return true;
         }

@@ -4,12 +4,13 @@ import { UpdateInventoryDto } from './dto/update-inventory.dto';
 export declare class InventoryService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    create(createInventoryDto: CreateInventoryDto): Promise<{
+    create(createInventoryDto: CreateInventoryDto, businessId: string, modules?: string[]): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -20,22 +21,32 @@ export declare class InventoryService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    findAll(search?: string): Promise<({
+    findAll(businessId: string, search?: string, itemType?: string, modules?: string[]): Promise<({
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -46,22 +57,32 @@ export declare class InventoryService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     })[]>;
-    findOne(id: string): Promise<{
+    findOne(id: string, businessId: string): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -72,22 +93,32 @@ export declare class InventoryService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    update(id: string, updateInventoryDto: UpdateInventoryDto): Promise<{
+    update(id: string, updateInventoryDto: UpdateInventoryDto, businessId: string, modules?: string[]): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -98,32 +129,50 @@ export declare class InventoryService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    remove(id: string): Promise<{
+    remove(id: string, businessId: string): Promise<{
         id: string;
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    getStats(): Promise<{
+    getStats(businessId: string): Promise<{
         totalItems: number;
         availableStock: number;
         damagedItems: number;
@@ -136,4 +185,7 @@ export declare class InventoryService {
             severity: string;
         }[];
     }>;
+    private assertLocationInBusiness;
+    private isInventoryItemType;
+    private assertCanUseItemType;
 }

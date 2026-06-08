@@ -7,6 +7,9 @@ import { UsersModule } from './users/users.module';
 import { LocationsModule } from './locations/locations.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { AuthModule } from './auth/auth.module';
+import { StockMovementsModule } from './stock-movements/stock-movements.module';
+import { RecipesModule } from './recipes/recipes.module';
+import { KitchenOrdersModule } from './kitchen-orders/kitchen-orders.module';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { AuthModule } from './auth/auth.module';
     UsersModule,
     LocationsModule,
     InventoryModule,
+    StockMovementsModule,
+    RecipesModule,
+    KitchenOrdersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

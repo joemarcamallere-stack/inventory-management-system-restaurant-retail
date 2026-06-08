@@ -1,6 +1,6 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, XCircle, Receipt, DollarSign, RotateCcw } from 'lucide-react';
-import type { Sale, InventoryItem } from '../utils/generateSampleData';
+import type { Sale, InventoryItem } from '../../app/utils/generateSampleData';
 
 export default function POSView({
   sales,
@@ -257,7 +257,7 @@ export default function POSView({
             <div className="grid grid-cols-3 gap-4 mb-6">
               <div className="bg-[#E0F5F1] border border-[rgba(0,122,94,0.2)] rounded-[12px] p-4">
                 <p className="text-[14px] text-[#007A5E] font-medium">Today's Sales</p>
-                <p className="text-[28px] font-bold text-[#007A5E] mt-1">₱{todayRevenue.toLocaleString()}</p>
+                <p className="text-[28px] font-bold text-[#007A5E] mt-1">â‚±{todayRevenue.toLocaleString()}</p>
               </div>
               <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[12px] p-4">
                 <p className="text-[14px] text-[#6b7280] font-medium">Transactions</p>
@@ -266,7 +266,7 @@ export default function POSView({
               <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[12px] p-4">
                 <p className="text-[14px] text-[#6b7280] font-medium">Avg. Sale</p>
                 <p className="text-[28px] font-bold text-[#323B42] mt-1">
-                  ₱{todayTransactions > 0 ? Math.round(todayRevenue / todayTransactions).toLocaleString() : 0}
+                  â‚±{todayTransactions > 0 ? Math.round(todayRevenue / todayTransactions).toLocaleString() : 0}
                 </p>
               </div>
             </div>
@@ -342,9 +342,9 @@ export default function POSView({
                         {item.condition}
                       </span>
                     </div>
-                    <p className="text-[12px] text-[#6b7280] mb-2">{item.category} • Size {item.size}</p>
+                    <p className="text-[12px] text-[#6b7280] mb-2">{item.category} â€¢ Size {item.size}</p>
                     <div className="flex items-center justify-between">
-                      <p className="text-[18px] font-bold text-[#007A5E]">₱{item.price}</p>
+                      <p className="text-[18px] font-bold text-[#007A5E]">â‚±{item.price}</p>
                       <p className="text-[12px] text-[#6b7280]">Stock: {item.quantity}</p>
                     </div>
                   </button>
@@ -406,7 +406,7 @@ export default function POSView({
                             +
                           </button>
                         </div>
-                        <p className="text-[14px] font-bold text-[#007A5E]">₱{item.totalPrice}</p>
+                        <p className="text-[14px] font-bold text-[#007A5E]">â‚±{item.totalPrice}</p>
                       </div>
                     </div>
                   ))
@@ -428,7 +428,7 @@ export default function POSView({
                   </div>
 
                   <div className="mb-4">
-                    <label className="block text-[12px] font-medium text-[#6b7280] mb-1">Discount (₱)</label>
+                    <label className="block text-[12px] font-medium text-[#6b7280] mb-1">Discount (â‚±)</label>
                     <input
                       type="number"
                       value={discount}
@@ -445,17 +445,17 @@ export default function POSView({
               <div className="border-t border-[rgba(0,0,0,0.1)] pt-3 mb-4 space-y-2">
                 <div className="flex justify-between text-[13px]">
                   <span className="text-[#6b7280]">Subtotal:</span>
-                  <span className="font-medium text-[#323B42]">₱{subtotal.toLocaleString()}</span>
+                  <span className="font-medium text-[#323B42]">â‚±{subtotal.toLocaleString()}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#6b7280]">Discount:</span>
-                    <span className="font-medium text-[#E7000B]">-₱{discount.toLocaleString()}</span>
+                    <span className="font-medium text-[#E7000B]">-â‚±{discount.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-[18px] font-bold pt-2 border-t border-[rgba(0,0,0,0.1)]">
                   <span className="text-[#323B42]">Total:</span>
-                  <span className="text-[#007A5E]">₱{total.toLocaleString()}</span>
+                  <span className="text-[#007A5E]">â‚±{total.toLocaleString()}</span>
                 </div>
               </div>
 
@@ -487,10 +487,10 @@ export default function POSView({
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <p className="text-[16px] font-bold text-[#323B42]">{sale.transactionNumber}</p>
-                    <p className="text-[13px] text-[#6b7280]">{sale.date} • {sale.time} • {sale.cashier}</p>
+                    <p className="text-[13px] text-[#6b7280]">{sale.date} â€¢ {sale.time} â€¢ {sale.cashier}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-[18px] font-bold text-[#007A5E]">₱{sale.total.toLocaleString()}</p>
+                    <p className="text-[18px] font-bold text-[#007A5E]">â‚±{sale.total.toLocaleString()}</p>
                     <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${
                       sale.status === 'Completed' ? 'bg-[#E0F5F1] text-[#008967]' :
                       sale.status === 'Refunded' ? 'bg-[#ffe2e2] text-[#991b1b]' :
@@ -502,11 +502,11 @@ export default function POSView({
                 </div>
                 <div className="flex items-center gap-4 text-[12px] text-[#6b7280]">
                   <span>{sale.items.length} item(s)</span>
-                  <span>•</span>
+                  <span>â€¢</span>
                   <span>{sale.paymentMethod}</span>
                   {sale.customer && (
                     <>
-                      <span>•</span>
+                      <span>â€¢</span>
                       <span>{sale.customer}</span>
                     </>
                   )}
@@ -527,10 +527,10 @@ export default function POSView({
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <p className="text-[16px] font-bold text-[#323B42]">{sale.transactionNumber}</p>
-                    <p className="text-[13px] text-[#6b7280]">{sale.date} • {sale.time}</p>
+                    <p className="text-[13px] text-[#6b7280]">{sale.date} â€¢ {sale.time}</p>
                     <p className="text-[13px] text-[#6b7280]">Items: {sale.items.map(i => i.name).join(', ')}</p>
                   </div>
-                  <p className="text-[18px] font-bold text-[#007A5E]">₱{sale.total.toLocaleString()}</p>
+                  <p className="text-[18px] font-bold text-[#007A5E]">â‚±{sale.total.toLocaleString()}</p>
                 </div>
 
                 {selectedSaleForReturn === sale.id ? (
@@ -607,7 +607,7 @@ export default function POSView({
             <div className="bg-[#F8FAFB] rounded-[8px] p-4 mb-4">
               <div className="flex justify-between mb-2">
                 <span className="text-[14px] text-[#6b7280]">Total Amount:</span>
-                <span className="text-[18px] font-bold text-[#007A5E]">₱{total.toLocaleString()}</span>
+                <span className="text-[18px] font-bold text-[#007A5E]">â‚±{total.toLocaleString()}</span>
               </div>
             </div>
 
@@ -629,7 +629,7 @@ export default function POSView({
                   <div className="bg-[#E0F5F1] rounded-[8px] p-4 mb-4">
                     <div className="flex justify-between">
                       <span className="text-[14px] text-[#007A5E] font-medium">Change:</span>
-                      <span className="text-[20px] font-bold text-[#007A5E]">₱{change.toLocaleString()}</span>
+                      <span className="text-[20px] font-bold text-[#007A5E]">â‚±{change.toLocaleString()}</span>
                     </div>
                   </div>
                 )}
@@ -666,29 +666,29 @@ export default function POSView({
             </div>
 
             <div className="border border-[rgba(0,0,0,0.1)] rounded-[8px] p-4 mb-4">
-              <p className="text-[12px] text-[#6b7280] mb-2">{lastTransaction.date} • {lastTransaction.time}</p>
+              <p className="text-[12px] text-[#6b7280] mb-2">{lastTransaction.date} â€¢ {lastTransaction.time}</p>
               <div className="space-y-1 mb-3">
                 {lastTransaction.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-[13px]">
                     <span className="text-[#323B42]">{item.name} x{item.quantity}</span>
-                    <span className="font-medium text-[#323B42]">₱{item.totalPrice}</span>
+                    <span className="font-medium text-[#323B42]">â‚±{item.totalPrice}</span>
                   </div>
                 ))}
               </div>
               <div className="border-t border-[rgba(0,0,0,0.1)] pt-2 space-y-1">
                 <div className="flex justify-between text-[13px]">
                   <span className="text-[#6b7280]">Subtotal:</span>
-                  <span className="text-[#323B42]">₱{lastTransaction.subtotal.toLocaleString()}</span>
+                  <span className="text-[#323B42]">â‚±{lastTransaction.subtotal.toLocaleString()}</span>
                 </div>
                 {lastTransaction.discount > 0 && (
                   <div className="flex justify-between text-[13px]">
                     <span className="text-[#6b7280]">Discount:</span>
-                    <span className="text-[#E7000B]">-₱{lastTransaction.discount.toLocaleString()}</span>
+                    <span className="text-[#E7000B]">-â‚±{lastTransaction.discount.toLocaleString()}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-[16px] font-bold pt-2 border-t border-[rgba(0,0,0,0.1)]">
                   <span className="text-[#323B42]">Total:</span>
-                  <span className="text-[#007A5E]">₱{lastTransaction.total.toLocaleString()}</span>
+                  <span className="text-[#007A5E]">â‚±{lastTransaction.total.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-[13px] pt-2">
                   <span className="text-[#6b7280]">Payment:</span>
@@ -698,11 +698,11 @@ export default function POSView({
                   <>
                     <div className="flex justify-between text-[13px]">
                       <span className="text-[#6b7280]">Cash:</span>
-                      <span className="text-[#323B42]">₱{lastTransaction.amountPaid.toLocaleString()}</span>
+                      <span className="text-[#323B42]">â‚±{lastTransaction.amountPaid.toLocaleString()}</span>
                     </div>
                     <div className="flex justify-between text-[13px]">
                       <span className="text-[#6b7280]">Change:</span>
-                      <span className="text-[#323B42]">₱{lastTransaction.change.toLocaleString()}</span>
+                      <span className="text-[#323B42]">â‚±{lastTransaction.change.toLocaleString()}</span>
                     </div>
                   </>
                 )}

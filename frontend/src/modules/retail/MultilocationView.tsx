@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
-import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../utils/generateSampleData';
-import { createLocation, deleteLocation, updateLocation } from '../api/client';
+import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
+import { createLocation, deleteLocation, updateLocation } from '../../app/api/client';
 
 const mapApiLocation = (location: any): Location => ({
   id: location.id,
@@ -201,7 +201,7 @@ export default function MultilocationView({
             <p className="text-[#323B42] text-[12px]">Total Value</p>
             <TrendingUp className="size-5 text-[#00A7A5]" />
           </div>
-          <p className="text-[#007A5E] text-[24px] font-bold">₱{(overallStats.totalInventoryValue / 1000).toFixed(1)}K</p>
+          <p className="text-[#007A5E] text-[24px] font-bold">â‚±{(overallStats.totalInventoryValue / 1000).toFixed(1)}K</p>
         </div>
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4">
           <div className="flex items-center justify-between mb-2">
@@ -307,7 +307,7 @@ export default function MultilocationView({
                   </div>
                   <div className="flex justify-between">
                     <span className="text-[13px] text-[#6b7280]">Stock Value:</span>
-                    <span className="text-[13px] font-semibold text-[#007A5E]">₱{stats.totalValue.toLocaleString()}</span>
+                    <span className="text-[13px] font-semibold text-[#007A5E]">â‚±{stats.totalValue.toLocaleString()}</span>
                   </div>
                   {stats.lowStockItems > 0 && (
                     <div className="flex justify-between">
@@ -322,10 +322,10 @@ export default function MultilocationView({
                     <p className="text-[12px] text-[#6b7280] mb-1">Active Transfers:</p>
                     <div className="flex items-center justify-between text-[13px]">
                       {stats.incomingTransfers > 0 && (
-                        <span className="text-[#008967]">↓ {stats.incomingTransfers} incoming</span>
+                        <span className="text-[#008967]">â†“ {stats.incomingTransfers} incoming</span>
                       )}
                       {stats.outgoingTransfers > 0 && (
-                        <span className="text-[#FFA500]">↑ {stats.outgoingTransfers} outgoing</span>
+                        <span className="text-[#FFA500]">â†‘ {stats.outgoingTransfers} outgoing</span>
                       )}
                     </div>
                   </div>
@@ -372,7 +372,7 @@ export default function MultilocationView({
                           </div>
                           <div className="bg-[#F8FAFB] rounded-[8px] p-3">
                             <p className="text-[11px] text-[#6b7280]">Stock Value</p>
-                            <p className="text-[18px] font-bold text-[#007A5E]">₱{(stats.totalValue / 1000).toFixed(1)}K</p>
+                            <p className="text-[18px] font-bold text-[#007A5E]">â‚±{(stats.totalValue / 1000).toFixed(1)}K</p>
                           </div>
                           <div className="bg-[#F8FAFB] rounded-[8px] p-3">
                             <p className="text-[11px] text-[#6b7280]">Low Stock</p>
@@ -616,7 +616,7 @@ export default function MultilocationView({
                     </div>
                     <div className="bg-[#F8FAFB] rounded-[12px] p-4">
                       <p className="text-[12px] text-[#6b7280] mb-1">Stock Value</p>
-                      <p className="text-[24px] font-bold text-[#007A5E]">₱{stats.totalValue.toLocaleString()}</p>
+                      <p className="text-[24px] font-bold text-[#007A5E]">â‚±{stats.totalValue.toLocaleString()}</p>
                     </div>
                     <div className="bg-[#F8FAFB] rounded-[12px] p-4">
                       <p className="text-[12px] text-[#6b7280] mb-1">Low Stock Items</p>
@@ -681,11 +681,11 @@ export default function MultilocationView({
                           <div key={item.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] p-3 flex items-center justify-between">
                             <div className="flex-1">
                               <p className="text-[14px] font-medium text-[#323B42]">{item.name}</p>
-                              <p className="text-[12px] text-[#6b7280]">{item.category} • {item.condition}</p>
+                              <p className="text-[12px] text-[#6b7280]">{item.category} â€¢ {item.condition}</p>
                             </div>
                             <div className="text-right">
                               <p className="text-[14px] font-semibold text-[#007A5E]">{item.quantity}</p>
-                              <p className="text-[12px] text-[#6b7280]">₱{item.price}</p>
+                              <p className="text-[12px] text-[#6b7280]">â‚±{item.price}</p>
                             </div>
                           </div>
                         ))}

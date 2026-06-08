@@ -1,7 +1,7 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
-import type { PurchaseOrder, InventoryItem, Supplier } from '../utils/generateSampleData';
-import { categorySubcategories } from '../utils/constants';
+import type { PurchaseOrder, InventoryItem, Supplier } from '../../app/utils/generateSampleData';
+import { categorySubcategories } from '../../app/utils/constants';
 
 export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventory, setInventory, currentUser }: {
   orders: PurchaseOrder[];
@@ -368,7 +368,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                         className="px-4 py-3 hover:bg-[#f8fafb] cursor-pointer border-b border-[rgba(50,59,66,0.1)] last:border-b-0"
                       >
                         <p className="text-[14px] font-medium text-[#323b42]">{supplier.name}</p>
-                        <p className="text-[12px] text-[#6b7280] mt-0.5">{supplier.category} • {supplier.contactPerson}</p>
+                        <p className="text-[12px] text-[#6b7280] mt-0.5">{supplier.category} â€¢ {supplier.contactPerson}</p>
                       </div>
                     ))}
                   </div>
@@ -453,9 +453,9 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                       <div className="border-t border-[rgba(50,59,66,0.15)] pt-3">
                         <div className="flex items-center justify-between">
                           <span className="text-[12px] text-[#6b7280]">
-                            {item.quantity} qty × ₱{item.price.toLocaleString()}
+                            {item.quantity} qty Ã— â‚±{item.price.toLocaleString()}
                           </span>
-                          <span className="text-[14px] font-semibold text-[#007a5e]">₱{(item.quantity * item.price).toLocaleString()}</span>
+                          <span className="text-[14px] font-semibold text-[#007a5e]">â‚±{(item.quantity * item.price).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -467,7 +467,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
             <div className="mt-3 bg-[#f3f4f6] rounded-[12px] p-3 flex justify-between items-center">
               <span className="text-[16px] font-semibold text-[#323b42]">Total Order Cost:</span>
               <span className="text-[20px] font-bold text-[#007a5e]">
-                ₱{poForm.items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString()}
+                â‚±{poForm.items.reduce((sum, item) => sum + (item.quantity * item.price), 0).toLocaleString()}
               </span>
             </div>
 
@@ -646,7 +646,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                   />
                 </div>
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost per Bale (₱) *</label>
+                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost per Bale (â‚±) *</label>
                   <input
                     type="number"
                     min="0"
@@ -823,7 +823,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                 <p className="text-[14px] text-[#323B42]">Date: {order.date}</p>
               </div>
               <div className="text-right">
-                <p className="text-[24px] font-bold text-[#323B42]">₱{order.totalAmount.toLocaleString()}</p>
+                <p className="text-[24px] font-bold text-[#323B42]">â‚±{order.totalAmount.toLocaleString()}</p>
                 <p className="text-[12px] text-[#323B42]">Total Amount</p>
               </div>
             </div>
@@ -835,7 +835,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                   <div key={idx} className="flex items-center justify-between text-[13px]">
                     <span className="text-[#323B42]">{item.name}</span>
                     <span className="text-[#323B42]">
-                      {item.quantity} × ₱{item.price} = <span className="font-medium">₱{(item.quantity * item.price).toLocaleString()}</span>
+                      {item.quantity} Ã— â‚±{item.price} = <span className="font-medium">â‚±{(item.quantity * item.price).toLocaleString()}</span>
                     </span>
                   </div>
                 ))}
@@ -883,7 +883,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                         <p className="text-[14px] text-[#6b7280]">Date: {po.date}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[20px] font-bold text-[#007A5E]">₱{po.totalAmount.toLocaleString()}</p>
+                        <p className="text-[20px] font-bold text-[#007A5E]">â‚±{po.totalAmount.toLocaleString()}</p>
                         <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-[#fef3c6] text-[#92400e]">
                           Pending Approval
                         </span>
@@ -897,7 +897,7 @@ export default function PurchaseOrdersView({ orders, setPurchaseOrders, inventor
                           <div key={idx} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] px-3 py-2 rounded-[6px]">
                             <span className="text-[#323B42]">{item.name}</span>
                             <span className="text-[#323B42]">
-                              {item.quantity} × ₱{item.price} = <span className="font-medium">₱{(item.quantity * item.price).toLocaleString()}</span>
+                              {item.quantity} Ã— â‚±{item.price} = <span className="font-medium">â‚±{(item.quantity * item.price).toLocaleString()}</span>
                             </span>
                           </div>
                         ))}

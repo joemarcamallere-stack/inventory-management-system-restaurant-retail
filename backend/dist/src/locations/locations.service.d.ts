@@ -4,11 +4,12 @@ import { UpdateLocationDto } from './dto/update-location.dto';
 export declare class LocationsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
-    create(createLocationDto: CreateLocationDto): Promise<Omit<{
+    create(createLocationDto: CreateLocationDto, businessId: string): Promise<Omit<{
         id: string;
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string;
         manager: string;
         phone: string;
@@ -16,7 +17,7 @@ export declare class LocationsService {
     }, "_count"> & {
         itemCount: number;
     }>;
-    findAll(): Promise<(Omit<{
+    findAll(businessId: string): Promise<(Omit<{
         _count: {
             items: number;
         };
@@ -25,6 +26,7 @@ export declare class LocationsService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string;
         manager: string;
         phone: string;
@@ -32,7 +34,7 @@ export declare class LocationsService {
     }, "_count"> & {
         itemCount: number;
     })[]>;
-    findOne(id: string): Promise<Omit<{
+    findOne(id: string, businessId: string): Promise<Omit<{
         _count: {
             items: number;
         };
@@ -41,6 +43,7 @@ export declare class LocationsService {
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string;
         manager: string;
         phone: string;
@@ -48,11 +51,12 @@ export declare class LocationsService {
     }, "_count"> & {
         itemCount: number;
     }>;
-    update(id: string, updateLocationDto: UpdateLocationDto): Promise<Omit<{
+    update(id: string, updateLocationDto: UpdateLocationDto, businessId: string): Promise<Omit<{
         id: string;
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string;
         manager: string;
         phone: string;
@@ -60,11 +64,12 @@ export declare class LocationsService {
     }, "_count"> & {
         itemCount: number;
     }>;
-    remove(id: string): Promise<{
+    remove(id: string, businessId: string): Promise<{
         id: string;
         name: string;
         createdAt: Date;
         updatedAt: Date;
+        businessId: string;
         address: string;
         manager: string;
         phone: string;

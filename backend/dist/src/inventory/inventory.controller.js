@@ -20,71 +20,79 @@ const update_inventory_dto_1 = require("./dto/update-inventory.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
 const roles_guard_1 = require("../auth/roles.guard");
+const current_user_decorator_1 = require("../auth/current-user.decorator");
 let InventoryController = class InventoryController {
     inventoryService;
     constructor(inventoryService) {
         this.inventoryService = inventoryService;
     }
-    create(createInventoryDto) {
-        return this.inventoryService.create(createInventoryDto);
+    create(createInventoryDto, currentUser) {
+        return this.inventoryService.create(createInventoryDto, currentUser.businessId, currentUser.modules);
     }
-    findAll(search) {
-        return this.inventoryService.findAll(search);
+    findAll(currentUser, search, itemType) {
+        return this.inventoryService.findAll(currentUser.businessId, search, itemType, currentUser.modules);
     }
-    getStats() {
-        return this.inventoryService.getStats();
+    getStats(currentUser) {
+        return this.inventoryService.getStats(currentUser.businessId);
     }
-    findOne(id) {
-        return this.inventoryService.findOne(id);
+    findOne(id, currentUser) {
+        return this.inventoryService.findOne(id, currentUser.businessId);
     }
-    update(id, updateInventoryDto) {
-        return this.inventoryService.update(id, updateInventoryDto);
+    update(id, updateInventoryDto, currentUser) {
+        return this.inventoryService.update(id, updateInventoryDto, currentUser.businessId, currentUser.modules);
     }
-    remove(id) {
-        return this.inventoryService.remove(id);
+    remove(id, currentUser) {
+        return this.inventoryService.remove(id, currentUser.businessId);
     }
 };
 exports.InventoryController = InventoryController;
 __decorate([
     (0, common_1.Post)(),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_inventory_dto_1.CreateInventoryDto]),
+    __metadata("design:paramtypes", [create_inventory_dto_1.CreateInventoryDto, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('search')),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Query)('search')),
+    __param(2, (0, common_1.Query)('itemType')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String, String]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('stats'),
+    __param(0, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     __param(0, (0, common_1.Param)('id')),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_inventory_dto_1.UpdateInventoryDto]),
+    __metadata("design:paramtypes", [String, update_inventory_dto_1.UpdateInventoryDto, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
     __param(0, (0, common_1.Param)('id')),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [String, Object]),
     __metadata("design:returntype", void 0)
 ], InventoryController.prototype, "remove", null);
 exports.InventoryController = InventoryController = __decorate([

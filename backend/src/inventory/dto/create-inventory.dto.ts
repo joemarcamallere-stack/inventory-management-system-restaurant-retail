@@ -1,6 +1,8 @@
 import {
   IsEnum,
+  IsISO8601,
   IsNumber,
+  IsOptional,
   IsString,
   IsUUID,
   Min,
@@ -20,37 +22,87 @@ export enum InventoryCondition {
   Damaged = 'Damaged',
 }
 
+export enum InventoryItemType {
+  UkayItem = 'UKAY_ITEM',
+  Ingredient = 'INGREDIENT',
+  MenuItem = 'MENU_ITEM',
+  Supply = 'SUPPLY',
+  Bundle = 'BUNDLE',
+}
+
 export class CreateInventoryDto {
   @IsString()
   @MinLength(2)
-  name: string;
+  name!: string;
 
-  @IsString()
-  @MinLength(2)
-  category: string;
+  @IsOptional()
+  @IsEnum(InventoryItemType)
+  itemType?: InventoryItemType;
 
-  @IsEnum(TargetCustomer)
-  targetCustomer: TargetCustomer;
-
-  @IsString()
-  @MinLength(2)
-  subcategory: string;
-
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  size: string;
+  sku?: string;
 
+  @IsString()
+  @MinLength(2)
+  category!: string;
+
+  @IsOptional()
+  @IsEnum(TargetCustomer)
+  targetCustomer?: TargetCustomer;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(2)
+  subcategory?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  size?: string;
+
+  @IsOptional()
   @IsEnum(InventoryCondition)
-  condition: InventoryCondition;
+  condition?: InventoryCondition;
 
   @IsNumber()
   @Min(0)
-  quantity: number;
+  quantity!: number;
 
   @IsNumber()
   @Min(0)
-  price: number;
+  price!: number;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  unit?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderPoint?: number;
+
+  @IsOptional()
+  @IsISO8601()
+  expiryDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  storageTemperature?: string;
 
   @IsUUID()
-  locationId: string;
+  locationId!: string;
 }

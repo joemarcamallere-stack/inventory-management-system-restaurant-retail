@@ -15,6 +15,8 @@ import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { AuthenticatedUser } from '../auth/current-user.decorator';
 
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -23,35 +25,57 @@ export class InventoryController {
   constructor(private readonly inventoryService: InventoryService) {}
 
   @Post()
-  create(@Body() createInventoryDto: CreateInventoryDto) {
-    return this.inventoryService.create(createInventoryDto);
+  create(
+    @Body() createInventoryDto: CreateInventoryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
+  ) {
+    return this.inventoryService.create(
+      createInventoryDto,
+      currentUser.businessId,
+      currentUser.modules,
+    );
   }
 
   @Get()
-  findAll(@Query('search') search?: string) {
-    return this.inventoryService.findAll(search);
+  findAll(
+    @CurrentUser() currentUser: AuthenticatedUser,
+    @Query('search') search?: string,
+    @Query('itemType') itemType?: string,
+  ) {
+    return this.inventoryService.findAll(
+      currentUser.businessId,
+      search,
+      itemType,
+      currentUser.modules,
+    );
   }
 
   @Get('stats')
-  getStats() {
-    return this.inventoryService.getStats();
+  getStats(@CurrentUser() currentUser: AuthenticatedUser) {
+    return this.inventoryService.getStats(currentUser.businessId);
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.inventoryService.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    return this.inventoryService.findOne(id, currentUser.businessId);
   }
 
   @Patch(':id')
   update(
     @Param('id') id: string,
     @Body() updateInventoryDto: UpdateInventoryDto,
+    @CurrentUser() currentUser: AuthenticatedUser,
   ) {
-    return this.inventoryService.update(id, updateInventoryDto);
+    return this.inventoryService.update(
+      id,
+      updateInventoryDto,
+      currentUser.businessId,
+      currentUser.modules,
+    );
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.inventoryService.remove(id);
+  remove(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
+    return this.inventoryService.remove(id, currentUser.businessId);
   }
 }

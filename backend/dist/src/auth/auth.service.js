@@ -65,14 +65,20 @@ let AuthService = class AuthService {
         }
         await this.usersService.touchLastLogin(user.id);
         const currentUser = this.usersService.sanitizeUser(user);
+        const { business: _business, ...safeUser } = currentUser;
         const accessToken = await this.jwtService.signAsync({
             sub: user.id,
             email: user.email,
             role: user.role,
+            businessId: user.businessId,
+            modules: user.business.modules,
         });
         return {
             accessToken,
-            user: currentUser,
+            user: {
+                ...safeUser,
+                modules: user.business.modules,
+            },
         };
     }
 };

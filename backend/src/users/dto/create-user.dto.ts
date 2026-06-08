@@ -4,6 +4,9 @@ export enum UserRole {
   Admin = 'Admin',
   Manager = 'Manager',
   Staff = 'Staff',
+  Cashier = 'Cashier',
+  KitchenStaff = 'KitchenStaff',
+  UkayStaff = 'UkayStaff',
 }
 
 export enum UserStatus {
@@ -14,18 +17,18 @@ export enum UserStatus {
 export class CreateUserDto {
   @IsString()
   @MinLength(2)
-  name: string;
+  name!: string;
 
   @IsEmail()
-  email: string;
+  email!: string;
 
   @IsString()
   @MinLength(6)
-  password: string;
+  password!: string;
 
   @IsEnum(UserRole)
-  role: UserRole;
+  role!: UserRole;
 
   @IsEnum(UserStatus)
-  status: UserStatus;
+  status!: UserStatus;
 }

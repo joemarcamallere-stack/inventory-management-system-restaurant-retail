@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
+﻿import { useState, useMemo } from 'react';
 import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, XCircle, Clock, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
-import type { Transfer, Adjustment, InventoryItem, Location } from '../utils/generateSampleData';
+import type { Transfer, Adjustment, InventoryItem, Location } from '../../app/utils/generateSampleData';
 
 export default function TransfersView({
   transfers,
@@ -789,7 +789,7 @@ export default function TransfersView({
                         <div className="flex-1">
                           <p className="text-[14px] font-medium text-[#323B42]">{item.name}</p>
                           <p className="text-[12px] text-[#6b7280]">
-                            {item.location} • Current: {item.currentQuantity}
+                            {item.location} â€¢ Current: {item.currentQuantity}
                           </p>
                         </div>
                         <div className="flex items-center gap-3">
@@ -969,15 +969,15 @@ export default function TransfersView({
                                               <span className="text-[12px] text-[#6b7280]">
                                                 <span className="font-medium">Size:</span> {item.size}
                                               </span>
-                                              <span className="text-[12px] text-[#6b7280]">•</span>
+                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
                                               <span className="text-[12px] text-[#6b7280]">
                                                 <span className="font-medium">Location:</span> {item.location}
                                               </span>
-                                              <span className="text-[12px] text-[#6b7280]">•</span>
+                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
                                               <span className="text-[12px] text-[#6b7280]">
                                                 <span className="font-medium">Qty:</span> {item.quantity}
                                               </span>
-                                              <span className="text-[12px] text-[#6b7280]">•</span>
+                                              <span className="text-[12px] text-[#6b7280]">â€¢</span>
                                               <span className={`text-[12px] font-medium ${
                                                 item.condition === 'Excellent' ? 'text-[#00a63e]' :
                                                 item.condition === 'Good' ? 'text-[#007A5E]' :

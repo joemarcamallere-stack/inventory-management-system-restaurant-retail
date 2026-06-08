@@ -16,6 +16,9 @@ const users_module_1 = require("./users/users.module");
 const locations_module_1 = require("./locations/locations.module");
 const inventory_module_1 = require("./inventory/inventory.module");
 const auth_module_1 = require("./auth/auth.module");
+const stock_movements_module_1 = require("./stock-movements/stock-movements.module");
+const recipes_module_1 = require("./recipes/recipes.module");
+const kitchen_orders_module_1 = require("./kitchen-orders/kitchen-orders.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -28,6 +31,9 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             locations_module_1.LocationsModule,
             inventory_module_1.InventoryModule,
+            stock_movements_module_1.StockMovementsModule,
+            recipes_module_1.RecipesModule,
+            kitchen_orders_module_1.KitchenOrdersModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

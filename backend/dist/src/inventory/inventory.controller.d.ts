@@ -1,15 +1,17 @@
 import { InventoryService } from './inventory.service';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
+import type { AuthenticatedUser } from '../auth/current-user.decorator';
 export declare class InventoryController {
     private readonly inventoryService;
     constructor(inventoryService: InventoryService);
-    create(createInventoryDto: CreateInventoryDto): Promise<{
+    create(createInventoryDto: CreateInventoryDto, currentUser: AuthenticatedUser): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -20,22 +22,32 @@ export declare class InventoryController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    findAll(search?: string): Promise<({
+    findAll(currentUser: AuthenticatedUser, search?: string, itemType?: string): Promise<({
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -46,17 +58,26 @@ export declare class InventoryController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     })[]>;
-    getStats(): Promise<{
+    getStats(currentUser: AuthenticatedUser): Promise<{
         totalItems: number;
         availableStock: number;
         damagedItems: number;
@@ -69,12 +90,13 @@ export declare class InventoryController {
             severity: string;
         }[];
     }>;
-    findOne(id: string): Promise<{
+    findOne(id: string, currentUser: AuthenticatedUser): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -85,22 +107,32 @@ export declare class InventoryController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    update(id: string, updateInventoryDto: UpdateInventoryDto): Promise<{
+    update(id: string, updateInventoryDto: UpdateInventoryDto, currentUser: AuthenticatedUser): Promise<{
         location: {
             id: string;
             name: string;
             createdAt: Date;
             updatedAt: Date;
+            businessId: string;
             address: string;
             manager: string;
             phone: string;
@@ -111,29 +143,47 @@ export declare class InventoryController {
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
-    remove(id: string): Promise<{
+    remove(id: string, currentUser: AuthenticatedUser): Promise<{
         id: string;
         name: string;
         createdAt: Date;
         updatedAt: Date;
-        locationId: string;
+        businessId: string;
+        itemType: import("@prisma/client").$Enums.InventoryItemType;
+        sku: string | null;
         category: string;
-        targetCustomer: string;
-        subcategory: string;
-        size: string;
-        condition: string;
+        targetCustomer: string | null;
+        subcategory: string | null;
+        size: string | null;
+        condition: string | null;
         quantity: number;
         price: number;
+        unit: string | null;
+        minStock: number | null;
+        maxStock: number | null;
+        reorderPoint: number | null;
+        expiryDate: Date | null;
+        storageTemperature: string | null;
         dateAdded: Date;
+        locationId: string;
     }>;
 }

@@ -51,31 +51,37 @@ let UsersService = class UsersService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    async create(createUserDto) {
+    async create(createUserDto, businessId) {
         const { password, ...userData } = createUserDto;
         const passwordHash = await bcrypt.hash(password, 12);
         const user = await this.prisma.user.create({
-            data: { ...userData, passwordHash },
+            data: { ...userData, passwordHash, businessId },
         });
         return this.sanitizeUser(user);
     }
-    async findAll() {
+    async findAll(businessId) {
         const users = await this.prisma.user.findMany({
+            where: { businessId },
             orderBy: { createdAt: 'desc' },
         });
         return users.map((user) => this.sanitizeUser(user));
     }
-    async findOne(id) {
-        const user = await this.prisma.user.findUnique({ where: { id } });
+    async findOne(id, businessId) {
+        const user = await this.prisma.user.findFirst({
+            where: { id, businessId },
+        });
         if (!user)
             throw new common_1.NotFoundException(`User #${id} not found`);
         return this.sanitizeUser(user);
     }
     async findByEmail(email) {
-        return this.prisma.user.findUnique({ where: { email } });
+        return this.prisma.user.findUnique({
+            where: { email },
+            include: { business: true },
+        });
     }
-    async update(id, updateUserDto) {
-        await this.findOne(id);
+    async update(id, updateUserDto, businessId) {
+        await this.findOne(id, businessId);
         const { password, ...userData } = updateUserDto;
         const data = password !== undefined
             ? { ...userData, passwordHash: await bcrypt.hash(password, 12) }
@@ -86,8 +92,8 @@ let UsersService = class UsersService {
         });
         return this.sanitizeUser(user);
     }
-    async remove(id) {
-        await this.findOne(id);
+    async remove(id, businessId) {
+        await this.findOne(id, businessId);
         const user = await this.prisma.user.delete({ where: { id } });
         return this.sanitizeUser(user);
     }
