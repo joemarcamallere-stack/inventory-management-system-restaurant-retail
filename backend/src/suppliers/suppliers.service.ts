@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateSupplierDto } from './dto/create-supplier.dto';
 import { UpdateSupplierDto } from './dto/update-supplier.dto';
 
@@ -41,8 +41,7 @@ export class SuppliersService {
       this.prisma.supplier.findMany({
         where,
         orderBy: { name: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.supplier.count({ where }),
     ]);

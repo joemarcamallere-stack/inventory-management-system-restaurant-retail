@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 
@@ -30,8 +30,7 @@ export class LocationsService {
         where,
         include: { _count: { select: { items: true } } },
         orderBy: { name: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.location.count({ where }),
     ]);

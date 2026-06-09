@@ -1,7 +1,7 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateInventoryDto } from './dto/create-inventory.dto';
 import { InventoryItemType } from './dto/create-inventory.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
@@ -61,8 +61,7 @@ export class InventoryService {
         where,
         include: { location: true },
         orderBy: { dateAdded: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.inventoryItem.count({ where }),
     ]);

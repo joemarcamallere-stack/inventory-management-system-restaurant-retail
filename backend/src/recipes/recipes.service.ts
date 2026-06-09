@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateRecipeDto, RecipeIngredientDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
@@ -61,8 +61,7 @@ export class RecipesService {
         where,
         include: this.recipeInclude,
         orderBy: { name: 'asc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.recipe.count({ where }),
     ]);
@@ -143,6 +142,21 @@ export class RecipesService {
 
     if (itemCount !== new Set(itemIds).size) {
       throw new NotFoundException('One or more recipe items were not found');
+    }
+
+    const invalidItems = await this.prisma.inventoryItem.findMany({
+      where: {
+        businessId,
+        id: { in: Array.from(new Set(itemIds)) },
+        itemType: 'UKAY_ITEM',
+      },
+      select: { name: true },
+    });
+
+    if (invalidItems.length > 0) {
+      throw new BadRequestException(
+        `The following items cannot be used as recipe ingredients: ${invalidItems.map((item) => item.name).join(', ')}`,
+      );
     }
   }
 

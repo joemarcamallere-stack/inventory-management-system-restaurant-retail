@@ -12,12 +12,17 @@ import { SalesService } from './sales.service';
 import { CreateSaleDto } from './dto/create-sale.dto';
 import { RefundSaleDto } from './dto/refund-sale.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BusinessModulesGuard } from '../auth/business-modules.guard';
+import { RequiredBusinessModules } from '../auth/business-modules.decorator';
+import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
 
 @Controller('sales')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, BusinessModulesGuard)
+@Roles('Admin', 'Manager', 'Staff')
+@RequiredBusinessModules('UKAY')
 export class SalesController {
   constructor(private readonly salesService: SalesService) {}
 
@@ -53,6 +58,7 @@ export class SalesController {
   }
 
   @Patch(':id/refund')
+  @Roles('Admin', 'Manager')
   refund(
     @Param('id') id: string,
     @Body() dto: RefundSaleDto,

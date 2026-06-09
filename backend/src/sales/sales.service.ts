@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
 
 @Injectable()
@@ -150,8 +150,7 @@ export class SalesService {
         where,
         include: this.saleInclude,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.sale.count({ where }),
     ]);

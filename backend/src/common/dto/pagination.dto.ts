@@ -38,3 +38,7 @@ export function paginate<T>(
     totalPages: Math.ceil(total / limit),
   };
 }
+
+export function paginateQuery(page: number, limit: number) {
+  return { skip: (page - 1) * limit, take: limit };
+}

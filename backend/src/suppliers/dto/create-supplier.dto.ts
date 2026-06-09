@@ -7,6 +7,7 @@ export class CreateSupplierDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   contactPerson?: string;
 
   @IsOptional()
@@ -15,14 +16,17 @@ export class CreateSupplierDto {
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   phone?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   address?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   category?: string;
 
   @IsOptional()

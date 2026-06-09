@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -8,6 +9,14 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export enum PaymentMethod {
+  CASH = 'Cash',
+  CARD = 'Card',
+  GCASH = 'GCash',
+  BANK_TRANSFER = 'Bank Transfer',
+  CHECK = 'Check',
+}
 
 export class SaleItemDto {
   @IsUUID()
@@ -41,8 +50,8 @@ export class CreateSaleDto {
   @Min(0)
   tax?: number;
 
-  @IsString()
-  paymentMethod: string;
+  @IsEnum(PaymentMethod)
+  paymentMethod: PaymentMethod;
 
   @IsNumber()
   @Min(0)

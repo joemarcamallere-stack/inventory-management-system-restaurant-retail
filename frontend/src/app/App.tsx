@@ -30,16 +30,6 @@ import type {
   User,
 } from './utils/generateSampleData';
 
-import {
-  generateSampleData,
-  generatePurchaseOrders,
-  generateProductsReceived,
-  generateTransfers,
-  generateAdjustments,
-  generateLocations,
-  generateUsers,
-} from './utils/generateSampleData';
-
 // Types
 interface StockAlert {
   id: string;
@@ -110,13 +100,13 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  const [inventory, setInventory] = useState<InventoryItem[]>(generateSampleData());
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(generatePurchaseOrders());
-  const [productsReceived, setProductsReceived] = useState<ProductReceived[]>(generateProductsReceived());
-  const [transfers, setTransfers] = useState<Transfer[]>(generateTransfers());
-  const [adjustments, setAdjustments] = useState<Adjustment[]>(generateAdjustments());
-  const [locations, setLocations] = useState<Location[]>(generateLocations());
-  const [users, setUsers] = useState<User[]>(generateUsers());
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [productsReceived, setProductsReceived] = useState<ProductReceived[]>([]);
+  const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasUkayModule = currentUser?.modules?.includes('UKAY') ?? false;
   const hasBothModules = hasRestaurantModule && hasUkayModule;

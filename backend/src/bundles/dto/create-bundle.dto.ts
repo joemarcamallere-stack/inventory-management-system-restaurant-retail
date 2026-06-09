@@ -1,8 +1,16 @@
-import { IsArray, IsNumber, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNumber,
+  IsString,
+  IsUUID,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class BundleItemDto {
-  @IsString()
+  @IsUUID()
   inventoryItemId: string;
 
   @IsNumber()
@@ -12,6 +20,7 @@ export class BundleItemDto {
 
 export class CreateBundleDto {
   @IsString()
+  @MinLength(1)
   name: string;
 
   @IsNumber()

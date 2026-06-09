@@ -1,13 +1,24 @@
 import {
   IsArray,
+  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   Min,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+
+export enum POPaymentMethod {
+  CASH = 'Cash',
+  CARD = 'Card',
+  GCASH = 'GCash',
+  BANK_TRANSFER = 'Bank Transfer',
+  CHECK = 'Check',
+  CREDIT_TERMS = 'Credit Terms',
+}
 
 export class PurchaseOrderItemDto {
   @IsOptional()
@@ -15,6 +26,7 @@ export class PurchaseOrderItemDto {
   inventoryItemId?: string;
 
   @IsString()
+  @MinLength(1)
   name: string;
 
   @IsNumber()
@@ -36,11 +48,12 @@ export class CreatePurchaseOrderDto {
   notes?: string;
 
   @IsOptional()
-  @IsString()
-  paymentMethod?: string;
+  @IsEnum(POPaymentMethod)
+  paymentMethod?: POPaymentMethod;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   paymentTerms?: string;
 
   @IsArray()

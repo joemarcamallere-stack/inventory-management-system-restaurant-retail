@@ -11,12 +11,14 @@ import {
 import { TransfersService } from './transfers.service';
 import { CreateTransferDto } from './dto/create-transfer.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
 
 @Controller('transfers')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('Admin', 'Manager', 'Staff')
 export class TransfersController {
   constructor(private readonly transfersService: TransfersService) {}
 

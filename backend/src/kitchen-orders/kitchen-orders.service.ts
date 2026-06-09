@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { KitchenOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { paginate, PaginatedResult } from '../common/dto/pagination.dto';
+import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateKitchenOrderDto } from './dto/create-kitchen-order.dto';
 import { VoidKitchenOrderDto } from './dto/void-kitchen-order.dto';
 
@@ -144,8 +144,7 @@ export class KitchenOrdersService {
         where,
         include: this.kitchenOrderInclude,
         orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * limit,
-        take: limit,
+        ...paginateQuery(page, limit),
       }),
       this.prisma.kitchenOrder.count({ where }),
     ]);
