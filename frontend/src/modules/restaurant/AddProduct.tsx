@@ -7,6 +7,7 @@ import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOp
 type StoredProduct = {
   id: number;
   name: string;
+  itemType: string;
   sku: string;
   category: string;
   stock: number;
@@ -39,6 +40,7 @@ export function AddProduct() {
   const [categoryForSubCategory, setCategoryForSubCategory] = useState("");
   const [formData, setFormData] = useState({
     name: "",
+    itemType: "INGREDIENT",
     sku: "",
     price: "",
     stock: "",
@@ -65,6 +67,7 @@ export function AddProduct() {
     const productToAdd: StoredProduct = {
       id: nextId,
       name: formData.name,
+      itemType: formData.itemType,
       sku: formData.sku,
       category: `${selectedCategory} > ${selectedSubCategory}`,
       stock,
@@ -173,6 +176,24 @@ export function AddProduct() {
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                     required
                   />
+                </div>
+
+                <div>
+                  <label htmlFor="itemType" className="block text-sm mb-2 text-foreground">
+                    Item Type *
+                  </label>
+                  <select
+                    id="itemType"
+                    name="itemType"
+                    value={formData.itemType}
+                    onChange={handleChange}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
+                    required
+                  >
+                    <option value="INGREDIENT">Ingredient</option>
+                    <option value="MENU_ITEM">Menu Item</option>
+                    <option value="SUPPLY">Supply</option>
+                  </select>
                 </div>
 
                 <div>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, ChefHat, ClipboardList, Store, UtensilsCrossed } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
 import MultilocationView from '../modules/retail/MultilocationView';
@@ -28,7 +28,6 @@ import type {
   Adjustment,
   Location,
   User,
-  Supplier,
 } from './utils/generateSampleData';
 
 import {
@@ -40,7 +39,6 @@ import {
   generateLocations,
   generateUsers,
 } from './utils/generateSampleData';
-
 
 // Types
 interface StockAlert {
@@ -531,56 +529,6 @@ export default function App() {
             </>
           )}
 
-          {/* Restaurant nav â€” shown when activeModule is RESTAURANT */}
-          {activeModule === 'RESTAURANT' && hasRestaurantModule && (
-            <>
-              <NavButton active={currentView === 'restaurant-dashboard'} onClick={() => setCurrentView('restaurant-dashboard')}>
-                <DashboardIcon />
-                Dashboard
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-stock-control'} onClick={() => setCurrentView('restaurant-stock-control')}>
-                <StockAlertsIcon />
-                Stock Control
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-food-inventory'} onClick={() => setCurrentView('restaurant-food-inventory')}>
-                <InventoryIcon />
-                Food Inventory
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-add-food-item'} onClick={() => setCurrentView('restaurant-add-food-item')}>
-                <PackagePlusIcon />
-                Add Food Item
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-purchase-orders'} onClick={() => setCurrentView('restaurant-purchase-orders')}>
-                <PurchaseOrdersIcon />
-                Purchase Orders
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-goods-received'} onClick={() => setCurrentView('restaurant-goods-received')}>
-                <ProductsReceivedIcon />
-                Goods Received
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-pos'} onClick={() => setCurrentView('restaurant-pos')}>
-                <RestaurantKitchenIcon />
-                POS / Kitchen Orders
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-recipe-bom'} onClick={() => setCurrentView('restaurant-recipe-bom')}>
-                <RestaurantRecipesIcon />
-                Recipe &amp; BOM
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-transfers'} onClick={() => setCurrentView('restaurant-transfers')}>
-                <TransfersIcon />
-                Transfers &amp; Adjustments
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-multilocation'} onClick={() => setCurrentView('restaurant-multilocation')}>
-                <MultilocationIcon />
-                Multi-Location
-              </NavButton>
-              <NavButton active={currentView === 'restaurant-reports'} onClick={() => setCurrentView('restaurant-reports')}>
-                <ReportsIcon />
-                Reports
-              </NavButton>
-            </>
-          )}
-
           {currentUser?.role === 'Admin' && (
             <NavButton active={currentView === 'user-management'} onClick={() => setCurrentView('user-management')}>
               <UserManagementIcon />
@@ -724,7 +672,6 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
 const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
-const PackagePlusIcon = () => <PackagePlus className="size-5" />;
 const PurchaseOrdersIcon = () => <ShoppingCart className="size-5" />;
 const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;
@@ -732,7 +679,5 @@ const TransfersIcon = () => <ArrowRightLeft className="size-5" />;
 const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;
 const UserManagementIcon = () => <Users className="size-5" />;
-const RestaurantRecipesIcon = () => <ChefHat className="size-5" />;
-const RestaurantKitchenIcon = () => <ClipboardList className="size-5" />;
 const LogoutIcon = () => <LogOut className="size-4" />;
 

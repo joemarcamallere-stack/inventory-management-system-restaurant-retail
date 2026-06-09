@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
-import { readLocalStorage, useLocalStorageState, writeLocalStorage } from "../lib/localStorage";
+import { completeKitchenOrder, voidKitchenOrder } from "../../app/api/client";
+import { readLocalStorage, useLocalStorageState, writeLocalStorageOnly } from "../lib/localStorage";
 import { InventoryProduct } from "../lib/inventoryLogic";
 
 type Ingredient = {
@@ -54,6 +55,17 @@ type InventoryMovement = {
 
 const normalizeName = (value: string | undefined) => (value || '').trim().toLowerCase();
 
+const reportSyncError = (error: unknown) => {
+  window.dispatchEvent(
+    new CustomEvent("restaurant-sync-error", {
+      detail: {
+        key: "pos.orders",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    }),
+  );
+};
+
 export function POSKitchenOrders() {
   const [searchQuery, setSearchQuery] = useState("");
   const [receiptNo, setReceiptNo] = useState("");
@@ -62,6 +74,8 @@ export function POSKitchenOrders() {
   const [notes, setNotes] = useState("");
   const [voidReason, setVoidReason] = useState("");
   const [voidingOrderId, setVoidingOrderId] = useState("");
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [isVoiding, setIsVoiding] = useState(false);
   const [excludedIngredientIds, setExcludedIngredientIds] = useState<Set<string>>(new Set());
 
   const [orders, setOrders] = useLocalStorageState<POSOrder[]>("pos.orders", []);
@@ -129,9 +143,9 @@ export function POSKitchenOrders() {
     setExcludedIngredientIds(nextExcluded);
   };
 
-  const completeOrder = (event: React.FormEvent) => {
+  const completeOrder = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedRecipe || !canCompleteOrder) return;
+    if (!selectedRecipe || !canCompleteOrder || isCompleting) return;
 
     const now = new Date().toISOString();
     const orderId = `POS-${Date.now()}`;
@@ -169,18 +183,38 @@ export function POSKitchenOrders() {
       notes,
     };
 
-    writeLocalStorage("inventory.products", nextProducts);
-    writeLocalStorage("inventory.movements", [...nextMovements, ...movements]);
-    setOrders([order, ...orders]);
-    setReceiptNo("");
-    setRecipeId("");
-    setExcludedIngredientIds(new Set());
-    setQuantity("1");
-    setNotes("");
+    setIsCompleting(true);
+    try {
+      const recipeIdMap = readLocalStorage<Record<string, string>>("recipes.backendIdByLocalId", {});
+      const saved = await completeKitchenOrder({
+        receiptNo: order.receiptNo,
+        recipeId: recipeIdMap[String(order.recipeId)] ?? order.recipeId,
+        quantity: order.quantity,
+        notes: order.notes,
+      });
+      const orderIdMap = readLocalStorage<Record<string, string>>("pos.backendIdByLocalId", {});
+      orderIdMap[orderId] = saved.id;
+      writeLocalStorageOnly("pos.backendIdByLocalId", orderIdMap);
+
+      // The backend has already deducted cloud stock. These writes only mirror
+      // the successful result in the legacy UI.
+      writeLocalStorageOnly("inventory.products", nextProducts);
+      writeLocalStorageOnly("inventory.movements", [...nextMovements, ...movements]);
+      setOrders([order, ...orders]);
+      setReceiptNo("");
+      setRecipeId("");
+      setExcludedIngredientIds(new Set());
+      setQuantity("1");
+      setNotes("");
+    } catch (error) {
+      reportSyncError(error);
+    } finally {
+      setIsCompleting(false);
+    }
   };
 
-  const voidOrder = (order: POSOrder) => {
-    if (!voidReason.trim()) return;
+  const voidOrder = async (order: POSOrder) => {
+    if (!voidReason.trim() || isVoiding) return;
 
     const products = readLocalStorage<InventoryProduct[]>("inventory.products", []);
     const movements = readLocalStorage<InventoryMovement[]>("inventory.movements", []);
@@ -202,15 +236,32 @@ export function POSKitchenOrders() {
       notes: `Void reversal for ${order.receiptNo}: ${voidReason.trim()}`,
     }));
 
-    writeLocalStorage("inventory.products", nextProducts);
-    writeLocalStorage("inventory.movements", [...reversalMovements, ...movements]);
-    setOrders(orders.map((current) =>
-      current.id === order.id
-        ? { ...current, status: "voided", voidReason: voidReason.trim(), voidedAt: now }
-        : current
-    ));
-    setVoidingOrderId("");
-    setVoidReason("");
+    setIsVoiding(true);
+    try {
+      const orderIdMap = readLocalStorage<Record<string, string>>("pos.backendIdByLocalId", {});
+      const backendId = orderIdMap[String(order.id)] ?? order.id;
+      await voidKitchenOrder(backendId, voidReason.trim());
+
+      const voidedSynced = readLocalStorage<Record<string, boolean>>("pos.voidedSynced", {});
+      voidedSynced[String(order.id)] = true;
+      writeLocalStorageOnly("pos.voidedSynced", voidedSynced);
+
+      // The backend has already restored cloud stock. These writes only mirror
+      // the successful result in the legacy UI.
+      writeLocalStorageOnly("inventory.products", nextProducts);
+      writeLocalStorageOnly("inventory.movements", [...reversalMovements, ...movements]);
+      setOrders(orders.map((current) =>
+        current.id === order.id
+          ? { ...current, status: "voided", voidReason: voidReason.trim(), voidedAt: now }
+          : current
+      ));
+      setVoidingOrderId("");
+      setVoidReason("");
+    } catch (error) {
+      reportSyncError(error);
+    } finally {
+      setIsVoiding(false);
+    }
   };
 
   return (
@@ -302,8 +353,8 @@ export function POSKitchenOrders() {
             )}
           </div>
 
-          <button type="submit" disabled={!canCompleteOrder} className="mt-5 w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50">
-            Complete Receipt & Deduct Stock
+          <button type="submit" disabled={!canCompleteOrder || isCompleting} className="mt-5 w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50">
+            {isCompleting ? "Completing..." : "Complete Receipt & Deduct Stock"}
           </button>
         </form>
 
@@ -379,7 +430,9 @@ export function POSKitchenOrders() {
             <textarea value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="Required void reason" className="mt-4 min-h-24 w-full rounded-lg border border-input bg-input-background px-3 py-2 text-sm outline-none focus:border-primary" />
             <div className="mt-4 flex gap-3">
               <button type="button" onClick={() => { setVoidingOrderId(""); setVoidReason(""); }} className="flex-1 rounded-lg bg-muted px-4 py-3 text-sm text-foreground">Cancel</button>
-              <button type="button" onClick={() => voidOrder(orders.find((order) => order.id === voidingOrderId)!)} disabled={!voidReason.trim()} className="flex-1 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-50">Void & Restore Stock</button>
+              <button type="button" onClick={() => voidOrder(orders.find((order) => order.id === voidingOrderId)!)} disabled={!voidReason.trim() || isVoiding} className="flex-1 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white disabled:opacity-50">
+                {isVoiding ? "Voiding..." : "Void & Restore Stock"}
+              </button>
             </div>
           </div>
         </div>

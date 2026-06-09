@@ -3,11 +3,13 @@ import {
   completeKitchenOrder,
   createInventoryItem,
   createRecipe,
+  deleteInventoryItem,
   getInventory,
   getLocations,
   getRecipes,
   updateInventoryItem,
   updateRecipe,
+  voidKitchenOrder,
 } from '../../app/api/client';
 
 export function readLocalStorage<T>(key: string, fallback: T): T {
@@ -25,6 +27,11 @@ export function writeLocalStorage<T>(key: string, value: T) {
   if (typeof window === 'undefined') return;
   window.localStorage.setItem(key, JSON.stringify(value));
   void syncRestaurantKey(key, value);
+}
+
+export function writeLocalStorageOnly<T>(key: string, value: T) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(key, JSON.stringify(value));
 }
 
 export function useLocalStorageState<T>(key: string, fallback: T) {
@@ -63,8 +70,13 @@ async function syncRestaurantKey<T>(key: string, value: T) {
     if (key === 'pos.orders' && Array.isArray(value)) {
       await syncKitchenOrders(value as any[]);
     }
-  } catch {
-    // Legacy UI remains usable if the backend sync rejects; the next hydration will reconcile.
+  } catch (error) {
+    console.error('[Restaurant Sync] Failed to sync key:', key, error);
+    window.dispatchEvent(
+      new CustomEvent('restaurant-sync-error', {
+        detail: { key, message: error instanceof Error ? error.message : String(error) },
+      }),
+    );
   }
 }
 
@@ -80,6 +92,8 @@ async function syncInventoryProducts(products: any[]) {
   if (!defaultLocation) return;
 
   const idMap = readRaw<Record<string, string>>('inventory.backendIdByLocalId', {});
+  // Snapshot of all previously synced backend IDs before this write
+  const allSyncedIds = new Set(Object.values(idMap));
 
   for (const product of products) {
     if (!product?.name) continue;
@@ -92,7 +106,8 @@ async function syncInventoryProducts(products: any[]) {
 
     const payload = {
       name: product.name,
-      itemType: 'INGREDIENT',
+      // Preserve the original itemType instead of hard-coding INGREDIENT
+      itemType: (product.itemType as string) ?? 'INGREDIENT',
       sku: product.sku || undefined,
       category: product.category || 'Uncategorized > General',
       quantity: Number(product.stock ?? product.quantity ?? 0),
@@ -111,6 +126,22 @@ async function syncInventoryProducts(products: any[]) {
       : await createInventoryItem(payload);
 
     if (product.id) idMap[String(product.id)] = saved.id;
+  }
+
+  // Delete backend items that were previously synced but are no longer in local state
+  const currentBackendIds = new Set(
+    products
+      .map(p => p.backendId ?? idMap[String(p.id)])
+      .filter((id): id is string => !!id),
+  );
+  for (const item of existing) {
+    if (allSyncedIds.has(item.id) && !currentBackendIds.has(item.id)) {
+      await deleteInventoryItem(item.id);
+      // Remove the stale local→backend mapping so a reused local ID creates a
+      // fresh backend record instead of trying to update the deleted one.
+      const localId = Object.keys(idMap).find(key => idMap[key] === item.id);
+      if (localId) delete idMap[localId];
+    }
   }
 
   writeRaw('inventory.backendIdByLocalId', idMap);
@@ -179,21 +210,37 @@ async function syncRecipes(recipes: any[]) {
 async function syncKitchenOrders(orders: any[]) {
   const recipeIdMap = readRaw<Record<string, string>>('recipes.backendIdByLocalId', {});
   const orderIdMap = readRaw<Record<string, string>>('pos.backendIdByLocalId', {});
+  const voidedSynced = readRaw<Record<string, boolean>>('pos.voidedSynced', {});
 
   for (const order of orders) {
-    if (!order?.receiptNo || order.status !== 'completed' || orderIdMap[String(order.id)]) continue;
-    const recipeId = recipeIdMap[String(order.recipeId)] ?? order.recipeId;
-    if (!recipeId) continue;
+    if (!order?.receiptNo) continue;
 
-    const saved = await completeKitchenOrder({
-      receiptNo: order.receiptNo,
-      recipeId,
-      quantity: Number(order.quantity ?? 1),
-      notes: order.notes,
-    });
+    if (order.status === 'completed' && !orderIdMap[String(order.id)]) {
+      const recipeId = recipeIdMap[String(order.recipeId)] ?? order.recipeId;
+      if (!recipeId) continue;
 
-    if (order.id) orderIdMap[String(order.id)] = saved.id;
+      const saved = await completeKitchenOrder({
+        receiptNo: order.receiptNo,
+        recipeId,
+        quantity: Number(order.quantity ?? 1),
+        notes: order.notes,
+      });
+
+      if (order.id) orderIdMap[String(order.id)] = saved.id;
+    }
+
+    // Sync void to backend — only once per order
+    if (order.status === 'voided' && !voidedSynced[String(order.id)]) {
+      const backendId =
+        orderIdMap[String(order.id)] ??
+        (typeof order.id === 'string' && order.id.includes('-') ? order.id : undefined);
+      if (!backendId) continue;
+
+      await voidKitchenOrder(backendId, order.voidReason || 'Voided from restaurant UI');
+      voidedSynced[String(order.id)] = true;
+    }
   }
 
   writeRaw('pos.backendIdByLocalId', orderIdMap);
+  writeRaw('pos.voidedSynced', voidedSynced);
 }

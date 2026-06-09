@@ -149,18 +149,75 @@ export class TransfersService {
           },
         });
 
+        // A SKU is unique across the business, so destination copies are stored
+        // without one while the source item exists. Match that copy on later
+        // transfers instead of creating another destination row.
+        let destItem = await tx.inventoryItem.findFirst({
+          where: {
+            businessId,
+            locationId: transfer.toLocationId,
+            OR: [
+              ...(item.sku ? [{ sku: item.sku }] : []),
+              {
+                sku: null,
+                name: item.name,
+                itemType: item.itemType,
+                category: item.category,
+                subcategory: item.subcategory,
+                size: item.size,
+                unit: item.unit,
+              },
+            ],
+          },
+        });
+
+        if (!destItem) {
+          // No matching item at destination — create one.
+          // Omit SKU to avoid the @@unique([businessId, sku]) conflict when the
+          // source item still exists with that SKU (partial transfer).
+          destItem = await tx.inventoryItem.create({
+            data: {
+              name: item.name,
+              itemType: item.itemType,
+              category: item.category,
+              targetCustomer: item.targetCustomer,
+              subcategory: item.subcategory,
+              size: item.size,
+              condition: item.condition,
+              quantity: 0,
+              price: item.price,
+              unit: item.unit,
+              minStock: item.minStock,
+              maxStock: item.maxStock,
+              reorderPoint: item.reorderPoint,
+              expiryDate: item.expiryDate,
+              storageTemperature: item.storageTemperature,
+              locationId: transfer.toLocationId,
+              businessId,
+            },
+          });
+        }
+
+        const destPrevious = destItem.quantity;
+        const destNew = destPrevious + transferItem.quantity;
+
+        await tx.inventoryItem.update({
+          where: { id: destItem.id },
+          data: { quantity: destNew },
+        });
+
         await tx.stockMovement.create({
           data: {
             type: 'TRANSFER_IN',
             quantity: transferItem.quantity,
-            previousQuantity: 0,
-            newQuantity: transferItem.quantity,
+            previousQuantity: destPrevious,
+            newQuantity: destNew,
             unit: item.unit,
             reason: 'Stock transfer in',
             referenceType: 'TRANSFER',
             referenceId: transfer.id,
             notes: `Transfer ${transfer.transferNumber} in`,
-            itemId: item.id,
+            itemId: destItem.id,
             locationId: transfer.toLocationId,
             businessId,
             createdById: completedById,
