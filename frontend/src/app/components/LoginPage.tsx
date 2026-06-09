@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, ShoppingBag, Tag, DollarSign, TrendingUp } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Package, Tag, DollarSign, TrendingUp } from 'lucide-react';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
@@ -44,16 +44,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     onLogin(email, password);
   };
 
-  const fillAdminCredentials = () => {
-    setEmail('admin@ukayukay.com');
-    setPassword('admin123');
-  };
-
-  const fillStaffCredentials = () => {
-    setEmail('staff@ukayukay.com');
-    setPassword('staff123');
-  };
-
   return (
     <div className="bg-[#F8FAFB] content-stretch flex flex-col items-start relative size-full min-h-screen">
       <style>{floatingAnimation}</style>
@@ -84,7 +74,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
                   {/* Central Icon Container */}
                   <div className="relative w-[200px] h-[200px] bg-white bg-opacity-20 backdrop-blur-sm rounded-full flex items-center justify-center border-4 border-white border-opacity-30">
-                    <ShoppingBag className="w-24 h-24 text-white opacity-60" strokeWidth={1.5} />
+                    <Package className="w-24 h-24 text-white opacity-60" strokeWidth={1.5} />
                   </div>
 
                   {/* Floating Tags Around */}
@@ -116,12 +106,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               {/* Logo and Title */}
               <div className="absolute content-stretch flex gap-[12px] items-center left-[48px] top-[48px] w-[476px] z-[50]" style={{ animation: 'slide-in-left 0.6s ease-out' }}>
                 <div className="relative rounded-full shadow-lg shrink-0 size-[48px] bg-white flex items-center justify-center" style={{ animation: 'pulse-glow 3s ease-in-out infinite' }}>
-                  <ShoppingBag className="w-7 h-7 text-[#007A5E]" strokeWidth={2.2} />
+                  <Package className="w-7 h-7 text-[#007A5E]" strokeWidth={2.2} />
                 </div>
                 <div className="relative shrink-0 w-[208.65px]">
                   <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
                     <p className="font-['Poppins',sans-serif] font-bold leading-[32px] text-[24px] text-white whitespace-nowrap" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                      Ukay-Ukay
+                      Inventra
                     </p>
                     <p className="font-['Inter',sans-serif] font-normal leading-[20px] text-[14px] text-[rgba(255,255,255,0.95)] whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
                       Inventory Management System
@@ -133,10 +123,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               {/* Main Content */}
               <div className="absolute content-stretch flex flex-col items-start left-[48px] bottom-[100px] w-[476px] z-[50]" style={{ animation: 'slide-in-left 0.8s ease-out' }}>
                 <h2 className="font-['Inter',sans-serif] font-bold leading-[40px] text-[36px] text-white w-[476px]" style={{ textShadow: '0 2px 8px rgba(0,0,0,0.4)' }}>
-                  Manage Your Thrift Store Inventory with Ease
+                  Manage Your Inventory with Ease
                 </h2>
                 <p className="font-['Inter',sans-serif] font-normal leading-[29.25px] pt-[16px] text-[18px] text-[rgba(255,255,255,0.95)] w-[476px]" style={{ textShadow: '0 2px 6px rgba(0,0,0,0.3)' }}>
-                  Track clothing items, manage stock levels, and streamline your thrift store operations with our specialized inventory platform.
+                  Track items, manage stock levels, and streamline your operations with our inventory platform.
                 </p>
 
                 {/* Features */}
@@ -152,7 +142,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                         Stock Management
                       </p>
                       <p className="font-['Inter',sans-serif] font-normal leading-[20px] pt-[4px] text-[14px] text-[rgba(255,255,255,0.95)] whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
-                        Track items by category, size, and condition
+                        Track items by category, type, and location
                       </p>
                     </div>
                   </div>
@@ -272,56 +262,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                         Sign In
                       </button>
 
-                      {/* Divider */}
-                      <div className="relative w-full pt-[24px]">
-                        <div className="relative h-[20px] w-full">
-                          <div className="absolute border-t border-[#00A7A5] inset-0 top-[10px]" />
-                          <div className="absolute left-1/2 -translate-x-1/2 bg-[#F8FAFB] px-4">
-                            <p className="font-['Inter',sans-serif] font-normal leading-[20px] text-[14px] text-[#6b7280] whitespace-nowrap">
-                              Demo Credentials
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Demo Credentials Cards */}
-                      <div className="pt-[24px] w-[448px]">
-                        <button
-                          type="button"
-                          onClick={fillAdminCredentials}
-                          className="bg-gradient-to-r from-[#E0F2F2] to-[#E0F5F1] relative rounded-[16px] w-full p-[16.8px] border border-[#00A7A5] hover:border-[#007A5E] transition-all duration-300 hover:scale-[1.02] hover:shadow-lg text-left"
-                        >
-                          <p className="font-['Inter',sans-serif] font-semibold leading-[20px] text-[14px] text-[#003534] whitespace-nowrap">
-                            Admin Account (Full Access)
-                          </p>
-                          <p className="font-['Inter',sans-serif] font-normal leading-[20px] pt-[8px] text-[14px] text-[#005656]">
-                            <span>Email: </span>
-                            <span className="font-medium text-[#323B42]">admin@ukayukay.com</span>
-                          </p>
-                          <p className="font-['Inter',sans-serif] font-normal leading-[20px] pt-[4px] text-[14px] text-[#005656]">
-                            <span>Password: </span>
-                            <span className="font-medium text-[#323B42]">admin123</span>
-                          </p>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={fillStaffCredentials}
-                          className="bg-gradient-to-r from-[#E0F5F1] to-[#E0F5F1] relative rounded-[16px] w-full p-[16.8px] mt-[12px] border border-[#008967] hover:border-[#007A5E] transition-all duration-300 hover:scale-[1.02] hover:shadow-lg text-left"
-                        >
-                          <p className="font-['Inter',sans-serif] font-semibold leading-[20px] text-[14px] text-[#007A5E] whitespace-nowrap">
-                            Staff Account (Limited Access)
-                          </p>
-                          <p className="font-['Inter',sans-serif] font-normal leading-[20px] pt-[8px] text-[14px] text-[#007A5E]">
-                            <span>Email: </span>
-                            <span className="font-medium text-[#323B42]">staff@ukayukay.com</span>
-                          </p>
-                          <p className="font-['Inter',sans-serif] font-normal leading-[20px] pt-[4px] text-[14px] text-[#007A5E]">
-                            <span>Password: </span>
-                            <span className="font-medium text-[#323B42]">staff123</span>
-                          </p>
-                        </button>
-                      </div>
                     </form>
                   </div>
                 </div>

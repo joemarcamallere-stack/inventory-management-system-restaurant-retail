@@ -1,27 +1,11 @@
 import { useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, ChefHat, ClipboardList, Store, UtensilsCrossed, ShoppingBag } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, ChefHat, ClipboardList, Store, UtensilsCrossed } from 'lucide-react';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
 import MultilocationView from '../modules/retail/MultilocationView';
 import PurchaseOrdersView from '../modules/retail/PurchaseOrdersView';
 import POSView from '../modules/retail/POSView';
 import { DashboardView, StockAlertsView, InventoryView, ProductsReceivedView, ItemBundlingView, ReportsView, UserManagementView } from '../modules/retail/RetailViews';
-import RestaurantIngredientsView from '../modules/restaurant/RestaurantIngredientsView';
-import RestaurantMenuItemsView from '../modules/restaurant/RestaurantMenuItemsView';
-import RestaurantRecipesView from '../modules/restaurant/RestaurantRecipesView';
-import RestaurantKitchenOrdersView from '../modules/restaurant/RestaurantKitchenOrdersView';
-import RestaurantSpoilageView from '../modules/restaurant/RestaurantSpoilageView';
-import RestaurantDashboard from '../modules/restaurant/RestaurantDashboard';
-import RestaurantStockControl from '../modules/restaurant/RestaurantStockControl';
-import RestaurantFoodInventory from '../modules/restaurant/RestaurantFoodInventory';
-import RestaurantAddFoodItem from '../modules/restaurant/RestaurantAddFoodItem';
-import RestaurantPurchaseOrders from '../modules/restaurant/RestaurantPurchaseOrders';
-import RestaurantGoodsReceived from '../modules/restaurant/RestaurantGoodsReceived';
-import RestaurantPOS from '../modules/restaurant/RestaurantPOS';
-import RestaurantRecipeBOM from '../modules/restaurant/RestaurantRecipeBOM';
-import RestaurantTransfers from '../modules/restaurant/RestaurantTransfers';
-import RestaurantReports from '../modules/restaurant/RestaurantReports';
-import RestaurantMultiLocation from '../modules/restaurant/RestaurantMultiLocation';
 import RestaurantShell from '../modules/restaurant/RestaurantShell';
 import {
   clearStoredToken,
@@ -40,25 +24,21 @@ import type {
   InventoryItem,
   PurchaseOrder,
   ProductReceived,
-  Bundle,
   Transfer,
   Adjustment,
   Location,
   User,
   Supplier,
-  Sale
 } from './utils/generateSampleData';
 
 import {
   generateSampleData,
   generatePurchaseOrders,
   generateProductsReceived,
-  generateBundles,
   generateTransfers,
   generateAdjustments,
   generateLocations,
   generateUsers,
-  generateSales
 } from './utils/generateSampleData';
 
 
@@ -135,12 +115,10 @@ export default function App() {
   const [inventory, setInventory] = useState<InventoryItem[]>(generateSampleData());
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>(generatePurchaseOrders());
   const [productsReceived, setProductsReceived] = useState<ProductReceived[]>(generateProductsReceived());
-  const [bundles, setBundles] = useState<Bundle[]>(generateBundles());
   const [transfers, setTransfers] = useState<Transfer[]>(generateTransfers());
   const [adjustments, setAdjustments] = useState<Adjustment[]>(generateAdjustments());
   const [locations, setLocations] = useState<Location[]>(generateLocations());
   const [users, setUsers] = useState<User[]>(generateUsers());
-  const [sales, setSales] = useState<Sale[]>(generateSales());
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasUkayModule = currentUser?.modules?.includes('UKAY') ?? false;
   const hasBothModules = hasRestaurantModule && hasUkayModule;
@@ -469,11 +447,11 @@ export default function App() {
         {/* Header */}
         <div className="p-6 flex items-center gap-3">
           <div className="bg-white rounded-full size-[40px] flex items-center justify-center shadow-sm">
-            <ShoppingBag className="size-6 text-[#007A5E]" strokeWidth={2.2} />
+            <Package className="size-6 text-[#007A5E]" strokeWidth={2.2} />
           </div>
           <div>
             <p className="text-white text-[20px] leading-[28px]" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
-              Ukay-Ukay
+              Inventra
             </p>
             <p className="text-[#00A7A5] text-[12px] leading-[16px]" style={{ fontFamily: 'Inter, sans-serif' }}>Inventory System</p>
           </div>
@@ -709,54 +687,6 @@ export default function App() {
               users={users}
               currentUser={currentUser}
             />
-          )}
-          {currentView === 'restaurant-ingredients' && hasRestaurantModule && (
-            <RestaurantIngredientsView locations={locations} />
-          )}
-          {currentView === 'restaurant-menu-items' && hasRestaurantModule && (
-            <RestaurantMenuItemsView locations={locations} />
-          )}
-          {currentView === 'restaurant-recipes' && hasRestaurantModule && (
-            <RestaurantRecipesView />
-          )}
-          {currentView === 'restaurant-kitchen-orders' && hasRestaurantModule && (
-            <RestaurantKitchenOrdersView />
-          )}
-          {currentView === 'restaurant-spoilage' && hasRestaurantModule && (
-            <RestaurantSpoilageView />
-          )}
-          {currentView === 'restaurant-dashboard' && hasRestaurantModule && (
-            <RestaurantDashboard />
-          )}
-          {currentView === 'restaurant-stock-control' && hasRestaurantModule && (
-            <RestaurantStockControl />
-          )}
-          {currentView === 'restaurant-food-inventory' && hasRestaurantModule && (
-            <RestaurantFoodInventory onAddItem={() => setCurrentView('restaurant-add-food-item')} />
-          )}
-          {currentView === 'restaurant-add-food-item' && hasRestaurantModule && (
-            <RestaurantAddFoodItem onBack={() => setCurrentView('restaurant-food-inventory')} onSaved={() => setCurrentView('restaurant-food-inventory')} />
-          )}
-          {currentView === 'restaurant-purchase-orders' && hasRestaurantModule && (
-            <RestaurantPurchaseOrders currentUser={currentUser} />
-          )}
-          {currentView === 'restaurant-goods-received' && hasRestaurantModule && (
-            <RestaurantGoodsReceived currentUser={currentUser} />
-          )}
-          {currentView === 'restaurant-pos' && hasRestaurantModule && (
-            <RestaurantPOS currentUser={currentUser} />
-          )}
-          {currentView === 'restaurant-recipe-bom' && hasRestaurantModule && (
-            <RestaurantRecipeBOM currentUser={currentUser} />
-          )}
-          {currentView === 'restaurant-transfers' && hasRestaurantModule && (
-            <RestaurantTransfers currentUser={currentUser} />
-          )}
-          {currentView === 'restaurant-reports' && hasRestaurantModule && (
-            <RestaurantReports />
-          )}
-          {currentView === 'restaurant-multilocation' && hasRestaurantModule && (
-            <RestaurantMultiLocation />
           )}
           {currentView === 'user-management' && (
             <UserManagementView
