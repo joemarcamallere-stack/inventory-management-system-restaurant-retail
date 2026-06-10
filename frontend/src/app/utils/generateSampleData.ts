@@ -673,7 +673,7 @@ export function generateUsers(): User[] {
     {
       id: '1',
       name: 'Admin User',
-      email: 'admin@ukayukay.com',
+      email: 'admin@retaildemo.com',
       role: 'Admin',
       status: 'Active',
       lastLogin: '2026-06-02 09:30'
@@ -681,7 +681,7 @@ export function generateUsers(): User[] {
     {
       id: '2',
       name: 'Juan Dela Cruz',
-      email: 'juan@ukayukay.com',
+      email: 'juan@retaildemo.com',
       role: 'Manager',
       status: 'Active',
       lastLogin: '2026-06-01 14:20'
@@ -689,7 +689,7 @@ export function generateUsers(): User[] {
     {
       id: '3',
       name: 'Maria Santos',
-      email: 'maria@ukayukay.com',
+      email: 'maria@retaildemo.com',
       role: 'Manager',
       status: 'Active',
       lastLogin: '2026-06-01 16:45'
@@ -697,7 +697,7 @@ export function generateUsers(): User[] {
     {
       id: '4',
       name: 'Pedro Reyes',
-      email: 'pedro@ukayukay.com',
+      email: 'pedro@retaildemo.com',
       role: 'Staff',
       status: 'Active',
       lastLogin: '2026-05-31 10:15'
@@ -705,7 +705,7 @@ export function generateUsers(): User[] {
     {
       id: '5',
       name: 'Ana Garcia',
-      email: 'ana@ukayukay.com',
+      email: 'ana@retaildemo.com',
       role: 'Staff',
       status: 'Inactive',
       lastLogin: '2026-05-15 13:00'
@@ -848,9 +848,9 @@ export function generateBundles(): Bundle[] {
       price: 800,
       discount: 15,
       dateCreated: '2026-05-20',
-      createdBy: 'admin@ukayukay.com',
+      createdBy: 'admin@retaildemo.com',
       status: 'Active',
-      approvedBy: 'admin@ukayukay.com',
+      approvedBy: 'admin@retaildemo.com',
       approvedDate: '2026-05-20'
     },
     {
@@ -864,7 +864,7 @@ export function generateBundles(): Bundle[] {
       price: 1500,
       discount: 20,
       dateCreated: '2026-05-15',
-      createdBy: 'staff@ukayukay.com',
+      createdBy: 'staff@retaildemo.com',
       status: 'Pending'
     },
     {
@@ -877,9 +877,9 @@ export function generateBundles(): Bundle[] {
       price: 1200,
       discount: 25,
       dateCreated: '2026-05-18',
-      createdBy: 'admin@ukayukay.com',
+      createdBy: 'admin@retaildemo.com',
       status: 'Approved',
-      approvedBy: 'admin@ukayukay.com',
+      approvedBy: 'admin@retaildemo.com',
       approvedDate: '2026-05-18'
     },
     {
@@ -893,9 +893,9 @@ export function generateBundles(): Bundle[] {
       price: 950,
       discount: 10,
       dateCreated: '2026-05-12',
-      createdBy: 'admin@ukayukay.com',
+      createdBy: 'admin@retaildemo.com',
       status: 'Inactive',
-      approvedBy: 'admin@ukayukay.com',
+      approvedBy: 'admin@retaildemo.com',
       approvedDate: '2026-05-12'
     },
     {
@@ -908,7 +908,7 @@ export function generateBundles(): Bundle[] {
       price: 1800,
       discount: 18,
       dateCreated: '2026-05-10',
-      createdBy: 'staff@ukayukay.com',
+      createdBy: 'staff@retaildemo.com',
       status: 'Rejected',
       rejectionReason: 'Items no longer available in required quantities'
     },
@@ -922,9 +922,9 @@ export function generateBundles(): Bundle[] {
       price: 1100,
       discount: 22,
       dateCreated: '2026-05-25',
-      createdBy: 'admin@ukayukay.com',
+      createdBy: 'admin@retaildemo.com',
       status: 'Active',
-      approvedBy: 'admin@ukayukay.com',
+      approvedBy: 'admin@retaildemo.com',
       approvedDate: '2026-05-25'
     },
     {
@@ -938,7 +938,7 @@ export function generateBundles(): Bundle[] {
       price: 2200,
       discount: 30,
       dateCreated: '2026-05-22',
-      createdBy: 'staff@ukayukay.com',
+      createdBy: 'staff@retaildemo.com',
       status: 'Pending'
     },
     {
@@ -951,9 +951,9 @@ export function generateBundles(): Bundle[] {
       price: 1350,
       discount: 20,
       dateCreated: '2026-05-08',
-      createdBy: 'admin@ukayukay.com',
+      createdBy: 'admin@retaildemo.com',
       status: 'Approved',
-      approvedBy: 'admin@ukayukay.com',
+      approvedBy: 'admin@retaildemo.com',
       approvedDate: '2026-05-08'
     }
   ];
@@ -991,7 +991,7 @@ export function generateSales(): Sale[] {
     }
 
     const discount = Math.random() > 0.7 ? Math.floor(subtotal * 0.1) : 0;
-    const tax = 0; // No tax for ukay-ukay
+    const tax = 0;
     const total = subtotal - discount + tax;
     const paymentMethod = paymentMethods[Math.floor(Math.random() * paymentMethods.length)];
     const amountPaid = paymentMethod === 'Cash' ? Math.ceil(total / 100) * 100 : total;

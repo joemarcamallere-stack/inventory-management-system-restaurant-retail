@@ -12,18 +12,18 @@ async function main() {
   const staffPasswordHash = await bcrypt.hash('staff123', 12);
 
   const business = await prisma.business.upsert({
-    where: { name: 'Ukay + Restaurant Demo' },
+    where: { name: 'Retail + Restaurant Demo' },
     update: {
       modules: ['RETAIL', 'RESTAURANT'],
     },
     create: {
-      name: 'Ukay + Restaurant Demo',
+      name: 'Retail + Restaurant Demo',
       modules: ['RETAIL', 'RESTAURANT'],
     },
   });
 
   await prisma.user.upsert({
-    where: { email: 'admin@ukayukay.com' },
+    where: { email: 'admin@retaildemo.com' },
     update: {
       name: 'Admin User',
       role: 'Admin',
@@ -33,7 +33,7 @@ async function main() {
     },
     create: {
       name: 'Admin User',
-      email: 'admin@ukayukay.com',
+      email: 'admin@retaildemo.com',
       role: 'Admin',
       status: 'Active',
       passwordHash: adminPasswordHash,
@@ -42,7 +42,7 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email: 'staff@ukayukay.com' },
+    where: { email: 'staff@retaildemo.com' },
     update: {
       name: 'Staff User',
       role: 'Staff',
@@ -52,7 +52,7 @@ async function main() {
     },
     create: {
       name: 'Staff User',
-      email: 'staff@ukayukay.com',
+      email: 'staff@retaildemo.com',
       role: 'Staff',
       status: 'Active',
       passwordHash: staffPasswordHash,
@@ -167,7 +167,7 @@ async function main() {
         {
           name: 'Vintage Band T-Shirt',
           itemType: 'RETAIL_ITEM',
-          sku: 'UKAY-TEE-001',
+          sku: 'RTL-TEE-001',
           category: 'Tops',
           targetCustomer: 'Unisex',
           subcategory: 'T-Shirts',
@@ -184,7 +184,7 @@ async function main() {
         {
           name: 'Classic Denim Jeans',
           itemType: 'RETAIL_ITEM',
-          sku: 'UKAY-JEANS-001',
+          sku: 'RTL-JEANS-001',
           category: 'Bottoms',
           targetCustomer: 'Unisex',
           subcategory: 'Jeans',
@@ -199,10 +199,10 @@ async function main() {
           businessId: business.id,
         },
         {
-          name: 'Mixed Clothing Bale',
+          name: 'Mixed Clothing Lot',
           itemType: 'RETAIL_ITEM',
-          sku: 'UKAY-BALE-001',
-          category: 'Bales',
+          sku: 'RTL-MIX-001',
+          category: 'Mixed Lots',
           targetCustomer: 'Unisex',
           subcategory: 'Mixed Clothing',
           size: 'Assorted',
@@ -403,11 +403,11 @@ async function main() {
     ],
   });
 
-  // --- Ukay-only business ---
+  // --- Retail-only business ---
   const ukayBusiness = await prisma.business.upsert({
-    where: { name: 'Ukay-Only Demo' },
+    where: { name: 'Retail-Only Demo' },
     update: { modules: ['RETAIL'] },
-    create: { name: 'Ukay-Only Demo', modules: ['RETAIL'] },
+    create: { name: 'Retail-Only Demo', modules: ['RETAIL'] },
   });
 
   const legacyRetailAdmin = await prisma.user.findUnique({

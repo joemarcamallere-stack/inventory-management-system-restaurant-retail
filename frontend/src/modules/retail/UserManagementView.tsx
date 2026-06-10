@@ -46,7 +46,7 @@ export function UserManagementView({
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
-    role: 'Staff' as 'Admin' | 'Manager' | 'Staff' | 'Cashier' | 'KitchenStaff' | 'UkayStaff',
+    role: 'Staff' as 'Admin' | 'Manager' | 'Staff' | 'Cashier' | 'KitchenStaff' | 'RetailStaff',
     password: '',
     confirmPassword: ''
   });
@@ -346,7 +346,7 @@ export function UserManagementView({
               <option value="Manager">Manager</option>
               <option value="Staff">Staff</option>
               <option value="Cashier">Cashier</option>
-              <option value="UkayStaff">Ukay Staff</option>
+              <option value="RetailStaff">Retail Staff</option>
               <option value="KitchenStaff">Kitchen Staff</option>
             </select>
           </div>
@@ -517,7 +517,7 @@ export function UserManagementView({
                   >
                     <option value="Staff">Staff</option>
                     <option value="Cashier">Cashier</option>
-                    <option value="UkayStaff">Ukay Staff</option>
+                    <option value="RetailStaff">Retail Staff</option>
                     <option value="KitchenStaff">Kitchen Staff</option>
                     <option value="Manager">Manager</option>
                     <option value="Admin">Admin</option>
@@ -637,7 +637,7 @@ export function UserManagementView({
                   >
                     <option value="Staff">Staff</option>
                     <option value="Cashier">Cashier</option>
-                    <option value="UkayStaff">Ukay Staff</option>
+                    <option value="RetailStaff">Retail Staff</option>
                     <option value="KitchenStaff">Kitchen Staff</option>
                     <option value="Manager">Manager</option>
                     <option value="Admin">Admin</option>

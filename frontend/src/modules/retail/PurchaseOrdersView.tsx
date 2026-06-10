@@ -124,7 +124,7 @@ export default function PurchaseOrdersView({
 
   const handleAddItemToPO = () => {
     if (!newItemForm.baleType || !newItemForm.quantity || !newItemForm.unitPrice) {
-      alert('Please fill in Bale Type, Quantity, and Unit Cost');
+      alert('Please fill in Item Name, Quantity, and Unit Cost');
       return;
     }
     const finalCategory = newItemForm.newCategory || newItemForm.category || 'General';
@@ -287,7 +287,7 @@ export default function PurchaseOrdersView({
             <div className="flex items-start justify-between mb-2">
               <div>
                 <h3 className="text-[18px] font-semibold text-[#003534]">Create Purchase Order</h3>
-                <p className="text-[14px] text-[#323b42] mt-1">Create a new purchase order for bale deliveries</p>
+                <p className="text-[14px] text-[#323b42] mt-1">Create a new purchase order for product deliveries</p>
               </div>
               <button onClick={() => setShowNewPOModal(false)} className="p-2 hover:bg-[rgba(0,0,0,0.05)] rounded-[6px] transition-colors opacity-70">
                 <X className="size-4 text-[#323B42]" />
@@ -363,7 +363,7 @@ export default function PurchaseOrdersView({
 
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
-                <label className="text-[16px] font-semibold text-[#323b42]">Bale Items</label>
+                <label className="text-[16px] font-semibold text-[#323b42]">Order Items</label>
                 <button onClick={() => setShowNewItemModal(true)} className="px-[10.8px] py-[0.8px] h-[32px] bg-[#f8fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] text-[#323b42] rounded-[10px] text-[14px] font-medium flex items-center gap-[6px] hover:bg-[#e9ecef] transition-colors">
                   <Plus className="size-4" />
                   Add Item
@@ -427,7 +427,7 @@ export default function PurchaseOrdersView({
             <h3 className="text-[24px] font-bold text-[#323B42] mb-6">Add Item to Purchase Order</h3>
             <div className="space-y-4">
               <div className="relative">
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">Bale Type *</label>
+                <label className="block text-[14px] font-medium text-[#323B42] mb-2">Item / Product Name *</label>
                 <input
                   type="text"
                   value={newItemForm.baleType}
@@ -480,11 +480,11 @@ export default function PurchaseOrdersView({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Quantity (Bales) *</label>
+                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Quantity *</label>
                   <input type="number" min="1" value={newItemForm.quantity} onChange={(e) => setNewItemForm({ ...newItemForm, quantity: parseInt(e.target.value) || 1 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
                 </div>
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost per Bale (₱) *</label>
+                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost (₱) *</label>
                   <input type="number" min="0" step="0.01" value={newItemForm.unitPrice} onChange={(e) => setNewItemForm({ ...newItemForm, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
                 </div>
               </div>

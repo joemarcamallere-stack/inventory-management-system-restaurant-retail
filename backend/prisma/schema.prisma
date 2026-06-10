@@ -22,7 +22,7 @@ enum UserRole {
   Staff
   Cashier
   KitchenStaff
-  UkayStaff
+  RetailStaff
 }
 
 enum UserStatus {

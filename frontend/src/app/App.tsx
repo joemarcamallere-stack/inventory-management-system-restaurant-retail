@@ -108,18 +108,18 @@ export default function App() {
   const [locations, setLocations] = useState<Location[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
-  const hasUkayModule = currentUser?.modules?.includes('RETAIL') ?? false;
-  const hasBothModules = hasRestaurantModule && hasUkayModule;
+  const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
+  const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
 
   // When user logs in and has only RESTAURANT module, switch to it automatically
   useEffect(() => {
-    if (hasRestaurantModule && !hasUkayModule) {
+    if (hasRestaurantModule && !hasRetailModule) {
       setActiveModule('RESTAURANT');
     } else {
       setActiveModule('RETAIL');
     }
-  }, [hasRestaurantModule, hasUkayModule]);
+  }, [hasRestaurantModule, hasRetailModule]);
 
   // When switching modules, navigate to the appropriate default view
   const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
@@ -155,7 +155,7 @@ export default function App() {
 
     const loadPhaseOneData = async () => {
       try {
-        const inventoryRequest = hasUkayModule
+        const inventoryRequest = hasRetailModule
           ? getInventory({ itemType: 'RETAIL_ITEM' })
           : Promise.resolve([]);
         const [inventoryData, locationData] = await Promise.all([
@@ -176,7 +176,7 @@ export default function App() {
     };
 
     loadPhaseOneData();
-  }, [isLoggedIn, currentUser?.role, hasUkayModule]);
+  }, [isLoggedIn, currentUser?.role, hasRetailModule]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -423,7 +423,7 @@ export default function App() {
         setCurrentView={setCurrentView}
         currentUser={currentUser}
         hasBothModules={hasBothModules}
-        onSwitchToUkay={() => switchModule('RETAIL')}
+        onSwitchToRetail={() => switchModule('RETAIL')}
         onLogout={handleLogout}
         users={users}
         setUsers={setUsers}

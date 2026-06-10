@@ -64,7 +64,7 @@ type Props = {
   setCurrentView: Dispatch<SetStateAction<any>>;
   currentUser: CurrentUser;
   hasBothModules: boolean;
-  onSwitchToUkay: () => void;
+  onSwitchToRetail: () => void;
   onLogout: () => void;
   users: AppUser[];
   setUsers: Dispatch<SetStateAction<AppUser[]>>;
@@ -90,7 +90,7 @@ export default function RestaurantShell({
   setCurrentView,
   currentUser,
   hasBothModules,
-  onSwitchToUkay,
+  onSwitchToRetail,
   onLogout,
   users,
   setUsers,
@@ -153,7 +153,7 @@ export default function RestaurantShell({
           <div className="px-4 pt-4">
             <button
               type="button"
-              onClick={onSwitchToUkay}
+              onClick={onSwitchToRetail}
               className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-all duration-200"
             >
               <Store className="w-5 h-5" />
