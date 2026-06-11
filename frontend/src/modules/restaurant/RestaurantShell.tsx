@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useEffect, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   LayoutDashboard,
   Apple,
@@ -30,10 +30,10 @@ import { RecipeBOM } from './RecipeBOM';
 import { Transfers } from './Transfers';
 import { Reports } from './Reports';
 import { MultiLocation } from './MultiLocation';
-import { UserManagementView } from '../retail/RetailViews';
+import { UserManagement } from './UserManagement';
 import type { User as AppUser } from '../../app/utils/generateSampleData';
-import LegacyRestaurantDataBridge from './LegacyRestaurantDataBridge';
 import './restaurantLegacyTheme.css';
+import { migrateLegacyRestaurantData } from './migrateLegacyRestaurantData';
 
 type RestaurantView =
   | 'restaurant-dashboard'
@@ -96,7 +96,15 @@ export default function RestaurantShell({
   setUsers,
 }: Props) {
   const userRole = currentUser?.role ?? 'Staff';
+  const [migrationError, setMigrationError] = useState<string | null>(null);
   const navItems = restaurantNavItems.filter((item) => item.roles.includes(userRole as any));
+
+  useEffect(() => {
+    if (!currentUser?.businessId) return;
+    migrateLegacyRestaurantData(currentUser.businessId, currentUser.role).catch((error) => {
+      setMigrationError(error instanceof Error ? error.message : 'Legacy restaurant data migration failed');
+    });
+  }, [currentUser?.businessId, currentUser?.role]);
 
   const renderContent = () => {
     switch (currentView) {
@@ -112,7 +120,7 @@ export default function RestaurantShell({
       case 'restaurant-add-food-item':
         return <AddProduct />;
       case 'restaurant-purchase-orders':
-        return <PurchaseOrders />;
+        return <PurchaseOrders currentUserRole={userRole} />;
       case 'restaurant-goods-received':
         return <GoodsReceived />;
       case 'restaurant-pos':
@@ -128,7 +136,7 @@ export default function RestaurantShell({
       case 'restaurant-reports':
         return <Reports />;
       case 'user-management':
-        return <UserManagementView users={users} setUsers={setUsers} currentUser={currentUser} />;
+        return <UserManagement />;
       default:
         return <Dashboard />;
     }
@@ -227,10 +235,13 @@ export default function RestaurantShell({
       </aside>
 
       <main className="flex-1 overflow-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+        {migrationError && (
+          <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            Legacy data was backed up but could not be fully imported: {migrationError}
+          </div>
+        )}
         <MemoryRouter>
-          <LegacyRestaurantDataBridge currentUser={currentUser}>
-            {renderContent()}
-          </LegacyRestaurantDataBridge>
+          {renderContent()}
         </MemoryRouter>
       </main>
     </div>

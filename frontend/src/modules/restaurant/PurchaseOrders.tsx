@@ -1,1712 +1,537 @@
-import { useState, useEffect } from "react";
-import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
-import { readLocalStorage, useLocalStorageState, writeLocalStorage } from "../lib/localStorage";
-import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
-import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Eye,
+  Filter,
+  Plus,
+  Search,
+  Users,
+  X,
+  XCircle,
+} from "lucide-react";
+import {
+  approvePurchaseOrder,
+  cancelPurchaseOrder,
+  createPurchaseOrder,
+  createSupplier,
+  getInventory,
+  getPurchaseOrders,
+  getSuppliers,
+  rejectPurchaseOrder,
+  submitPurchaseOrder,
+} from "../../app/api/client";
 
-// Helper function to normalize product names (capitalize first letter of each word, trim)
-const normalizeProductName = (name: string | undefined): string => {
-  return (name || '')
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-};
-
-// Check if product exists (case-insensitive)
-const findProductByName = (name: string, allProducts: GlobalProduct[]): GlobalProduct | undefined => {
-  const normalized = normalizeProductName(name);
-  return allProducts.find(p => normalizeProductName(p.name) === normalized);
-};
-
-const blankOrderItemInput = (): OrderItemInput => ({
-  productId: undefined,
-  inventoryId: undefined,
-  sku: "",
-  productName: "",
-  category: "",
-  subCategory: "",
-  unit: "",
-  quantity: "",
-  unitPrice: "",
-  isNewProduct: false,
-  unitOverride: false,
-});
-
-type OrderItem = {
-  productId?: string;
-  inventoryId?: number;
-  sku?: string;
-  productName: string;
-  quantity: number;
-  unitPrice: number;
-  category: string;
-  subCategory: string;
-  unit: string;
-};
-
-type Order = {
+type Supplier = {
   id: string;
-  supplier: string;
-  date: string;
-  items: number;
-  orderItems: OrderItem[];
-  total: number;
-  status: string;
-  expectedDelivery: string;
-  createdByUserId?: number;
-  createdBy?: string;
-  createdByRole?: string;
-  createdAt?: string;
-  rejectionNote?: string;
-  rejectedBy?: string;
-  rejectedAt?: string;
+  name: string;
+  contactPerson?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
 };
 
-type OrderItemInput = PurchaseOrderItemInputValue;
-
-type GlobalProduct = {
+type InventoryItem = {
   id: string;
-  inventoryId?: number;
   name: string;
   sku?: string;
   category?: string;
-  subCategory?: string;
   unit?: string;
 };
 
-type SupplierProduct = {
-  supplierId: string;
-  productId: string;
-  price: number;
-};
-
-type Product = {
-  name: string;
-  price: number;
-};
-
-type Supplier = {
-  name: string;
-  contact: string;
-  email: string;
-  phone: string;
-  address: string;
-  products: Product[];
-};
-
-type GoodsItem = {
+type PurchaseOrderItem = {
   id: string;
-  poId: string;
-  supplier: string;
-  receivedDate: string;
-  items: number;
-  receivedItems?: Array<OrderItem & { condition: string }>;
-  totalValue: number;
-  receivedBy: string;
-  status: string;
-  notes: string;
-};
-
-type UserSummary = {
-  id: number;
+  inventoryItemId?: string;
   name: string;
-  email: string;
-  role: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  inventoryItem?: InventoryItem;
 };
 
-const getCurrentUser = (users: UserSummary[], userRole: string) => {
-  const email = localStorage.getItem("userEmail") || "";
-  const matchedUser = users.find((user) => (user.email || '').toLowerCase() === email.toLowerCase());
-
-  if (matchedUser) return matchedUser;
-
-  return {
-    id: userRole === "admin" ? 0 : -1,
-    name: userRole === "admin" ? "Admin" : email || "Local User",
-    email: email || (userRole === "admin" ? "admin@local" : "local-user"),
-    role: userRole,
-  };
+type PurchaseOrder = {
+  id: string;
+  orderNumber: string;
+  status: string;
+  notes?: string;
+  expectedDelivery?: string;
+  totalAmount: number;
+  supplier?: Supplier;
+  items: PurchaseOrderItem[];
+  createdBy?: { name: string };
+  rejectionReason?: string;
+  createdAt: string;
 };
 
-const getOrderCreator = (order: Order, users: UserSummary[]) => {
-  if (order.createdByRole === "admin") return "Admin";
-
-  const byId = typeof order.createdByUserId === "number"
-    ? users.find((user) => user.id === order.createdByUserId)
-    : undefined;
-  if (byId) return byId.name;
-
-  const byEmail = order.createdBy
-    ? users.find((user) => (user.email || '').toLowerCase() === (order.createdBy || '').toLowerCase())
-    : undefined;
-  if (byEmail) return byEmail.name;
-
-  return order.createdBy || "Legacy / Unknown user";
+type DraftLine = {
+  inventoryItemId: string;
+  quantity: string;
+  unitPrice: string;
 };
 
-const getOrderCreatorRole = (order: Order) => order.createdByRole || "unknown";
+const blankLine = (): DraftLine => ({
+  inventoryItemId: "",
+  quantity: "",
+  unitPrice: "",
+});
 
-export function PurchaseOrders() {
+const statusLabel = (status: string) =>
+  status
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+
+const statusClass = (status: string) => {
+  if (status === "RECEIVED") return "bg-green-100 text-green-700 border-green-200";
+  if (status === "APPROVED" || status === "PARTIALLY_RECEIVED") {
+    return "bg-blue-100 text-blue-700 border-blue-200";
+  }
+  if (status === "REJECTED" || status === "CANCELLED") {
+    return "bg-red-100 text-red-700 border-red-200";
+  }
+  return "bg-yellow-100 text-yellow-700 border-yellow-200";
+};
+
+export function PurchaseOrders({ currentUserRole }: { currentUserRole: string }) {
+  const [orders, setOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
   const [showSuppliersListModal, setShowSuppliersListModal] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
-  const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
-  const [approvingOrder, setApprovingOrder] = useState<Order | null>(null);
-  const [rejectionNote, setRejectionNote] = useState("");
-  const [userRole, setUserRole] = useState<string>("staff");
-
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
-
-  const [newOrder, setNewOrder] = useState({
-    supplier: "",
-    expectedDelivery: "",
-  });
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [currentItem, setCurrentItem] = useState<OrderItemInput>(blankOrderItemInput());
+  const [selectedOrder, setSelectedOrder] = useState<PurchaseOrder | null>(null);
+  const [rejectingOrder, setRejectingOrder] = useState<PurchaseOrder | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [expectedDelivery, setExpectedDelivery] = useState("");
+  const [notes, setNotes] = useState("");
+  const [lines, setLines] = useState<DraftLine[]>([blankLine()]);
   const [newSupplier, setNewSupplier] = useState({
     name: "",
-    contact: "",
+    contactPerson: "",
     email: "",
     phone: "",
     address: "",
   });
 
-  // Global products storage
-  const [globalProducts, setGlobalProducts] = useLocalStorageState<GlobalProduct[]>(
-    "purchaseOrders.globalProducts",
-    []
-  );
+  const userRole = currentUserRole.toLowerCase();
+  const canApprove = userRole === "admin" || userRole === "manager";
 
-  const [orders, setOrders] = useLocalStorageState<Order[]>("purchaseOrders.orders", []);
-  const [users] = useLocalStorageState<UserSummary[]>("users.records", []);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [orderData, supplierData, ingredients, menuItems, supplies] = await Promise.all([
+        getPurchaseOrders(),
+        getSuppliers({ isActive: true }),
+        getInventory({ itemType: "INGREDIENT" }),
+        getInventory({ itemType: "MENU_ITEM" }),
+        getInventory({ itemType: "SUPPLY" }),
+      ]);
+      setOrders(orderData);
+      setSuppliers(supplierData);
+      setInventory([...ingredients, ...menuItems, ...supplies]);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load purchase orders");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const statuses = ["all", "pending", "approved", "received", "partial", "rejected", "cancelled"];
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-  const filteredOrders = orders.filter(order => {
-    const matchesSearch = (order.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (order.supplier || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || order.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredOrders = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesQuery =
+        !query ||
+        order.orderNumber.toLowerCase().includes(query) ||
+        (order.supplier?.name || "").toLowerCase().includes(query);
+      const matchesStatus =
+        statusFilter === "all" || order.status === statusFilter;
+      return matchesQuery && matchesStatus;
+    });
+  }, [orders, searchQuery, statusFilter]);
 
-  const getStatusBadge = (status: string) => {
-    const styles = {
-      pending: { bg: "#FEF3C7", text: "#92400E", border: "#F59E0B" },
-      approved: { bg: "#D1F2E8", text: "#007A5E", border: "#008967" },
-      received: { bg: "#D1F2E8", text: "#007A5E", border: "#008967" },
-      completed: { bg: "#D1F2E8", text: "#007A5E", border: "#008967" },
-      partial: { bg: "#FED7AA", text: "#9A3412", border: "#F59E0B" },
-      rejected: { bg: "#FEE2E2", text: "#991B1B", border: "#DC2626" },
-      cancelled: { bg: "#FEE2E2", text: "#991B1B", border: "#DC2626" },
-    };
-    const icons = {
-      pending: Clock,
-      approved: CheckCircle,
-      received: CheckCircle,
-      completed: CheckCircle,
-      partial: AlertCircle,
-      rejected: XCircle,
-      cancelled: XCircle,
-    };
-    const Icon = icons[status as keyof typeof icons];
-    const style = styles[status as keyof typeof styles];
+  const updateLine = (index: number, patch: Partial<DraftLine>) => {
+    setLines((current) =>
+      current.map((line, lineIndex) =>
+        lineIndex === index ? { ...line, ...patch } : line,
+      ),
+    );
+  };
 
-    if (!Icon || !style) {
-      return (
-        <span className="px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1" style={{ backgroundColor: "#E5E7EB", color: "#374151", borderColor: "#9CA3AF" }}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
-        </span>
-      );
+  const resetOrderForm = () => {
+    setSupplierId("");
+    setExpectedDelivery("");
+    setNotes("");
+    setLines([blankLine()]);
+  };
+
+  const handleCreateOrder = async (event: FormEvent) => {
+    event.preventDefault();
+    const validLines = lines.filter(
+      (line) =>
+        line.inventoryItemId &&
+        Number(line.quantity) > 0 &&
+        Number(line.unitPrice) >= 0,
+    );
+    if (!supplierId || validLines.length === 0) {
+      setError("Select a supplier and add at least one valid item.");
+      return;
     }
 
-    return (
-      <span className="px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1" style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}>
-        <Icon className="w-5 h-5" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
-      </span>
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createPurchaseOrder({
+        supplierId,
+        expectedDelivery: expectedDelivery
+          ? new Date(`${expectedDelivery}T00:00:00`).toISOString()
+          : undefined,
+        notes: notes || undefined,
+        items: validLines.map((line) => {
+          const item = inventory.find(
+            (candidate) => candidate.id === line.inventoryItemId,
+          )!;
+          return {
+            inventoryItemId: item.id,
+            name: item.name,
+            quantity: Number(line.quantity),
+            unitPrice: Number(line.unitPrice),
+          };
+        }),
+      });
+      await submitPurchaseOrder(created.id);
+      await loadData();
+      resetOrderForm();
+      setShowCreateModal(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to create purchase order");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const runOrderAction = async (
+    action: () => Promise<unknown>,
+    fallbackMessage: string,
+  ) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await action();
+      await loadData();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : fallbackMessage);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleReject = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!rejectingOrder || !rejectionReason.trim()) return;
+    await runOrderAction(
+      () => rejectPurchaseOrder(rejectingOrder.id, rejectionReason.trim()),
+      "Failed to reject purchase order",
     );
+    setRejectingOrder(null);
+    setRejectionReason("");
+  };
+
+  const handleAddSupplier = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!newSupplier.name.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await createSupplier({
+        name: newSupplier.name.trim(),
+        contactPerson: newSupplier.contactPerson.trim() || undefined,
+        email: newSupplier.email.trim() || undefined,
+        phone: newSupplier.phone.trim() || undefined,
+        address: newSupplier.address.trim() || undefined,
+      });
+      setSuppliers((current) => [...current, saved].sort((a, b) => a.name.localeCompare(b.name)));
+      setSupplierId(saved.id);
+      setNewSupplier({ name: "", contactPerson: "", email: "", phone: "", address: "" });
+      setShowSupplierModal(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to add supplier");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const stats = [
-    { label: "Total Orders", value: orders.length, color: "#009BA5" },
-    { label: "Pending", value: orders.filter(o => o.status === "pending").length, color: "#F59E0B" },
-    { label: "Approved", value: orders.filter(o => o.status === "approved").length, color: "#007A5E" },
-    { label: "Partial", value: orders.filter(o => o.status === "partial").length, color: "#F59E0B" },
-    { label: "Rejected", value: orders.filter(o => o.status === "rejected").length, color: "#DC2626" },
+    { label: "Total Orders", value: orders.length },
+    { label: "Pending Approval", value: orders.filter((order) => order.status === "SUBMITTED").length },
+    { label: "Approved", value: orders.filter((order) => ["APPROVED", "PARTIALLY_RECEIVED"].includes(order.status)).length },
+    { label: "Received", value: orders.filter((order) => order.status === "RECEIVED").length },
   ];
-
-  const approvalLevels = [
-    {
-      label: "For Review",
-      status: "pending",
-      value: orders.filter(o => o.status === "pending").length,
-      description: "Needs admin approval or rejection",
-      icon: Clock,
-      color: "#92400E",
-      bg: "#FEF3C7",
-      border: "#F59E0B",
-    },
-    {
-      label: "Approved",
-      status: "approved",
-      value: orders.filter(o => o.status === "approved").length,
-      description: "Ready for goods receiving",
-      icon: CheckCircle,
-      color: "#007A5E",
-      bg: "#D1F2E8",
-      border: "#008967",
-    },
-    {
-      label: "Partial",
-      status: "partial",
-      value: orders.filter(o => o.status === "partial").length,
-      description: "Partially received or accepted",
-      icon: AlertCircle,
-      color: "#9A3412",
-      bg: "#FED7AA",
-      border: "#F59E0B",
-    },
-    {
-      label: "Rejected",
-      status: "rejected",
-      value: orders.filter(o => o.status === "rejected").length,
-      description: "Stopped by admin review",
-      icon: XCircle,
-      color: "#991B1B",
-      bg: "#FEE2E2",
-      border: "#DC2626",
-    },
-    {
-      label: "Received",
-      status: "received",
-      value: orders.filter(o => o.status === "received").length,
-      description: "Completed through goods receiving",
-      icon: Check,
-      color: "#007A5E",
-      bg: "#D1F2E8",
-      border: "#008967",
-    },
-  ];
-
-  const [suppliers, setSuppliers] = useLocalStorageState<Supplier[]>("purchaseOrders.suppliers", []);
-
-  // Get available products from selected supplier
-  const availableProducts = newOrder.supplier
-    ? suppliers.find(s => s.name === newOrder.supplier)?.products || []
-    : [];
-
-  const inventoryProductOptions: GlobalProduct[] = getInventoryProducts().map((product) => {
-    const { main, sub } = splitCategory(product.category);
-    return {
-      id: `inv-${product.id}`,
-      inventoryId: product.id,
-      name: product.name,
-      sku: product.sku,
-      category: main,
-      subCategory: sub,
-      unit: product.unit,
-    };
-  });
-
-  const productDatabase = [...globalProducts];
-  inventoryProductOptions.forEach((inventoryProduct) => {
-    const alreadyExists = productDatabase.some((product) =>
-      product.inventoryId === inventoryProduct.inventoryId ||
-      Boolean(product.sku && inventoryProduct.sku && product.sku.trim().toLowerCase() === inventoryProduct.sku.trim().toLowerCase()) ||
-      normalizeProductName(product.name) === normalizeProductName(inventoryProduct.name)
-    );
-    if (!alreadyExists) {
-      productDatabase.push(inventoryProduct);
-    }
-  });
-
-  const handleCreateNewProduct = (payload: {
-    name: string;
-    sku?: string;
-    category: string;
-    subCategory: string;
-    unit: string;
-  }) => {
-    const normalized = normalizeProductName(payload.name);
-
-    const existingProduct = findProductByName(normalized, globalProducts);
-    if (existingProduct) {
-      return existingProduct;
-    }
-
-    const productId = `gp-${Date.now()}`;
-    const newProduct: GlobalProduct = {
-      id: productId,
-      name: normalized,
-      sku: payload.sku?.trim(),
-      category: payload.category || "Other",
-      subCategory: payload.subCategory,
-      unit: payload.unit || "pcs",
-    };
-
-    setGlobalProducts([...globalProducts, newProduct]);
-
-    if (newOrder.supplier) {
-      const supplier = suppliers.find(s => s.name === newOrder.supplier);
-      if (supplier) {
-        const updatedSupplier: Supplier = {
-          ...supplier,
-          products: [
-            ...supplier.products,
-            { name: normalized, price: parseFloat(currentItem.unitPrice) || 0 },
-          ],
-        };
-        setSuppliers(suppliers.map(s => (s.name === newOrder.supplier ? updatedSupplier : s)));
-      }
-    }
-
-    return newProduct;
-  };
-
-  const handleAddItem = () => {
-if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentItem.unitPrice.trim() || !currentItem.unit.trim()) {
-      return;
-    }
-
-    let productId = currentItem.productId;
-    let inventoryId = currentItem.inventoryId;
-    let category = currentItem.category;
-    let subCategory = currentItem.subCategory;
-    let unit = currentItem.unit;
-
-    if (currentItem.isNewProduct || !productId) {
-      const created = handleCreateNewProduct({
-        name: currentItem.productName,
-        sku: currentItem.sku,
-        category: currentItem.category || "Other",
-        subCategory: currentItem.subCategory,
-        unit: currentItem.unit || "pcs",
-      });
-      productId = created.id;
-      inventoryId = created.inventoryId;
-      category = created.category;
-      subCategory = created.subCategory;
-      unit = created.unit;
-    }
-
-    const newItem: OrderItem = {
-      productId,
-      inventoryId,
-      sku: currentItem.sku?.trim(),
-      productName: normalizeProductName(currentItem.productName),
-      quantity: parseInt(currentItem.quantity, 10),
-      unitPrice: parseFloat(currentItem.unitPrice),
-      category: category || "",
-      subCategory: subCategory || "",
-      unit: unit || "",
-    };
-
-    setOrderItems([...orderItems, newItem]);
-    setCurrentItem(blankOrderItemInput());
-  };
-
-  const handleRemoveItem = (index: number) => {
-    setOrderItems(orderItems.filter((_, i) => i !== index));
-  };
-
-  const calculateTotal = () => {
-    return orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-  };
-
-  const handleCreateOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (orderItems.length === 0) {
-      alert("Please add at least one item to the order");
-      return;
-    }
-
-    const orderNumber = orders.length + 1;
-    const newOrderId = `PO-2024-${String(orderNumber).padStart(3, '0')}`;
-    const creator = getCurrentUser(users, userRole);
-
-    const orderToAdd: Order = {
-      id: newOrderId,
-      supplier: newOrder.supplier,
-      date: new Date().toISOString().split('T')[0],
-      items: orderItems.length,
-      orderItems: orderItems,
-      total: calculateTotal(),
-      status: "pending",
-      expectedDelivery: newOrder.expectedDelivery,
-      createdByUserId: creator.id,
-      createdBy: creator.email,
-      createdByRole: creator.role,
-      createdAt: new Date().toISOString(),
-    };
-
-    setOrders([orderToAdd, ...orders]);
-    setShowCreateModal(false);
-    setNewOrder({ supplier: "", expectedDelivery: "" });
-    setOrderItems([]);
-    setCurrentItem(blankOrderItemInput());
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-
-    // If supplier is being changed, clear the order items and current item
-    if (name === "supplier" && value !== newOrder.supplier) {
-      setOrderItems([]);
-      setCurrentItem(blankOrderItemInput());
-    }
-
-    setNewOrder({
-      ...newOrder,
-      [name]: value,
-    });
-  };
-
-  const handleViewDetails = (order: Order) => {
-    setSelectedOrder(order);
-    setShowViewModal(true);
-  };
-
-  const handleDownload = (order: Order) => {
-    // Generate CSV content
-    let csvContent = "Purchase Order Details\n\n";
-    csvContent += `Order ID:,${order.id}\n`;
-    csvContent += `Supplier:,${order.supplier}\n`;
-    csvContent += `Created By:,${getOrderCreator(order, users)}\n`;
-    csvContent += `Creator User ID:,${order.createdByUserId ?? "N/A"}\n`;
-    csvContent += `Creator Role:,${getOrderCreatorRole(order)}\n`;
-    csvContent += `Created At:,${order.createdAt || order.date}\n`;
-    csvContent += `Order Date:,${order.date}\n`;
-    csvContent += `Expected Delivery:,${order.expectedDelivery}\n`;
-    csvContent += `Status:,${order.status}\n\n`;
-    if (order.rejectionNote) {
-      csvContent += `Rejection Note:,${order.rejectionNote}\n`;
-      csvContent += `Rejected By:,${order.rejectedBy || "Admin"}\n`;
-      csvContent += `Rejected At:,${order.rejectedAt || "N/A"}\n\n`;
-    }
-    csvContent += "Items:\n";
-    csvContent += "Product Name,Quantity,Unit,Unit Price,Total\n";
-
-    order.orderItems.forEach(item => {
-      const itemTotal = item.quantity * item.unitPrice;
-      csvContent += `${item.productName},${item.quantity},${item.unit},${item.unitPrice.toFixed(2)},${itemTotal.toFixed(2)}\n`;
-    });
-
-    csvContent += `\nTotal Order Value:,₱${order.total.toFixed(2)}\n`;
-
-    // Create download link
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `${order.id}_PurchaseOrder.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const createGoodsReceivedRecord = (order: Order) => {
-    const goodsRecords = readLocalStorage<GoodsItem[]>("goodsReceived.records", []);
-    const alreadyExists = goodsRecords.some(record => record.poId === order.id);
-
-    if (alreadyExists) return;
-
-    const nextNumber = goodsRecords.length + 1;
-    const goodsRecord: GoodsItem = {
-      id: `GR-${new Date().getFullYear()}-${String(nextNumber).padStart(3, "0")}`,
-      poId: order.id,
-      supplier: order.supplier,
-      receivedDate: order.expectedDelivery || new Date().toISOString().split("T")[0],
-      items: order.items,
-      receivedItems: order.orderItems.map(item => ({ ...item, condition: "Pending Check" })),
-      totalValue: order.total,
-      receivedBy: "Receiving Team",
-      status: "pending",
-      notes: "Approved PO. Awaiting goods receipt and quality check.",
-    };
-
-    writeLocalStorage("goodsReceived.records", [goodsRecord, ...goodsRecords]);
-  };
-
-  const handleApproveOrder = (order: Order) => {
-    const approvedOrder = { ...order, status: "approved" };
-    setOrders(orders.map(currentOrder => currentOrder.id === order.id ? approvedOrder : currentOrder));
-    createGoodsReceivedRecord(approvedOrder);
-  };
-
-  const openRejectOrderModal = (order: Order) => {
-    setRejectingOrder(order);
-    setRejectionNote(order.rejectionNote || "");
-    setShowRejectModal(true);
-  };
-
-  const handleRejectOrder = () => {
-    const orderToReject = rejectingOrder || approvingOrder;
-    if (!orderToReject) return;
-
-    const trimmedNote = rejectionNote.trim();
-    if (!trimmedNote) {
-      alert("Please enter a rejection note before rejecting this order.");
-      return;
-    }
-
-    const rejectedOrder: Order = {
-      ...orderToReject,
-      status: "rejected",
-      rejectionNote: trimmedNote,
-      rejectedBy: localStorage.getItem("userEmail") || "Admin",
-      rejectedAt: new Date().toISOString(),
-    };
-
-    setOrders(orders.map(order => order.id === orderToReject.id ? rejectedOrder : order));
-    setShowRejectModal(false);
-    setRejectingOrder(null);
-    setApprovingOrder(null);
-    setRejectionNote("");
-  };
-
-  const handleCancelOrder = (orderId: string) => {
-    setOrders(orders.map(order => order.id === orderId ? { ...order, status: "cancelled" } : order));
-  };
-
-  const handleEditOrder = (order: Order) => {
-    setEditingOrder(order);
-    setNewOrder({
-      supplier: order.supplier,
-      expectedDelivery: order.expectedDelivery,
-    });
-    setOrderItems([...order.orderItems]);
-    setShowEditModal(true);
-  };
-
-  const handleUpdateOrder = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (orderItems.length === 0) {
-      alert("Please add at least one item to the order");
-      return;
-    }
-
-    if (!editingOrder) return;
-
-    const updatedOrder: Order = {
-      ...editingOrder,
-      supplier: newOrder.supplier,
-      expectedDelivery: newOrder.expectedDelivery,
-      items: orderItems.length,
-      orderItems: orderItems,
-      total: calculateTotal(),
-    };
-
-    setOrders(orders.map(order =>
-      order.id === editingOrder.id ? updatedOrder : order
-    ));
-
-    setShowEditModal(false);
-    setEditingOrder(null);
-    setNewOrder({ supplier: "", expectedDelivery: "" });
-    setOrderItems([]);
-    setCurrentItem(blankOrderItemInput());
-  };
-
-  const handleAddSupplier = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const missingSupplierFields = [
-      ["supplier name", newSupplier.name],
-      ["contact person", newSupplier.contact],
-      ["email", newSupplier.email],
-      ["phone", newSupplier.phone],
-      ["address", newSupplier.address],
-    ].filter(([, value]) => !String(value).trim());
-
-    if (missingSupplierFields.length > 0) {
-      alert(`Please complete supplier ${missingSupplierFields.map(([field]) => field).join(", ")}`);
-      return;
-    }
-
-    const supplierToAdd: Supplier = {
-      name: newSupplier.name.trim(),
-      contact: newSupplier.contact.trim(),
-      email: newSupplier.email.trim(),
-      phone: newSupplier.phone.trim(),
-      address: newSupplier.address.trim(),
-      products: [], // New suppliers start with no products
-    };
-
-    setSuppliers([...suppliers, supplierToAdd]);
-    setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
-    setNewSupplier({
-      name: "",
-      contact: "",
-      email: "",
-      phone: "",
-      address: "",
-    });
-    setShowSupplierModal(false);
-  };
-
-  const handleSupplierInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    setNewSupplier({
-      ...newSupplier,
-      [e.target.name]: e.target.value,
-    });
-  };
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
+      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-xl font-bold text-foreground mb-2">Purchase Orders</h1>
-          <p className="text-muted-foreground text-sm hidden">Manage and track all purchase orders</p>
+          <h1 className="text-xl font-bold text-foreground">Purchase Orders</h1>
+          <p className="text-sm text-muted-foreground">Backend-managed supplier purchasing and approvals</p>
         </div>
-        <div className="flex gap-3 mt-4 md:mt-0">
+        <div className="flex flex-wrap gap-3">
           <button
             onClick={() => setShowSuppliersListModal(true)}
-            className="px-6 py-3 bg-muted text-foreground rounded-2xl hover:bg-muted/80 transition-all duration-200 flex items-center gap-2 border border-border"
+            className="flex items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm"
           >
-            <Users className="w-5 h-5" />
-            View Suppliers
+            <Users className="h-4 w-4" /> Suppliers
           </button>
-          {userRole === "admin" && (
-            <button
-              onClick={() => setShowApprovalModal(true)}
-              className="px-6 py-3 bg-muted text-foreground rounded-2xl hover:bg-muted/80 transition-all duration-200 flex items-center gap-2 border border-border relative"
-            >
-              <Clock className="w-5 h-5" />
-              Pending Approval
-              {orders.filter(o => o.status === "pending").length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-primary text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
-                  {orders.filter(o => o.status === "pending").length}
-                </span>
-              )}
-            </button>
-          )}
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center gap-2"
+            className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm text-white"
           >
-            <Plus className="w-5 h-5" />
-            Create New Order
+            <Plus className="h-4 w-4" /> Create Order
           </button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-8">
-        {stats.map((stat, index) => (
-          <div key={index} className="bg-card rounded-2xl p-2 shadow-sm border border-border">
-            <p className="text-muted-foreground text-sm mb-6">{stat.label}</p>
-            <p className="text-xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
+      {error && (
+        <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <AlertCircle className="h-4 w-4" />
+          <span>{error}</span>
+          <button className="ml-auto underline" onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
+
+      <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-4">
+        {stats.map((stat) => (
+          <div key={stat.label} className="rounded-2xl border border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">{stat.label}</p>
+            <p className="mt-3 text-2xl font-bold text-foreground">{stat.value}</p>
           </div>
         ))}
       </div>
 
-      {userRole === "admin" && (
-        <div className="bg-card rounded-2xl p-4 shadow-sm border border-border mb-8">
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h2 className="text-lg font-bold text-foreground">Admin Approval Level</h2>
-              <p className="text-sm text-muted-foreground">Monitor purchase orders by approval decision before goods receiving.</p>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {approvalLevels.map((level) => {
-              const Icon = level.icon;
-              return (
-                <button
-                  key={level.status}
-                  type="button"
-                  onClick={() => setStatusFilter(level.status)}
-                  className={`text-left rounded-xl border p-4 transition-all hover:shadow-sm ${
-                    statusFilter === level.status ? "ring-2 ring-primary/40" : ""
-                  }`}
-                  style={{ borderColor: level.border, backgroundColor: level.bg }}
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: level.color }}>{level.label}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{level.description}</p>
-                    </div>
-                    <Icon className="w-5 h-5" style={{ color: level.color }} />
-                  </div>
-                  <p className="text-2xl font-bold mt-4" style={{ color: level.color }}>{level.value}</p>
-                </button>
-              );
-            })}
-          </div>
+      <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 md:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search order number or supplier"
+            className="w-full rounded-xl border border-input bg-input-background py-2 pl-10 pr-3"
+          />
         </div>
-      )}
-
-      {/* Search and Filter */}
-      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border mb-8">
-        <div className="flex flex-col md:flex-row gap-6">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search by order ID or supplier..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-2 py-1 bg-input-background border border-input rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-            />
-          </div>
-          <div className="relative">
-            <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="pl-12 pr-8 py-3 bg-input-background border border-input rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer min-w-[200px]"
-            >
-              {statuses.map((status) => (
-                <option key={status} value={status}>
-                  {status === "all" ? "All Status" : status.charAt(0).toUpperCase() + status.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="relative">
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="rounded-xl border border-input bg-input-background py-2 pl-10 pr-8"
+          >
+            <option value="all">All statuses</option>
+            {["DRAFT", "SUBMITTED", "APPROVED", "PARTIALLY_RECEIVED", "RECEIVED", "REJECTED", "CANCELLED"].map((status) => (
+              <option key={status} value={status}>{statusLabel(status)}</option>
+            ))}
+          </select>
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-muted/50 border-b border-border">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Order ID</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Supplier</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Created By</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Items</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Total</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Expected Delivery</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Status</th>
-                <th className="px-6 py-4 text-left text-sm font-medium text-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filteredOrders.map((order) => (
-                <tr key={order.id} className="hover:bg-muted/30 transition-colors">
-                  <td className="px-6 py-4">
-                    <span className="font-medium text-primary">{order.id}</span>
-                  </td>
-                  <td className="px-6 py-4 text-foreground">{order.supplier}</td>
-                  <td className="px-6 py-4">
-                    <div className="min-w-[150px]">
-                      <p className="text-sm font-medium text-foreground break-words">{getOrderCreator(order, users)}</p>
-                      <p className="text-xs text-muted-foreground">ID: {order.createdByUserId ?? "N/A"}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{getOrderCreatorRole(order)}</p>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-muted-foreground">{order.date}</td>
-                  <td className="px-6 py-4 text-foreground">{order.items}</td>
-                  <td className="px-6 py-4 text-foreground font-medium">₱{order.total.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-muted-foreground">{order.expectedDelivery}</td>
-                  <td className="px-6 py-4">{getStatusBadge(order.status)}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleViewDetails(order)}
-                        className="p-6 hover:bg-blue-50 text-blue-600 rounded-2xl transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleEditOrder(order)}
-                        className={`p-6 rounded-2xl transition-colors ${
-                          order.status === "received" || order.status === "cancelled" || order.status === "rejected"
-                            ? "text-muted-foreground cursor-not-allowed opacity-50"
-                            : "hover:bg-orange-50 text-orange-600"
-                        }`}
-                        title={order.status === "received" || order.status === "cancelled" || order.status === "rejected" ? "Cannot edit received, cancelled, or rejected orders" : "Edit Order"}
-                        disabled={order.status === "received" || order.status === "cancelled" || order.status === "rejected"}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDownload(order)}
-                        className="p-6 hover:bg-green-50 text-green-600 rounded-2xl transition-colors"
-                        title="Download"
-                      >
-                        <Download className="w-4 h-4" />
-                      </button>
-                      {order.status === "pending" && userRole === "admin" && (
-                        <>
-                          <button
-                            onClick={() => handleApproveOrder(order)}
-                            className="px-4 py-2 hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-colors text-sm font-semibold"
-                            title="Approve and create GRN"
-                          >
-                            Approved
-                          </button>
-                          <button
-                            onClick={() => openRejectOrderModal(order)}
-                            className="px-4 py-2 hover:bg-red-50 text-red-700 border border-red-200 rounded-xl transition-colors text-sm font-semibold"
-                            title="Reject Order"
-                          >
-                            Rejected
-                          </button>
-                        </>
-                      )}
-                      {order.status === "pending" && userRole !== "admin" && (
-                        <button
-                          onClick={() => handleCancelOrder(order.id)}
-                          className="p-6 hover:bg-red-50 text-red-600 rounded-2xl transition-colors"
-                          title="Cancel Order"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        {loading ? (
+          <p className="p-8 text-center text-muted-foreground">Loading purchase orders...</p>
+        ) : filteredOrders.length === 0 ? (
+          <p className="p-8 text-center text-muted-foreground">No purchase orders found.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="border-b border-border bg-muted/50 text-left text-sm">
+                <tr>
+                  <th className="px-5 py-4">Order</th>
+                  <th className="px-5 py-4">Supplier</th>
+                  <th className="px-5 py-4">Items</th>
+                  <th className="px-5 py-4">Total</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredOrders.map((order) => (
+                  <tr key={order.id}>
+                    <td className="px-5 py-4">
+                      <p className="font-medium text-primary">{order.orderNumber}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleDateString()}</p>
+                    </td>
+                    <td className="px-5 py-4">{order.supplier?.name || "No supplier"}</td>
+                    <td className="px-5 py-4">{order.items.length}</td>
+                    <td className="px-5 py-4 font-medium">PHP {order.totalAmount.toLocaleString()}</td>
+                    <td className="px-5 py-4">
+                      <span className={`rounded-full border px-3 py-1 text-xs ${statusClass(order.status)}`}>
+                        {statusLabel(order.status)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <div className="flex gap-2">
+                        <button onClick={() => setSelectedOrder(order)} className="rounded-lg p-2 hover:bg-muted" title="View">
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {canApprove && order.status === "SUBMITTED" && (
+                          <>
+                            <button
+                              disabled={saving}
+                              onClick={() => void runOrderAction(() => approvePurchaseOrder(order.id), "Failed to approve order")}
+                              className="rounded-lg p-2 text-green-700 hover:bg-green-50"
+                              title="Approve"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </button>
+                            <button
+                              disabled={saving}
+                              onClick={() => setRejectingOrder(order)}
+                              className="rounded-lg p-2 text-red-700 hover:bg-red-50"
+                              title="Reject"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                        {["DRAFT", "SUBMITTED", "APPROVED"].includes(order.status) && (
+                          <button
+                            disabled={saving}
+                            onClick={() => void runOrderAction(() => cancelPurchaseOrder(order.id), "Failed to cancel order")}
+                            className="rounded-lg p-2 text-muted-foreground hover:bg-muted"
+                            title="Cancel"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
-      {/* Create Order Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold text-foreground">Create New Order</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={handleCreateOrder} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-xl font-bold">Create Purchase Order</h2>
+              <button type="button" onClick={() => setShowCreateModal(false)}><X className="h-5 w-5" /></button>
             </div>
-
-            <form onSubmit={handleCreateOrder} className="space-y-4 max-h-[70vh] overflow-y-auto">
-              {userRole === "staff" && (
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-sm font-semibold text-amber-900 mb-1">Admin Approval Required</p>
-                      <p className="text-xs text-amber-800">
-                        Purchase orders you create will be submitted for admin approval before processing.
-                      </p>
-                    </div>
-                  </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="text-sm">
+                <span className="mb-1 block">Supplier</span>
+                <div className="flex gap-2">
+                  <select value={supplierId} onChange={(event) => setSupplierId(event.target.value)} required className="min-w-0 flex-1 rounded-xl border border-input bg-input-background p-2">
+                    <option value="">Select supplier</option>
+                    {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}</option>)}
+                  </select>
+                  <button type="button" onClick={() => setShowSupplierModal(true)} className="rounded-xl border border-border px-3"><Plus className="h-4 w-4" /></button>
                 </div>
-              )}
-
-              <div>
-                <label htmlFor="supplier" className="block text-sm mb-2 text-foreground">
-                  Supplier *
-                </label>
-                <select
-                  id="supplier"
-                  name="supplier"
-                  value={newOrder.supplier}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                  required
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map((sup) => (
-                    <option key={sup.name} value={sup.name}>
-                      {sup.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="expectedDelivery" className="block text-sm mb-2 text-foreground">
-                  Expected Delivery Date *
-                </label>
-                <input
-                  id="expectedDelivery"
-                  name="expectedDelivery"
-                  type="date"
-                  value={newOrder.expectedDelivery}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Add Items</h3>
-
-                <PurchaseOrderItemInput
-                  supplierName={newOrder.supplier}
-                  productDatabase={productDatabase}
-                  supplierProducts={availableProducts}
-                  value={currentItem}
-                  onChange={setCurrentItem}
-                  onAddItem={handleAddItem}
-                />
-              </div>
-
-              {orderItems.length > 0 && (
-                <div className="border-t border-border pt-4">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">Order Items ({orderItems.length})</h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {orderItems.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity} {item.unit} × ₱{item.unitPrice.toFixed(2)} = ₱{(item.quantity * item.unitPrice).toFixed(2)}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-foreground">Total:</span>
-                      <span className="text-lg font-bold text-primary">₱{calculateTotal().toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4 border-t border-border">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-5 h-5" />
-                  Save Order
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowCreateModal(false);
-                    setOrderItems([]);
-                    setCurrentItem(blankOrderItemInput());
-                  }}
-                  className="flex-1 px-4 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* View Order Details Modal */}
-      {showViewModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Purchase Order Details</h2>
-                <p className="text-sm text-muted-foreground mt-1">{selectedOrder.id}</p>
-              </div>
-              <button
-                onClick={() => setShowViewModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
+              </label>
+              <label className="text-sm">
+                <span className="mb-1 block">Expected delivery</span>
+                <input type="date" value={expectedDelivery} onChange={(event) => setExpectedDelivery(event.target.value)} className="w-full rounded-xl border border-input bg-input-background p-2" />
+              </label>
             </div>
-
-            <div className="p-6 space-y-6">
-              {/* Order Information */}
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Supplier</p>
-                    <p className="text-lg font-semibold text-foreground">{selectedOrder.supplier}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Order Date</p>
-                    <p className="text-foreground">{selectedOrder.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Expected Delivery</p>
-                    <p className="text-foreground">{selectedOrder.expectedDelivery}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Created By</p>
-                    <p className="font-medium text-foreground break-words">{getOrderCreator(selectedOrder, users)}</p>
-                    <p className="text-xs text-muted-foreground">User ID: {selectedOrder.createdByUserId ?? "N/A"}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{getOrderCreatorRole(selectedOrder)}</p>
-                  </div>
+            <div className="mt-5 space-y-3">
+              {lines.map((line, index) => (
+                <div key={index} className="grid gap-3 rounded-xl border border-border p-4 md:grid-cols-[1fr_120px_140px_auto]">
+                  <select value={line.inventoryItemId} onChange={(event) => updateLine(index, { inventoryItemId: event.target.value })} required className="rounded-lg border border-input bg-input-background p-2 text-sm">
+                    <option value="">Select inventory item</option>
+                    {inventory.map((item) => <option key={item.id} value={item.id}>{item.name}{item.sku ? ` (${item.sku})` : ""}</option>)}
+                  </select>
+                  <input type="number" min="0.001" step="0.001" placeholder="Quantity" value={line.quantity} onChange={(event) => updateLine(index, { quantity: event.target.value })} required className="rounded-lg border border-input bg-input-background p-2 text-sm" />
+                  <input type="number" min="0" step="0.01" placeholder="Unit price" value={line.unitPrice} onChange={(event) => updateLine(index, { unitPrice: event.target.value })} required className="rounded-lg border border-input bg-input-background p-2 text-sm" />
+                  <button type="button" disabled={lines.length === 1} onClick={() => setLines((current) => current.filter((_, lineIndex) => lineIndex !== index))} className="rounded-lg px-2 text-red-600 disabled:opacity-30"><X className="h-4 w-4" /></button>
                 </div>
-                <div className="space-y-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Status</p>
-                    {getStatusBadge(selectedOrder.status)}
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Items</p>
-                    <p className="text-foreground">{selectedOrder.items} items</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Total Value</p>
-                    <p className="text-2xl font-bold text-primary">₱{selectedOrder.total.toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedOrder.status === "rejected" && selectedOrder.rejectionNote && (
-                <div className="rounded-xl border border-red-200 bg-red-50 p-4">
-                  <div className="flex items-start gap-3">
-                    <XCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-700" />
-                    <div>
-                      <p className="text-sm font-semibold text-red-900">Rejection Remarks</p>
-                      <p className="mt-1 text-sm text-red-800">{selectedOrder.rejectionNote}</p>
-                      <p className="mt-2 text-xs text-red-700">
-                        Rejected by {selectedOrder.rejectedBy || "Admin"}
-                        {selectedOrder.rejectedAt ? ` on ${new Date(selectedOrder.rejectedAt).toLocaleString()}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Order Items Table */}
-              <div className="border-t border-border pt-6">
-                <h3 className="text-lg font-semibold text-foreground mb-4">Order Items</h3>
-                <div className="bg-muted/30 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b border-border">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Product Name</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Quantity</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Unit</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Unit Price</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {selectedOrder.orderItems.map((item, index) => (
-                        <tr key={index} className="hover:bg-muted/20">
-                          <td className="px-4 py-3 text-foreground">{item.productName}</td>
-                          <td className="px-4 py-3 text-right text-foreground">{item.quantity}</td>
-                          <td className="px-4 py-3 text-left text-foreground">{item.unit}</td>
-                          <td className="px-4 py-3 text-right text-foreground">₱{item.unitPrice.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
-                            ₱{(item.quantity * item.unitPrice).toFixed(2)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-muted/50 border-t border-border">
-                      <tr>
-                        <td colSpan={3} className="px-4 py-3 text-right font-semibold text-foreground">
-                          Grand Total:
-                        </td>
-                        <td className="px-4 py-3 text-right text-xl font-bold text-primary">
-                          ₱{selectedOrder.total.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-4 border-t border-border">
-                <button
-                  onClick={() => handleDownload(selectedOrder)}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Download className="w-5 h-5" />
-                  Download Order
-                </button>
-                <button
-                  onClick={() => setShowViewModal(false)}
-                  className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Close
-                </button>
-              </div>
+              ))}
+              <button type="button" onClick={() => setLines((current) => [...current, blankLine()])} className="flex items-center gap-2 text-sm text-primary"><Plus className="h-4 w-4" /> Add item</button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Reject Order Modal */}
-      {showRejectModal && (rejectingOrder || approvingOrder) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowRejectModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4 mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">Reject Purchase Order</h2>
-                <p className="text-sm text-muted-foreground mt-1">{(rejectingOrder || approvingOrder)!.id} - {(rejectingOrder || approvingOrder)!.supplier}</p>
-                <p className="text-xs text-muted-foreground mt-1">Created by {getOrderCreator((rejectingOrder || approvingOrder)!, users)}</p>
-              </div>
-              <button
-                onClick={() => {
-                  setShowRejectModal(false);
-                  setRejectingOrder(null);
-                  setApprovingOrder(null);
-                  setRejectionNote("");
-                }}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="rounded-xl p-4 mb-4" style={{ border: "1px solid #FCA5A5", backgroundColor: "#FEE2E2" }}>
-              <p className="text-sm" style={{ color: "#991B1B" }}>
-                Add the reason why this PO is rejected. This note will be saved with the order for admin review and audit trail.
-              </p>
-            </div>
-
-            <label htmlFor="rejectionNote" className="block text-sm font-semibold text-foreground mb-2">
-              Rejection remarks *
+            <label className="mt-5 block text-sm">
+              <span className="mb-1 block">Notes</span>
+              <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-20 w-full rounded-xl border border-input bg-input-background p-3" />
             </label>
-            <textarea
-              id="rejectionNote"
-              value={rejectionNote}
-              onChange={(event) => setRejectionNote(event.target.value)}
-              placeholder="Example: Supplier price mismatch, duplicate order, wrong quantity, missing approval document..."
-              className="min-h-[130px] w-full rounded-xl border border-input bg-input-background px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/30"
-            />
-
-            <div className="flex gap-3 pt-5">
-              <button
-                type="button"
-                onClick={handleRejectOrder}
-                className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 font-semibold"
-                style={{ backgroundColor: "#DC2626" }}
-                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#B91C1C")}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#DC2626")}
-              >
-                Reject Order
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowRejectModal(false);
-                  setRejectingOrder(null);
-                  setApprovingOrder(null);
-                  setRejectionNote("");
-                }}
-                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-              >
-                Cancel
-              </button>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setShowCreateModal(false)} className="rounded-xl border border-border px-4 py-2">Cancel</button>
+              <button disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-white disabled:opacity-50">{saving ? "Saving..." : "Create and Submit"}</button>
             </div>
-          </div>
+          </form>
         </div>
       )}
 
-      {/* Edit Order Modal */}
-      {showEditModal && editingOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">Edit Purchase Order</h2>
-                <p className="text-sm text-muted-foreground mt-1">{editingOrder.id}</p>
-              </div>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleUpdateOrder} className="space-y-4 max-h-[70vh] overflow-y-auto">
-              <div>
-                <label htmlFor="edit-supplier" className="block text-sm mb-2 text-foreground">
-                  Supplier *
-                </label>
-                <select
-                  id="edit-supplier"
-                  name="supplier"
-                  value={newOrder.supplier}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                  required
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers.map((sup) => (
-                    <option key={sup.name} value={sup.name}>
-                      {sup.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="edit-expectedDelivery" className="block text-sm mb-2 text-foreground">
-                  Expected Delivery Date *
-                </label>
-                <input
-                  id="edit-expectedDelivery"
-                  name="expectedDelivery"
-                  type="date"
-                  value={newOrder.expectedDelivery}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div className="border-t border-border pt-4">
-                <h3 className="text-sm font-semibold text-foreground mb-3">Add Items</h3>
-
-                <PurchaseOrderItemInput
-                  supplierName={newOrder.supplier}
-                  productDatabase={productDatabase}
-                  supplierProducts={availableProducts}
-                  value={currentItem}
-                  onChange={setCurrentItem}
-                  onAddItem={handleAddItem}
-                />
-              </div>
-
-              {orderItems.length > 0 && (
-                <div className="border-t border-border pt-4">
-                  <h3 className="text-sm font-semibold text-foreground mb-3">Order Items ({orderItems.length})</h3>
-                  <div className="space-y-2 max-h-40 overflow-y-auto">
-                    {orderItems.map((item, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-foreground">{item.productName}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.quantity} {item.unit} × ₱{item.unitPrice.toFixed(2)} = ₱{(item.quantity * item.unitPrice).toFixed(2)}
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(index)}
-                          className="p-1 hover:bg-red-100 text-red-600 rounded transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-border">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm font-semibold text-foreground">Total:</span>
-                      <span className="text-lg font-bold text-primary">₱{calculateTotal().toFixed(2)}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4 border-t border-border">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-5 h-5" />
-                  Update Order
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowEditModal(false);
-                    setEditingOrder(null);
-                    setOrderItems([]);
-                    setCurrentItem(blankOrderItemInput());
-                  }}
-                  className="flex-1 px-4 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add Supplier Modal */}
       {showSupplierModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSupplierModal(false)}>
-          <div className="bg-card rounded-xl shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
-            <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-card">
-              <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-primary" />
-                Add New Supplier
-              </h2>
-              <button
-                onClick={() => setShowSupplierModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={handleAddSupplier} className="w-full max-w-lg rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">Add Supplier</h2><button type="button" onClick={() => setShowSupplierModal(false)}><X className="h-5 w-5" /></button></div>
+            <div className="grid gap-3">
+              {([
+                ["name", "Supplier name"],
+                ["contactPerson", "Contact person"],
+                ["email", "Email"],
+                ["phone", "Phone"],
+                ["address", "Address"],
+              ] as const).map(([field, label]) => (
+                <input key={field} type={field === "email" ? "email" : "text"} required={field === "name"} placeholder={label} value={newSupplier[field]} onChange={(event) => setNewSupplier((current) => ({ ...current, [field]: event.target.value }))} className="rounded-xl border border-input bg-input-background p-3" />
+              ))}
             </div>
-
-            <form onSubmit={handleAddSupplier} className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
-              <div>
-                <label htmlFor="supplierName" className="block text-sm mb-1 text-foreground font-medium">
-                  Supplier Name *
-                </label>
-                <input
-                  id="supplierName"
-                  name="name"
-                  type="text"
-                  value={newSupplier.name}
-                  onChange={handleSupplierInputChange}
-                  placeholder="e.g., Fresh Farms Co."
-                  className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="supplierContact" className="block text-sm mb-1 text-foreground font-medium">
-                  Contact Person *
-                </label>
-                <input
-                  id="supplierContact"
-                  name="contact"
-                  type="text"
-                  value={newSupplier.contact}
-                  onChange={handleSupplierInputChange}
-                  placeholder="e.g., John Doe"
-                  className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="supplierEmail" className="block text-sm mb-1 text-foreground font-medium">
-                  Email *
-                </label>
-                <input
-                  id="supplierEmail"
-                  name="email"
-                  type="email"
-                  value={newSupplier.email}
-                  onChange={handleSupplierInputChange}
-                  placeholder="e.g., contact@supplier.com"
-                  className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="supplierPhone" className="block text-sm mb-1 text-foreground font-medium">
-                  Phone *
-                </label>
-                <input
-                  id="supplierPhone"
-                  name="phone"
-                  type="tel"
-                  value={newSupplier.phone}
-                  onChange={handleSupplierInputChange}
-                  placeholder="e.g., +1 234 567 8900"
-                  className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  required
-                />
-              </div>
-
-              <div>
-                <label htmlFor="supplierAddress" className="block text-sm mb-1 text-foreground font-medium">
-                  Address *
-                </label>
-                <textarea
-                  id="supplierAddress"
-                  name="address"
-                  value={newSupplier.address}
-                  onChange={handleSupplierInputChange}
-                  placeholder="e.g., 123 Farm Road, City, State, ZIP"
-                  className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all resize-none"
-                  rows={3}
-                  required
-                />
-              </div>
-
-              <div className="flex gap-3 pt-3">
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-primary to-secondary text-white text-sm rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-4 h-4" />
-                  Add Supplier
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSupplierModal(false);
-                    setNewSupplier({
-                      name: "",
-                      contact: "",
-                      email: "",
-                      phone: "",
-                      address: "",
-                    });
-                  }}
-                  className="flex-1 px-4 py-2 bg-muted text-foreground text-sm rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setShowSupplierModal(false)} className="rounded-xl border border-border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-white">Save Supplier</button></div>
+          </form>
         </div>
       )}
 
-      {/* View Suppliers Modal */}
       {showSuppliersListModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSuppliersListModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-5xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground flex items-center gap-3">
-                  <Users className="w-7 h-7 text-primary" />
-                  Suppliers Directory
-                </h2>
-                <p className="text-sm text-muted-foreground mt-1">All registered suppliers ({suppliers.length})</p>
-              </div>
-              <button
-                onClick={() => setShowSuppliersListModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              {suppliers.length > 0 ? (
-                <div className="bg-muted/30 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b border-border">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Supplier Name</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Contact Person</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Email</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Phone</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Address</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {suppliers.map((supplier, index) => (
-                        <tr key={index} className="hover:bg-muted/20">
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 bg-gradient-to-br from-primary to-secondary rounded-lg flex items-center justify-center text-white font-bold text-sm">
-                                {supplier.name.charAt(0)}
-                              </div>
-                              <span className="font-semibold text-foreground">{supplier.name}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-foreground">{supplier.contact || "N/A"}</td>
-                          <td className="px-4 py-3 text-foreground">
-                            {supplier.email ? (
-                              <a href={`mailto:${supplier.email}`} className="text-primary hover:underline">
-                                {supplier.email}
-                              </a>
-                            ) : (
-                              "N/A"
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-foreground">
-                            {supplier.phone ? (
-                              <a href={`tel:${supplier.phone}`} className="text-primary hover:underline">
-                                {supplier.phone}
-                              </a>
-                            ) : (
-                              "N/A"
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-foreground text-sm">{supplier.address || "N/A"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[80vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">Suppliers</h2><button onClick={() => setShowSuppliersListModal(false)}><X className="h-5 w-5" /></button></div>
+            <div className="space-y-3">
+              {suppliers.length === 0 ? <p className="text-muted-foreground">No suppliers found.</p> : suppliers.map((supplier) => (
+                <div key={supplier.id} className="rounded-xl border border-border p-4">
+                  <p className="font-semibold">{supplier.name}</p>
+                  <p className="text-sm text-muted-foreground">{supplier.contactPerson || "No contact"}{supplier.email ? ` | ${supplier.email}` : ""}</p>
                 </div>
-              ) : (
-                <div className="text-center py-12">
-                  <Building2 className="w-16 h-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                  <p className="text-muted-foreground">No suppliers registered yet</p>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-6 border-t border-border mt-6">
-                <button
-                  onClick={() => {
-                    setShowSuppliersListModal(false);
-                    setShowSupplierModal(true);
-                  }}
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Plus className="w-5 h-5" />
-                  Add New Supplier
-                </button>
-                <button
-                  onClick={() => setShowSuppliersListModal(false)}
-                  className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Close
-                </button>
-              </div>
+              ))}
             </div>
           </div>
         </div>
       )}
 
-      {/* Pending Approval Modal */}
-      {showApprovalModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
-            <div className="p-6 border-b border-border bg-gradient-to-r from-primary to-secondary">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-white">Pending Purchase Orders</h2>
-                  <p className="text-white/80 text-sm mt-1">Review and approve or reject purchase orders from staff</p>
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-5 flex justify-between"><div><h2 className="text-xl font-bold">{selectedOrder.orderNumber}</h2><p className="text-sm text-muted-foreground">{selectedOrder.supplier?.name}</p></div><button onClick={() => setSelectedOrder(null)}><X className="h-5 w-5" /></button></div>
+            <div className="space-y-3">
+              {selectedOrder.items.map((item) => (
+                <div key={item.id} className="flex justify-between rounded-xl border border-border p-4">
+                  <div><p className="font-medium">{item.name}</p><p className="text-sm text-muted-foreground">{item.quantity} {item.inventoryItem?.unit || "units"} x PHP {item.unitPrice.toFixed(2)}</p></div>
+                  <p className="font-semibold">PHP {item.totalPrice.toFixed(2)}</p>
                 </div>
-                <button
-                  onClick={() => {
-                    setShowApprovalModal(false);
-                    setApprovingOrder(null);
-                  }}
-                  className="text-white/80 hover:text-white transition-colors p-2"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+              ))}
             </div>
-
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {orders.filter(o => o.status === "pending").length === 0 ? (
-                <div className="text-center py-12">
-                  <CheckCircle className="w-16 h-16 text-success mx-auto mb-4 opacity-50" />
-                  <h3 className="text-xl font-semibold text-foreground mb-2">All Caught Up!</h3>
-                  <p className="text-muted-foreground">No pending purchase orders require approval</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {orders
-                    .filter(o => o.status === "pending")
-                    .map((order) => (
-                      <div
-                        key={order.id}
-                        className="bg-background rounded-2xl p-6 border-2 border-primary/20 hover:border-primary/40 transition-all"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-lg font-bold text-foreground">PO #{order.id}</h3>
-                              {getStatusBadge(order.status)}
-                            </div>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Supplier</p>
-                                <p className="text-sm font-medium text-foreground">{order.supplier}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Created By</p>
-                                <p className="text-sm font-medium text-foreground">{getOrderCreator(order, users)}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Date</p>
-                                <p className="text-sm font-medium text-foreground">{order.date}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Expected Delivery</p>
-                                <p className="text-sm font-medium text-foreground">{order.expectedDelivery}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Total Items</p>
-                                <p className="text-sm font-medium text-foreground">{order.items}</p>
-                              </div>
-                              <div>
-                                <p className="text-xs text-muted-foreground mb-1">Total Amount</p>
-                                <p className="text-sm font-bold text-foreground">₱{order.total.toFixed(2)}</p>
-                              </div>
-                            </div>
-
-                            {/* Order Items Preview */}
-                            <div className="mt-4 bg-muted/30 rounded-xl p-4">
-                              <p className="text-xs font-semibold text-foreground mb-2">Order Items:</p>
-                              <div className="space-y-1">
-                                {order.orderItems.slice(0, 3).map((item, idx) => (
-                                  <div key={idx} className="flex items-center justify-between text-sm">
-                                    <span className="text-foreground">{item.productName}</span>
-                                    <span className="text-muted-foreground">
-                                      {item.quantity} {item.unit} × ₱{item.unitPrice.toFixed(2)}
-                                    </span>
-                                  </div>
-                                ))}
-                                {order.orderItems.length > 3 && (
-                                  <p className="text-xs text-muted-foreground italic">
-                                    +{order.orderItems.length - 3} more items
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex gap-3 mt-4">
-                          <button
-                            onClick={() => {
-                              setOrders(orders.map(o =>
-                                o.id === order.id ? { ...o, status: "approved" } : o
-                              ));
-                            }}
-                            className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                          >
-                            <CheckCircle className="w-5 h-5" />
-                            Approve Order
-                          </button>
-                          <button
-                            onClick={() => {
-                              setApprovingOrder(order);
-                              setShowApprovalModal(false);
-                              setShowRejectModal(true);
-                            }}
-                            className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
-                            style={{ backgroundColor: "#DC2626" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#B91C1C")}
-                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#DC2626")}
-                          >
-                            <XCircle className="w-5 h-5" />
-                            Reject Order
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedOrder(order);
-                              setShowApprovalModal(false);
-                              setShowViewModal(true);
-                            }}
-                            className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200 flex items-center gap-2"
-                          >
-                            <Eye className="w-5 h-5" />
-                            View Details
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                </div>
-              )}
-            </div>
+            {selectedOrder.rejectionReason && <p className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-700">Rejection: {selectedOrder.rejectionReason}</p>}
           </div>
+        </div>
+      )}
+
+      {rejectingOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={handleReject} className="w-full max-w-md rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3"><Clock className="h-5 w-5 text-red-600" /><h2 className="text-xl font-bold">Reject {rejectingOrder.orderNumber}</h2></div>
+            <textarea required value={rejectionReason} onChange={(event) => setRejectionReason(event.target.value)} placeholder="Reason for rejection" className="min-h-28 w-full rounded-xl border border-input bg-input-background p-3" />
+            <div className="mt-4 flex justify-end gap-3"><button type="button" onClick={() => setRejectingOrder(null)} className="rounded-xl border border-border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-xl bg-red-600 px-4 py-2 text-white">Reject Order</button></div>
+          </form>
         </div>
       )}
     </div>

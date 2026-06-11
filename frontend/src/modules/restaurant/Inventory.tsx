@@ -1,638 +1,151 @@
-import { useState } from "react";
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
-import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, Edit, Search, Trash2, X } from "lucide-react";
+import {
+  deleteInventoryItem,
+  getInventory,
+  getLocations,
+  updateInventoryItem,
+} from "../../app/api/client";
+import { getStorageTemperatureOptions } from "../lib/inventoryLogic";
 
+type Location = { id: string; name: string };
 type Product = {
-  id: number;
+  id: string;
   name: string;
-  sku: string;
+  itemType: string;
+  sku?: string;
   category: string;
-  stock: number;
-  maxStock: number;
+  quantity: number;
   price: number;
-  expiry: string;
-  location?: string;
-  unit: string;
+  unit?: string;
+  minStock?: number;
+  maxStock?: number;
+  reorderPoint?: number;
+  expiryDate?: string;
   storageTemperature?: string;
+  locationId: string;
+  location?: Location;
 };
 
 export function Inventory() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedMainCategories, setExpandedMainCategories] = useState<Set<string>>(new Set());
-  const [expandedSubCategories, setExpandedSubCategories] = useState<Set<string>>(new Set());
-  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferProduct, setTransferProduct] = useState<Product | null>(null);
-  const [editMainCategory, setEditMainCategory] = useState("");
-  const [editSubCategory, setEditSubCategory] = useState("");
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [editing, setEditing] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const storageTemperatures = getStorageTemperatureOptions();
 
-  // Hierarchical category structure
-  const categoryHierarchy = getCategoryHierarchy();
-  const storageTemperatureOptions = getStorageTemperatureOptions();
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [ingredients, menuItems, supplies, locationData] = await Promise.all([
+        getInventory({ itemType: "INGREDIENT" }),
+        getInventory({ itemType: "MENU_ITEM" }),
+        getInventory({ itemType: "SUPPLY" }),
+        getLocations(),
+      ]);
+      setProducts([...ingredients, ...menuItems, ...supplies]);
+      setLocations(locationData);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load food inventory");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const [products, setProducts] = useLocalStorageState<Product[]>("inventory.products", defaultInventoryProducts);
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-  const locations = ["Cold Storage A", "Cold Storage B", "Refrigerator 1", "Refrigerator 2", "Dry Storage", "Produce Section", "Bakery Shelf", "Freezer"];
+  const filteredProducts = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return products.filter(
+      (product) =>
+        (typeFilter === "all" || product.itemType === typeFilter) &&
+        (product.name.toLowerCase().includes(query) || (product.sku || "").toLowerCase().includes(query)),
+    );
+  }, [products, searchQuery, typeFilter]);
 
-  const mainCategories = Object.keys(categoryHierarchy);
-
-  const toggleMainCategory = (category: string) => {
-    const newExpanded = new Set(expandedMainCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-      // Also collapse all subcategories under this main category
-      const newSubExpanded = new Set(expandedSubCategories);
-      categoryHierarchy[category]?.forEach(sub => {
-        newSubExpanded.delete(`${category} > ${sub}`);
+  const handleSave = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateInventoryItem(editing.id, {
+        name: editing.name,
+        itemType: editing.itemType,
+        sku: editing.sku || undefined,
+        category: editing.category,
+        quantity: Number(editing.quantity),
+        price: Number(editing.price),
+        unit: editing.unit || undefined,
+        minStock: Number(editing.minStock ?? 0),
+        maxStock: Number(editing.maxStock ?? editing.quantity),
+        reorderPoint: Number(editing.reorderPoint ?? editing.minStock ?? 0),
+        expiryDate: editing.expiryDate ? new Date(editing.expiryDate).toISOString() : undefined,
+        storageTemperature: editing.storageTemperature || undefined,
+        locationId: editing.locationId,
       });
-      setExpandedSubCategories(newSubExpanded);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedMainCategories(newExpanded);
-  };
-
-  const toggleSubCategory = (mainCategory: string, subCategory: string) => {
-    const key = `${mainCategory} > ${subCategory}`;
-    const newExpanded = new Set(expandedSubCategories);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedSubCategories(newExpanded);
-  };
-
-  const getProductsInCategory = (mainCategory: string, subCategory: string) => {
-    return products.filter(p => {
-      const categoryKey = `${mainCategory} > ${subCategory}`;
-      const matchesCategory = p.category === categoryKey;
-      const matchesSearch = searchQuery === "" ||
-        (p.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (p.sku || '').toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  };
-
-  const getProductCountInSubCategory = (mainCategory: string, subCategory: string) => {
-    return getProductsInCategory(mainCategory, subCategory).length;
-  };
-
-  const getProductCountInMainCategory = (mainCategory: string) => {
-    return products.filter(p => p.category.startsWith(mainCategory + " > ")).length;
-  };
-
-  const handleEdit = (product: Product) => {
-    const [main, sub] = product.category.split(" > ");
-    setEditMainCategory(main);
-    setEditSubCategory(sub);
-    setEditingProduct({ ...product });
-    setShowEditModal(true);
-  };
-
-  const handleEditMainCategoryChange = (newMainCategory: string) => {
-    setEditMainCategory(newMainCategory);
-    setEditSubCategory("");
-  };
-
-  const handleSaveEdit = () => {
-    if (editingProduct && editMainCategory && editSubCategory) {
-      const updatedProduct = {
-        ...editingProduct,
-        category: `${editMainCategory} > ${editSubCategory}`
-      };
-      setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
-      setShowEditModal(false);
-      setEditingProduct(null);
-      setEditMainCategory("");
-      setEditSubCategory("");
+      await loadData();
+      setEditing(null);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to update inventory item");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleTransfer = (product: Product) => {
-    const [main, sub] = product.category.split(" > ");
-    setEditMainCategory(main);
-    setEditSubCategory(sub);
-    setTransferProduct({ ...product });
-    setShowTransferModal(true);
-  };
-
-  const handleSaveTransfer = () => {
-    if (transferProduct && editMainCategory && editSubCategory) {
-      const updatedProduct = {
-        ...transferProduct,
-        category: `${editMainCategory} > ${editSubCategory}`
-      };
-      setProducts(products.map(p => p.id === transferProduct.id ? updatedProduct : p));
-      setShowTransferModal(false);
-      setTransferProduct(null);
-      setEditMainCategory("");
-      setEditSubCategory("");
+  const handleDelete = async (product: Product) => {
+    if (!window.confirm(`Delete ${product.name}?`)) return;
+    setError(null);
+    try {
+      await deleteInventoryItem(product.id);
+      await loadData();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete inventory item");
     }
   };
 
-  const handleDelete = (id: number) => {
-    if (confirm("Are you sure you want to delete this item?")) {
-      setProducts(products.filter(p => p.id !== id));
-    }
-  };
-
-  const getStockStatus = (stock: number, maxStock: number) => {
-    if (stock === 0) {
-      return {
-        color: "bg-black text-white border-black",
-        label: "Out of Stock",
-        textColor: "text-black"
-      };
-    }
-
-    const percentage = (stock / maxStock) * 100;
-
-    if (percentage <= 10) {
-      return {
-        color: "bg-red-100 text-red-700 border-red-200",
-        label: "Critical Stock",
-        textColor: "text-red-600"
-      };
-    } else if (percentage <= 30) {
-      return {
-        color: "bg-orange-100 text-orange-700 border-orange-200",
-        label: "Low Stock",
-        textColor: "text-orange-600"
-      };
-    } else if (percentage <= 70) {
-      return {
-        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
-        label: "Medium Stock",
-        textColor: "text-yellow-700"
-      };
-    } else {
-      return {
-        color: "bg-green-100 text-green-700 border-green-200",
-        label: "Healthy Stock",
-        textColor: "text-green-600"
-      };
-    }
+  const status = (product: Product) => {
+    if (product.quantity <= 0) return "Out of stock";
+    if (product.quantity <= (product.minStock ?? 0)) return "Critical";
+    if (product.quantity <= (product.reorderPoint ?? 0)) return "Low";
+    return "Healthy";
   };
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground">Inventory</h1>
+      <div className="mb-8"><h1 className="text-xl font-bold">Food Inventory</h1><p className="text-sm text-muted-foreground">Ingredients, menu items, and supplies from PostgreSQL</p></div>
+      {error && <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="h-4 w-4" />{error}<button onClick={() => setError(null)} className="ml-auto underline">Dismiss</button></div>}
+      <div className="mb-6 flex flex-col gap-3 md:flex-row"><div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search food inventory" className="w-full rounded-xl border border-input bg-input-background py-2 pl-10 pr-3" /></div><select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} className="rounded-xl border border-input bg-input-background px-3 py-2"><option value="all">All item types</option><option value="INGREDIENT">Ingredients</option><option value="MENU_ITEM">Menu items</option><option value="SUPPLY">Supplies</option></select></div>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        {loading ? <p className="p-8 text-center text-muted-foreground">Loading inventory...</p> : filteredProducts.length === 0 ? <p className="p-8 text-center text-muted-foreground">No food inventory found.</p> :
+        <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="border-b border-border bg-muted/50 text-left"><tr><th className="px-5 py-4">Item</th><th className="px-5 py-4">Type</th><th className="px-5 py-4">Category</th><th className="px-5 py-4">Stock</th><th className="px-5 py-4">Location</th><th className="px-5 py-4">Status</th><th className="px-5 py-4">Actions</th></tr></thead><tbody className="divide-y divide-border">{filteredProducts.map((product) => <tr key={product.id}><td className="px-5 py-4"><p className="font-medium">{product.name}</p><p className="text-xs text-muted-foreground">{product.sku || "No SKU"}</p></td><td className="px-5 py-4">{product.itemType.replace("_", " ")}</td><td className="px-5 py-4">{product.category}</td><td className="px-5 py-4">{product.quantity} {product.unit}</td><td className="px-5 py-4">{product.location?.name}</td><td className="px-5 py-4">{status(product)}</td><td className="px-5 py-4"><div className="flex gap-2"><button onClick={() => setEditing({ ...product, expiryDate: product.expiryDate?.slice(0, 10) })} className="rounded-lg p-2 hover:bg-muted"><Edit className="h-4 w-4" /></button><button onClick={() => void handleDelete(product)} className="rounded-lg p-2 text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody></table></div>}
       </div>
 
-      {/* Search Bar */}
-      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border mb-8">
-        <div className="flex items-center gap-2">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-2 py-1 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
-            />
-          </div>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-6 gap-1.5 mt-2 pt-2 border-t border-border">
-          <div className="text-center">
-            <p className="text-sm font-bold text-foreground">{products.length}</p>
-            <p className="text-muted-foreground text-sm">Total</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-black">{products.filter(p => p.stock === 0).length}</p>
-            <p className="text-muted-foreground text-sm">Out</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-red-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return p.stock > 0 && pct <= 10;
-            }).length}</p>
-            <p className="text-muted-foreground text-sm">Critical</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-orange-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 10 && pct <= 30;
-            }).length}</p>
-            <p className="text-muted-foreground text-sm">Low</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-yellow-700">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 30 && pct <= 70;
-            }).length}</p>
-            <p className="text-muted-foreground text-sm">Medium</p>
-          </div>
-          <div className="text-center">
-            <p className="text-sm font-bold text-green-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 70 && pct <= 100;
-            }).length}</p>
-            <p className="text-muted-foreground text-sm">Healthy</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Folder Tree View */}
-      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden p-2">
-        <div className="space-y-4">
-          {mainCategories.map((mainCategory) => {
-            const isMainExpanded = expandedMainCategories.has(mainCategory);
-            const mainCategoryCount = getProductCountInMainCategory(mainCategory);
-
-            return (
-              <div key={mainCategory} className="border border-border rounded-2xl overflow-hidden">
-                {/* Main Category Folder */}
-                <div
-                  className="flex items-center gap-1.5 p-1.5 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
-                  onClick={() => toggleMainCategory(mainCategory)}
-                >
-                  {isMainExpanded ? (
-                    <ChevronDown className="w-5 h-5 text-primary flex-shrink-0" />
-                  ) : (
-                    <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                  )}
-                  {isMainExpanded ? (
-                    <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
-                  ) : (
-                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
-                  )}
-                  <span className="font-semibold text-foreground flex-1 text-sm">{mainCategory}</span>
-                  <span className="text-sm text-muted-foreground bg-background px-1.5 py-2 rounded-full">
-                    {mainCategoryCount}
-                  </span>
-                </div>
-
-                {/* Subcategories */}
-                {isMainExpanded && (
-                  <div className="bg-background">
-                    {categoryHierarchy[mainCategory].map((subCategory) => {
-                      const subKey = `${mainCategory} > ${subCategory}`;
-                      const isSubExpanded = expandedSubCategories.has(subKey);
-                      const subCategoryProducts = getProductsInCategory(mainCategory, subCategory);
-                      const subCount = subCategoryProducts.length;
-
-                      if (searchQuery && subCount === 0) return null;
-
-                      return (
-                        <div key={subKey} className="border-l border-primary/20 ml-4">
-                          {/* Subcategory Folder */}
-                          <div
-                            className="flex items-center gap-1.5 p-1 hover:bg-muted/30 cursor-pointer transition-colors"
-                            onClick={() => toggleSubCategory(mainCategory, subCategory)}
-                          >
-                            {isSubExpanded ? (
-                              <ChevronDown className="w-5 h-5 text-primary flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                            )}
-                            {isSubExpanded ? (
-                              <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
-                            ) : (
-                              <Folder className="w-5 h-5 text-yellow-500 flex-shrink-0" />
-                            )}
-                            <span className="font-medium text-foreground flex-1 text-sm">{subCategory}</span>
-                            <span className="text-[8px] text-muted-foreground bg-muted px-1 py-2 rounded-full">
-                              {subCount}
-                            </span>
-                          </div>
-
-                          {/* Products in Subcategory */}
-                          {isSubExpanded && (
-                            <div className="ml-3 space-y-4 py-1">
-                              {subCategoryProducts.map((product) => (
-                                <div
-                                  key={product.id}
-                                  className="flex items-center gap-1.5 p-1.5 bg-card border border-border rounded hover:shadow-md transition-all"
-                                >
-                                  <Package className="w-5 h-5 text-primary flex-shrink-0" />
-
-                                  <div className="flex-1 grid grid-cols-6 gap-1.5 items-center">
-                                    <div className="col-span-2">
-                                      <p className="font-medium text-foreground text-sm truncate">{product.name}</p>
-                                      <p className="text-[8px] text-muted-foreground truncate">{product.sku}</p>
-                                    </div>
-
-                                    <div>
-                                      <p className="text-[8px] text-muted-foreground truncate">{product.location}</p>
-                                    </div>
-
-                                    <div>
-                                      <p className={`text-sm font-bold ${getStockStatus(product.stock, product.maxStock).textColor}`}>
-                                        {formatQuantity(product.stock, product.unit)} / {formatQuantity(product.maxStock, product.unit)}
-                                      </p>
-                                    </div>
-
-                                    <div>
-                                      <p className="text-sm font-medium text-foreground">₱{product.price}</p>
-                                    </div>
-
-                                    <div>
-                                      <p className="text-[8px] text-foreground truncate">{product.expiry}</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    <span className={`px-1 py-2 rounded text-[8px] font-medium border ${getStockStatus(product.stock, product.maxStock).color}`}>
-                                      {getStockStatus(product.stock, product.maxStock).label}
-                                    </span>
-                                  </div>
-
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    <button
-                                      onClick={() => handleTransfer(product)}
-                                      className="p-0.5 hover:bg-blue-50 text-blue-600 rounded transition-colors"
-                                      title="Transfer"
-                                    >
-                                      <ArrowRight className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleEdit(product)}
-                                      className="p-0.5 hover:bg-green-50 text-green-600 rounded transition-colors"
-                                      title="Edit"
-                                    >
-                                      <Edit className="w-5 h-5" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(product.id)}
-                                      className="p-0.5 hover:bg-red-50 text-red-600 rounded transition-colors"
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="w-5 h-5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                              {subCategoryProducts.length === 0 && (
-                                <div className="p-6 text-center text-muted-foreground text-sm">
-                                  No items found
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        {mainCategories.length === 0 && (
-          <div className="p-8 text-center text-muted-foreground">
-            No categories available
-          </div>
-        )}
-      </div>
-
-      {/* Edit Modal */}
-      {showEditModal && editingProduct && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
-          <div className="bg-card rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-card">
-              <h2 className="text-sm font-bold text-foreground">Edit Food Item</h2>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="p-6 hover:bg-muted rounded-2xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
+      {editing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <form onSubmit={handleSave} className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl">
+            <div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">Edit Food Item</h2><button type="button" onClick={() => setEditing(null)}><X className="h-5 w-5" /></button></div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <label className="text-sm">Name<input required value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">SKU<input value={editing.sku || ""} onChange={(event) => setEditing({ ...editing, sku: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Category<input required value={editing.category} onChange={(event) => setEditing({ ...editing, category: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Location<select value={editing.locationId} onChange={(event) => setEditing({ ...editing, locationId: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2">{locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></label>
+              <label className="text-sm">Quantity<input type="number" min="0" step="0.001" value={editing.quantity} onChange={(event) => setEditing({ ...editing, quantity: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Unit<input value={editing.unit || ""} onChange={(event) => setEditing({ ...editing, unit: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Price<input type="number" min="0" step="0.01" value={editing.price} onChange={(event) => setEditing({ ...editing, price: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Reorder point<input type="number" min="0" step="0.001" value={editing.reorderPoint ?? 0} onChange={(event) => setEditing({ ...editing, reorderPoint: Number(event.target.value) })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Expiry date<input type="date" value={editing.expiryDate || ""} onChange={(event) => setEditing({ ...editing, expiryDate: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+              <label className="text-sm">Storage temperature<select value={editing.storageTemperature || ""} onChange={(event) => setEditing({ ...editing, storageTemperature: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2"><option value="">Not set</option>{storageTemperatures.map((temperature) => <option key={temperature}>{temperature}</option>)}</select></label>
             </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm mb-2 text-foreground">Food Item Name</label>
-                <input
-                  type="text"
-                  value={editingProduct.name}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, name: e.target.value })}
-                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm mb-2 text-foreground">SKU</label>
-                <input
-                  type="text"
-                  value={editingProduct.sku}
-                  onChange={(e) => setEditingProduct({ ...editingProduct, sku: e.target.value })}
-                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Main Category</label>
-                  <select
-                    value={editMainCategory}
-                    onChange={(e) => handleEditMainCategoryChange(e.target.value)}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  >
-                    <option value="">Select Category</option>
-                    {mainCategories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Sub Category</label>
-                  <select
-                    value={editSubCategory}
-                    onChange={(e) => setEditSubCategory(e.target.value)}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    disabled={!editMainCategory}
-                  >
-                    <option value="">Select Subcategory</option>
-                    {editMainCategory && categoryHierarchy[editMainCategory]?.map((subCat) => (
-                      <option key={subCat} value={subCat}>{subCat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Current Stock</label>
-                  <input
-                    type="number"
-                    value={editingProduct.stock}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, stock: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Max Stock</label>
-                  <input
-                    type="number"
-                    value={editingProduct.maxStock}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Price</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editingProduct.price}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, price: parseFloat(e.target.value) })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Expiry Date</label>
-                  <input
-                    type="date"
-                    value={editingProduct.expiry}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, expiry: e.target.value })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Location</label>
-                  <select
-                    value={editingProduct.location}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, location: e.target.value })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  >
-                    {locations.map((loc) => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Storage Temperature</label>
-                  <select
-                    value={editingProduct.storageTemperature || ""}
-                    onChange={(e) => setEditingProduct({ ...editingProduct, storageTemperature: e.target.value })}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  >
-                    <option value="">Select storage temperature</option>
-                    {storageTemperatureOptions.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-border flex gap-3 justify-end">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
-              >
-                <Save className="w-5 h-5" />
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Transfer Modal */}
-      {showTransferModal && transferProduct && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-2xl shadow-xl max-w-md w-full">
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-foreground">Transfer Item</h2>
-              <button
-                onClick={() => setShowTransferModal(false)}
-                className="p-6 hover:bg-muted rounded-2xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="bg-muted/50 rounded-xl p-4">
-                <p className="text-sm text-muted-foreground mb-6">Transferring</p>
-                <p className="font-semibold text-foreground">{transferProduct.name}</p>
-                <p className="text-sm text-muted-foreground mt-2">Current Location: {transferProduct.location}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm mb-2 text-foreground">New Location</label>
-                <select
-                  value={transferProduct.location}
-                  onChange={(e) => setTransferProduct({ ...transferProduct, location: e.target.value })}
-                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                >
-                  {locations.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Main Category</label>
-                  <select
-                    value={editMainCategory}
-                    onChange={(e) => handleEditMainCategoryChange(e.target.value)}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  >
-                    {mainCategories.map((cat) => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm mb-2 text-foreground">Sub Category</label>
-                  <select
-                    value={editSubCategory}
-                    onChange={(e) => setEditSubCategory(e.target.value)}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    disabled={!editMainCategory}
-                  >
-                    <option value="">Select Subcategory</option>
-                    {editMainCategory && categoryHierarchy[editMainCategory]?.map((subCat) => (
-                      <option key={subCat} value={subCat}>{subCat}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-border flex gap-3 justify-end">
-              <button
-                onClick={() => setShowTransferModal(false)}
-                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveTransfer}
-                className="px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all flex items-center gap-2"
-              >
-                <ArrowRight className="w-5 h-5" />
-                Transfer Item
-              </button>
-            </div>
-          </div>
+            <div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setEditing(null)} className="rounded-xl border border-border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-white">{saving ? "Saving..." : "Save"}</button></div>
+          </form>
         </div>
       )}
     </div>

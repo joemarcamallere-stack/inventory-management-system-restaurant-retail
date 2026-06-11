@@ -1,1140 +1,169 @@
-import { useState } from "react";
-import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
-import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, ChefHat, Edit, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  createRecipe,
+  deleteRecipe,
+  getInventory,
+  getRecipes,
+  updateRecipe,
+} from "../../app/api/client";
 
-type Ingredient = {
-  id: string;
-  productId?: number;
-  productSku?: string;
-  name: string;
-  quantity: number;
-  unit: string;
-  inventoryQuantity?: number;
-  inventoryUnit?: string;
-  unitCost: number;
-  totalCost: number;
-};
-
+type InventoryItem = { id: string; name: string; quantity: number; price: number; costPrice?: number; unit?: string };
+type RecipeIngredient = { id?: string; itemId: string; quantity: number; unit?: string; unitCost?: number; item?: InventoryItem; totalCost?: number };
 type Recipe = {
   id: string;
   name: string;
   category: string;
   servings: number;
   yieldPercentage: number;
-  prepTime: number;
-  ingredients: Ingredient[];
-  totalCost: number;
-  yieldAdjustedCost?: number;
-  costPerServing: number;
+  prepTimeMinutes?: number;
+  instructions?: string;
   targetFoodCost?: number;
-  suggestedSellingPrice?: number;
   sellingPrice?: number;
-  grossMargin?: number;
-  isActive?: boolean;
-  instructions: string;
+  isActive: boolean;
+  ingredients: RecipeIngredient[];
 };
 
-// Use the actual inventory product structure from inventory logic
-// The `inventoryItems` list is loaded from localStorage or defaults when needed.
-type InventoryItem = InventoryProduct;
-
-const UNIT_OPTIONS = ["kg", "g", "L", "ml", "pcs", "piece", "liter", "bottle", "pack", "box", "dozen"];
-
-const normalizeUnit = (unit: string | undefined) => {
-  const normalized = (unit || '').trim().toLowerCase();
-  if (normalized === "ltr" || normalized === "litre" || normalized === "liters" || normalized === "liter") return "l";
-  if (normalized === "pc" || normalized === "piece" || normalized === "pieces") return "pcs";
-  return normalized;
-};
-
-const toInventoryQuantity = (quantity: number, recipeUnit: string, inventoryUnit: string) => {
-  const from = normalizeUnit(recipeUnit);
-  const to = normalizeUnit(inventoryUnit);
-  if (from === to) return quantity;
-  if (from === "g" && to === "kg") return quantity / 1000;
-  if (from === "kg" && to === "g") return quantity * 1000;
-  if (from === "ml" && to === "l") return quantity / 1000;
-  if (from === "l" && to === "ml") return quantity * 1000;
-  if (from === "dozen" && to === "pcs") return quantity * 12;
-  if (from === "pcs" && to === "dozen") return quantity / 12;
-  return null;
-};
-
-const formatMoney = (value: number) => `PHP ${Number.isFinite(value) ? value.toFixed(2) : "0.00"}`;
-
-const calculateRecipeYieldAdjustedCost = (recipe: Recipe) => {
-  return recipe.yieldAdjustedCost ?? recipe.totalCost / Math.max((recipe.yieldPercentage || 100) / 100, 0.01);
-};
-
-const calculateRecipeGrossMarginPercent = (recipe: Recipe) => {
-  const sellingPrice = recipe.sellingPrice ?? recipe.suggestedSellingPrice ?? 0;
-  return sellingPrice > 0 ? ((sellingPrice - recipe.costPerServing) / sellingPrice) * 100 : 0;
-};
+type DraftIngredient = { itemId: string; quantity: string; unit: string; unitCost: string };
+const blankIngredient = (): DraftIngredient => ({ itemId: "", quantity: "", unit: "", unitCost: "" });
 
 export function RecipeBOM() {
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
-  const isAdmin = userRole === "admin";
+  const [recipes, setRecipes] = useState<Recipe[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
-  const [showViewModal, setShowViewModal] = useState(false);
-  const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-  const [scaleMultiplier, setScaleMultiplier] = useState(1);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Recipe | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ name: "", category: "Main Course", servings: "1", yieldPercentage: "100", prepTimeMinutes: "", targetFoodCost: "35", sellingPrice: "", instructions: "", isActive: true });
+  const [ingredients, setIngredients] = useState<DraftIngredient[]>([blankIngredient()]);
 
-  const [newRecipe, setNewRecipe] = useState({
-    name: "",
-    category: "",
-    servings: "",
-    yieldPercentage: "100",
-    targetFoodCost: "35",
-    sellingPrice: "",
-    isActive: true,
-    prepTime: "",
-    instructions: "",
-  });
-
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [currentIngredient, setCurrentIngredient] = useState({
-    productId: "",
-    name: "",
-    quantity: "",
-    unit: "kg",
-    inventoryUnit: "",
-    unitCost: "",
-  });
-
-  const inventoryItems: InventoryItem[] = getInventoryProducts();
-
-  // Only show products that are actually in stock.
-  const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
-
-  // Extract unique categories from inventory
-  const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
-
-  const [recipes, setRecipes] = useLocalStorageState<Recipe[]>("recipes.records", []);
-
-  const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
-
-  // Filter inventory items based on selected categories
-  const filteredInventoryItems = selectedCategories.length === 0
-    ? availableInventoryItems
-    : availableInventoryItems.filter(item => selectedCategories.includes(item.category));
-
-  const filteredRecipes = recipes.filter(recipe => {
-    const matchesSearch = (recipe.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (recipe.id || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = categoryFilter === "all" || recipe.category === categoryFilter;
-    return matchesSearch && matchesCategory;
-  });
-
-  const handleAddIngredient = () => {
-    if (currentIngredient.productId && currentIngredient.quantity && currentIngredient.unitCost) {
-      const selectedItem = inventoryItems.find(item =>
-        currentIngredient.productId
-          ? item.id === Number(currentIngredient.productId)
-          : item.name === currentIngredient.name
-      );
-      if (!selectedItem) {
-        alert("Please select a valid inventory item");
-        return;
-      }
-
-      const quantity = parseFloat(currentIngredient.quantity);
-      const unitCost = parseFloat(currentIngredient.unitCost);
-      if (!Number.isFinite(quantity) || quantity <= 0) {
-        alert("Ingredient quantity must be greater than zero");
-        return;
-      }
-
-      const inventoryQuantity = toInventoryQuantity(quantity, currentIngredient.unit, selectedItem.unit);
-      if (inventoryQuantity === null) {
-        alert(`Cannot convert ${currentIngredient.unit} to inventory unit ${selectedItem.unit}. Please choose a compatible unit.`);
-        return;
-      }
-
-      if (inventoryQuantity > selectedItem.stock) {
-        alert(`This recipe needs ${inventoryQuantity.toFixed(2)} ${selectedItem.unit}, but only ${selectedItem.stock.toFixed(2)} ${selectedItem.unit} is in stock.`);
-      }
-
-      const totalCost = inventoryQuantity * unitCost;
-
-      const newIngredient: Ingredient = {
-        id: `ING-${Date.now()}`,
-        productId: selectedItem.id,
-        productSku: selectedItem.sku,
-        name: selectedItem.name,
-        quantity: quantity,
-        unit: currentIngredient.unit,
-        inventoryQuantity,
-        inventoryUnit: selectedItem.unit,
-        unitCost: unitCost,
-        totalCost: totalCost,
-      };
-
-      const existingIngredient = ingredients.find(ing =>
-        ing.productId === selectedItem.id &&
-        normalizeUnit(ing.unit) === normalizeUnit(newIngredient.unit)
-      );
-
-      setIngredients(existingIngredient
-        ? ingredients.map(ing => ing.id === existingIngredient.id
-          ? {
-              ...ing,
-              quantity: ing.quantity + newIngredient.quantity,
-              inventoryQuantity: (ing.inventoryQuantity || 0) + (newIngredient.inventoryQuantity || 0),
-              totalCost: ing.totalCost + newIngredient.totalCost,
-            }
-          : ing
-        )
-        : [...ingredients, newIngredient]
-      );
-      setCurrentIngredient({
-        productId: "",
-        name: "",
-        quantity: "",
-        unit: "kg",
-        inventoryUnit: "",
-        unitCost: "",
-      });
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [recipeData, ingredientData] = await Promise.all([
+        getRecipes(),
+        getInventory({ itemType: "INGREDIENT" }),
+      ]);
+      setRecipes(recipeData);
+      setInventory(ingredientData);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load recipes");
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { void loadData(); }, [loadData]);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ name: "", category: "Main Course", servings: "1", yieldPercentage: "100", prepTimeMinutes: "", targetFoodCost: "35", sellingPrice: "", instructions: "", isActive: true });
+    setIngredients([blankIngredient()]);
+    setShowForm(true);
   };
 
-  const handleRemoveIngredient = (id: string) => {
-    setIngredients(ingredients.filter(ing => ing.id !== id));
-  };
-
-  const calculateTotalCost = () => {
-    return ingredients.reduce((sum, ing) => sum + ing.totalCost, 0);
-  };
-
-  const calculateYieldAdjustedCost = () => {
-    const yieldPercentage = Number(newRecipe.yieldPercentage) || 100;
-    return calculateTotalCost() / Math.max(yieldPercentage / 100, 0.01);
-  };
-
-  const calculateCostPerServing = () => {
-    const servings = Number(newRecipe.servings) || 0;
-    return servings > 0 ? calculateYieldAdjustedCost() / servings : 0;
-  };
-
-  const calculateSuggestedSellingPrice = () => {
-    const targetFoodCost = Number(newRecipe.targetFoodCost) || 0;
-    return targetFoodCost > 0 ? calculateCostPerServing() / (targetFoodCost / 100) : 0;
-  };
-
-  const calculateMenuSellingPrice = () => {
-    const manualPrice = Number(newRecipe.sellingPrice);
-    return Number.isFinite(manualPrice) && manualPrice > 0 ? manualPrice : calculateSuggestedSellingPrice();
-  };
-
-  const calculateGrossMargin = () => {
-    return calculateMenuSellingPrice() - calculateCostPerServing();
-  };
-
-  const calculateGrossMarginPercent = () => {
-    const menuSellingPrice = calculateMenuSellingPrice();
-    return menuSellingPrice > 0 ? (calculateGrossMargin() / menuSellingPrice) * 100 : 0;
-  };
-
-  const handleCreateRecipe = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!isAdmin) {
-      alert("Only admin users can create or edit recipes and pricing.");
-      return;
-    }
-
-    if (ingredients.length === 0) {
-      alert("Please add at least one ingredient");
-      return;
-    }
-
-    const servings = parseInt(newRecipe.servings);
-    const yieldPercentage = Number(newRecipe.yieldPercentage);
-    const targetFoodCost = Number(newRecipe.targetFoodCost) || 0;
-    const sellingPriceInput = Number(newRecipe.sellingPrice);
-    const prepTime = parseInt(newRecipe.prepTime);
-
-    if (!Number.isFinite(servings) || servings <= 0) {
-      alert("Servings must be greater than zero");
-      return;
-    }
-    if (!Number.isFinite(yieldPercentage) || yieldPercentage <= 0 || yieldPercentage > 100) {
-      alert("Yield percentage must be between 1 and 100");
-      return;
-    }
-    if (!Number.isFinite(targetFoodCost) || targetFoodCost <= 0 || targetFoodCost > 100) {
-      alert("Target food cost percentage must be between 1 and 100");
-      return;
-    }
-    if (newRecipe.sellingPrice && (!Number.isFinite(sellingPriceInput) || sellingPriceInput <= 0)) {
-      alert("Menu selling price must be greater than zero when entered");
-      return;
-    }
-    if (!Number.isFinite(prepTime) || prepTime < 0) {
-      alert("Prep time cannot be negative");
-      return;
-    }
-
-    const totalCost = calculateTotalCost();
-    const yieldAdjustedCost = calculateYieldAdjustedCost();
-    const costPerServing = yieldAdjustedCost / servings;
-    const suggestedSellingPrice = targetFoodCost > 0 ? costPerServing / (targetFoodCost / 100) : 0;
-    const sellingPrice = newRecipe.sellingPrice ? sellingPriceInput : suggestedSellingPrice;
-    const grossMargin = sellingPrice > 0 ? sellingPrice - costPerServing : 0;
-
-    const recipeToAdd: Recipe = {
-      id: editingRecipe?.id || `RCP-${String(recipes.length + 1).padStart(3, '0')}`,
-      name: newRecipe.name,
-      category: newRecipe.category,
-      servings: servings,
-      yieldPercentage,
-      targetFoodCost,
-      prepTime,
-      ingredients: ingredients,
-      totalCost: totalCost,
-      yieldAdjustedCost,
-      costPerServing: costPerServing,
-      suggestedSellingPrice,
-      sellingPrice,
-      grossMargin,
-      isActive: newRecipe.isActive,
-      instructions: newRecipe.instructions,
-    };
-
-    setRecipes(editingRecipe
-      ? recipes.map(recipe => recipe.id === editingRecipe.id ? recipeToAdd : recipe)
-      : [recipeToAdd, ...recipes]
-    );
-    setShowCreateModal(false);
-    setEditingRecipe(null);
-    setNewRecipe({
-      name: "",
-      category: "",
-      servings: "",
-      yieldPercentage: "100",
-      targetFoodCost: "35",
-      sellingPrice: "",
-      isActive: true,
-      prepTime: "",
-      instructions: "",
-    });
-    setIngredients([]);
-  };
-
-  const handleViewRecipe = (recipe: Recipe) => {
-    setSelectedRecipe(recipe);
-    setScaleMultiplier(1);
-    setShowViewModal(true);
-  };
-
-  const handleEditRecipe = (recipe: Recipe) => {
-    if (!isAdmin) {
-      alert("Only admin users can edit recipes and pricing.");
-      return;
-    }
-
-    setEditingRecipe(recipe);
-    setNewRecipe({
+  const openEdit = (recipe: Recipe) => {
+    setEditing(recipe);
+    setForm({
       name: recipe.name,
       category: recipe.category,
-      servings: recipe.servings.toString(),
-      yieldPercentage: recipe.yieldPercentage.toString(),
-      targetFoodCost: (recipe.targetFoodCost || 35).toString(),
-      sellingPrice: (recipe.sellingPrice ?? recipe.suggestedSellingPrice ?? "").toString(),
-      isActive: recipe.isActive ?? true,
-      prepTime: recipe.prepTime.toString(),
-      instructions: recipe.instructions,
+      servings: String(recipe.servings),
+      yieldPercentage: String(recipe.yieldPercentage ?? 100),
+      prepTimeMinutes: String(recipe.prepTimeMinutes ?? ""),
+      targetFoodCost: String(recipe.targetFoodCost ?? ""),
+      sellingPrice: String(recipe.sellingPrice ?? ""),
+      instructions: recipe.instructions || "",
+      isActive: recipe.isActive,
     });
-    setIngredients(recipe.ingredients);
-    setSelectedCategories([]);
-    setShowCreateModal(true);
+    setIngredients(recipe.ingredients.map((ingredient) => ({
+      itemId: ingredient.itemId,
+      quantity: String(ingredient.quantity),
+      unit: ingredient.unit || ingredient.item?.unit || "",
+      unitCost: String(ingredient.unitCost ?? ingredient.item?.costPrice ?? ingredient.item?.price ?? 0),
+    })));
+    setShowForm(true);
   };
 
-  const handleDeleteRecipe = (id: string) => {
-    if (!isAdmin) {
-      alert("Only admin users can delete recipes.");
+  const handleSave = async (event: FormEvent) => {
+    event.preventDefault();
+    const validIngredients = ingredients.filter((ingredient) => ingredient.itemId && Number(ingredient.quantity) > 0);
+    if (validIngredients.length === 0) {
+      setError("Add at least one recipe ingredient.");
       return;
     }
-
-    if (confirm("Are you sure you want to delete this recipe?")) {
-      setRecipes(recipes.filter(r => r.id !== id));
+    const payload = {
+      name: form.name.trim(),
+      category: form.category,
+      servings: Number(form.servings),
+      yieldPercentage: Number(form.yieldPercentage),
+      prepTimeMinutes: Number(form.prepTimeMinutes) || 0,
+      targetFoodCost: Number(form.targetFoodCost) || 0,
+      sellingPrice: Number(form.sellingPrice) || 0,
+      instructions: form.instructions,
+      isActive: form.isActive,
+      ingredients: validIngredients.map((ingredient) => ({
+        itemId: ingredient.itemId,
+        quantity: Number(ingredient.quantity),
+        unit: ingredient.unit || undefined,
+        unitCost: Number(ingredient.unitCost) || 0,
+      })),
+    };
+    setSaving(true);
+    setError(null);
+    try {
+      if (editing) await updateRecipe(editing.id, payload);
+      else await createRecipe(payload);
+      await loadData();
+      setShowForm(false);
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Failed to save recipe");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    const value = e.target instanceof HTMLInputElement && e.target.type === "checkbox"
-      ? e.target.checked
-      : e.target.value;
-
-    setNewRecipe({
-      ...newRecipe,
-      [e.target.name]: value,
-    });
-  };
-
-  const handleIngredientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-
-    // If selecting an ingredient from dropdown, auto-fill unit cost and unit
-    if (name === "name" && value) {
-      const selectedItem = inventoryItems.find(item => item.id === Number(value));
-      if (selectedItem) {
-        setCurrentIngredient({
-          ...currentIngredient,
-          productId: selectedItem.id.toString(),
-          name: selectedItem.name,
-          unit: selectedItem.unit,
-          inventoryUnit: selectedItem.unit,
-          unitCost: selectedItem.price.toString(),
-        });
-        return;
-      }
+  const handleDelete = async (recipe: Recipe) => {
+    if (!window.confirm(`Delete ${recipe.name}?`)) return;
+    try {
+      await deleteRecipe(recipe.id);
+      await loadData();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete recipe");
     }
-
-    setCurrentIngredient({
-      ...currentIngredient,
-      [name]: value,
-    });
   };
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories(prev =>
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
-  };
+  const filteredRecipes = useMemo(() => {
+    const query = searchQuery.toLowerCase();
+    return recipes.filter((recipe) => recipe.name.toLowerCase().includes(query) || recipe.category.toLowerCase().includes(query));
+  }, [recipes, searchQuery]);
 
-  const handleOpenCreateModal = () => {
-    setShowCreateModal(true);
-    setEditingRecipe(null);
-    setSelectedCategories([]);
-    setIngredients([]);
-    setCurrentIngredient({
-      productId: "",
-      name: "",
-      quantity: "",
-      unit: "kg",
-      inventoryUnit: "",
-      unitCost: "",
-    });
-    setNewRecipe({
-      name: "",
-      category: "",
-      servings: "",
-      yieldPercentage: "100",
-      targetFoodCost: "35",
-      sellingPrice: "",
-      isActive: true,
-      prepTime: "",
-      instructions: "",
-    });
-  };
-
-  const getScaledQuantity = (quantity: number) => {
-    return (quantity * scaleMultiplier).toFixed(2);
-  };
-
-  const getScaledCost = (cost: number) => {
-    return (cost * scaleMultiplier).toFixed(2);
-  };
-
-  const stats = [
-    { label: "Total Recipes", value: recipes.length, color: "text-blue-600" },
-    { label: "Active Menu Items", value: recipes.filter(r => r.isActive ?? true).length, color: "text-purple-600" },
-    { label: "Avg Cost/Serving", value: formatMoney(recipes.length ? recipes.reduce((sum, r) => sum + r.costPerServing, 0) / recipes.length : 0), color: "text-green-600" },
-    { label: "Avg Menu Price", value: formatMoney(recipes.length ? recipes.reduce((sum, r) => sum + (r.sellingPrice ?? r.suggestedSellingPrice ?? 0), 0) / recipes.length : 0), color: "text-orange-600" },
-  ];
+  const recipeCost = (recipe: Recipe) =>
+    recipe.ingredients.reduce((sum, ingredient) => sum + (ingredient.totalCost ?? (ingredient.unitCost ?? ingredient.item?.price ?? 0) * ingredient.quantity), 0);
 
   return (
     <div className="p-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Recipe & BOM</h1>
-          <p className="text-muted-foreground">
-            {isAdmin
-              ? "Manage recipes, ingredient costs, and menu pricing"
-              : "View recipe costs, menu prices, and scaling"}
-          </p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={handleOpenCreateModal}
-            className="mt-4 md:mt-0 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center gap-2"
-          >
-            <Plus className="w-5 h-5" />
-            Create Recipe
-          </button>
-        )}
-      </div>
+      <div className="mb-8 flex items-center justify-between"><div><h1 className="text-xl font-bold">Recipe & BOM</h1><p className="text-sm text-muted-foreground">Backend recipe definitions linked to ingredient UUIDs</p></div><button onClick={openCreate} className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-sm text-white"><Plus className="h-4 w-4" />New Recipe</button></div>
+      {error && <div className="mb-6 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertCircle className="h-4 w-4" />{error}<button onClick={() => setError(null)} className="ml-auto underline">Dismiss</button></div>}
+      <div className="mb-6 relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search recipes" className="w-full rounded-xl border border-input bg-input-background py-2 pl-10 pr-3" /></div>
+      {loading ? <p className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">Loading recipes...</p> : filteredRecipes.length === 0 ? <p className="rounded-2xl border border-border bg-card p-8 text-center text-muted-foreground">No recipes found.</p> :
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{filteredRecipes.map((recipe) => {
+        const cost = recipeCost(recipe);
+        return <div key={recipe.id} className="rounded-2xl border border-border bg-card p-5"><div className="flex items-start justify-between"><div className="flex gap-3"><ChefHat className="h-5 w-5 text-primary" /><div><h2 className="font-semibold">{recipe.name}</h2><p className="text-sm text-muted-foreground">{recipe.category} | {recipe.servings} servings</p></div></div><div className="flex gap-1"><button onClick={() => openEdit(recipe)} className="rounded-lg p-2 hover:bg-muted"><Edit className="h-4 w-4" /></button><button onClick={() => void handleDelete(recipe)} className="rounded-lg p-2 text-red-700 hover:bg-red-50"><Trash2 className="h-4 w-4" /></button></div></div><div className="mt-4 space-y-2">{recipe.ingredients.map((ingredient) => <div key={ingredient.id || ingredient.itemId} className="flex justify-between text-sm"><span>{ingredient.item?.name || "Ingredient"}</span><span>{ingredient.quantity} {ingredient.unit || ingredient.item?.unit}</span></div>)}</div><div className="mt-4 flex justify-between border-t border-border pt-4 text-sm"><span>Recipe cost: PHP {cost.toFixed(2)}</span><span>Selling: PHP {(recipe.sellingPrice || 0).toFixed(2)}</span></div></div>;
+      })}</div>}
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => (
-          <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border">
-            <p className="text-muted-foreground text-sm mb-2">{stat.label}</p>
-            <p className={`text-2xl font-bold ${stat.color}`}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Search and Filter */}
-      <div className="bg-card rounded-2xl p-6 shadow-sm border border-border mb-8">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search recipes by name or ID..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-            />
-          </div>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer min-w-[200px]"
-          >
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat === "all" ? "All Categories" : cat}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Recipes Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredRecipes.map((recipe) => (
-          <div key={recipe.id} className="bg-card rounded-2xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center">
-                  <ChefHat className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground">{recipe.name}</h3>
-                  <p className="text-xs text-muted-foreground">{recipe.id}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Category:</span>
-                <span className="font-medium text-foreground">{recipe.category}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Servings:</span>
-                <span className="font-medium text-foreground">{recipe.servings}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Prep Time:</span>
-                <span className="font-medium text-foreground">{recipe.prepTime} min</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Yield:</span>
-                <span className="font-medium text-foreground">{recipe.yieldPercentage}%</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Ingredients:</span>
-                <span className="font-medium text-foreground">{recipe.ingredients.length}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Menu Status:</span>
-                <span className={`font-medium ${(recipe.isActive ?? true) ? "text-green-600" : "text-muted-foreground"}`}>
-                  {(recipe.isActive ?? true) ? "Active" : "Inactive"}
-                </span>
-              </div>
-            </div>
-
-            <div className="pt-4 border-t border-border mb-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Raw Cost</p>
-                  <p className="text-lg font-bold text-primary">{formatMoney(recipe.totalCost)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Cost/Serving</p>
-                  <p className="text-lg font-bold text-green-600">{formatMoney(recipe.costPerServing)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Yield-Adjusted</p>
-                  <p className="text-sm font-semibold text-foreground">{formatMoney(calculateRecipeYieldAdjustedCost(recipe))}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Menu Price</p>
-                  <p className="text-sm font-semibold text-foreground">{formatMoney(recipe.sellingPrice ?? recipe.suggestedSellingPrice ?? 0)}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => handleViewRecipe(recipe)}
-                className="flex-1 px-4 py-2 bg-primary/10 text-primary rounded-xl hover:bg-primary/20 transition-colors flex items-center justify-center gap-2"
-              >
-                <Calculator className="w-4 h-4" />
-                View & Scale
-              </button>
-              {isAdmin && (
-                <>
-                  <button
-                    onClick={() => handleEditRecipe(recipe)}
-                    className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors"
-                    title="Edit recipe and pricing"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteRecipe(recipe.id)}
-                    className="px-4 py-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-colors"
-                    title="Delete recipe"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Create Recipe Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-foreground">{editingRecipe ? "Edit Recipe" : "Create New Recipe"}</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateRecipe} className="p-6 space-y-6">
-              {/* Category Selection for Filtering Ingredients */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Tag className="w-5 h-5 text-blue-600" />
-                  <h3 className="font-semibold text-blue-900">Select Ingredient Categories</h3>
-                </div>
-                <p className="text-xs text-blue-700 mb-3">Select one or more categories to filter available ingredients</p>
-                <div className="flex flex-wrap gap-2">
-                  {availableCategories.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleCategory(cat)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        selectedCategories.includes(cat)
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-blue-900 border-blue-300 hover:bg-blue-50"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                {selectedCategories.length > 0 && (
-                  <div className="mt-3 text-xs text-blue-700">
-                    <strong>{filteredInventoryItems.length}</strong> ingredients available from selected categories
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="name" className="block text-sm mb-2 text-foreground font-medium">
-                    Recipe Name *
-                  </label>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={newRecipe.name}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="category" className="block text-sm mb-2 text-foreground font-medium">
-                    Category *
-                  </label>
-                  <select
-                    id="category"
-                    name="category"
-                    value={newRecipe.category}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                    required
-                  >
-                    <option value="">Select category</option>
-                    <option value="Appetizer">Appetizer</option>
-                    <option value="Main Course">Main Course</option>
-                    <option value="Dessert">Dessert</option>
-                    <option value="Beverage">Beverage</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="servings" className="block text-sm mb-2 text-foreground font-medium">
-                    Servings *
-                  </label>
-                  <input
-                    id="servings"
-                    name="servings"
-                    type="number"
-                    min="1"
-                    value={newRecipe.servings}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="yieldPercentage" className="block text-sm mb-2 text-foreground font-medium">
-                    Yield Percentage *
-                  </label>
-                  <input
-                    id="yieldPercentage"
-                    name="yieldPercentage"
-                    type="number"
-                    min="1"
-                    max="100"
-                    step="0.01"
-                    value={newRecipe.yieldPercentage}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="targetFoodCost" className="block text-sm mb-2 text-foreground font-medium">
-                    Target Food Cost % *
-                  </label>
-                  <input
-                    id="targetFoodCost"
-                    name="targetFoodCost"
-                    type="number"
-                    min="1"
-                    max="100"
-                    step="0.01"
-                    value={newRecipe.targetFoodCost}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                  <p className="mt-1 text-[11px] text-muted-foreground">Used to compute the suggested price from current ingredient cost.</p>
-                </div>
-
-                <div>
-                  <label htmlFor="sellingPrice" className="block text-sm mb-2 text-foreground font-medium">
-                    Menu Selling Price
-                  </label>
-                  <input
-                    id="sellingPrice"
-                    name="sellingPrice"
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    value={newRecipe.sellingPrice}
-                    onChange={handleInputChange}
-                    placeholder={formatMoney(calculateSuggestedSellingPrice())}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                  />
-                  <p className="mt-1 text-[11px] text-muted-foreground">Leave blank to use the suggested price; edit this when the client wants a different menu price.</p>
-                </div>
-
-                <div>
-                  <label htmlFor="prepTime" className="block text-sm mb-2 text-foreground font-medium">
-                    Prep Time (minutes) *
-                  </label>
-                  <input
-                    id="prepTime"
-                    name="prepTime"
-                    type="number"
-                    min="0"
-                    value={newRecipe.prepTime}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
-                </div>
-
-                <label className="flex items-center gap-3 rounded-xl border border-border bg-muted/30 px-4 py-3 text-sm text-foreground">
-                  <input
-                    name="isActive"
-                    type="checkbox"
-                    checked={newRecipe.isActive}
-                    onChange={handleInputChange}
-                    className="h-4 w-4 accent-primary"
-                  />
-                  Active in POS menu
-                </label>
-              </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="text-lg font-semibold text-foreground mb-4">Add Ingredients</h3>
-                <p className="mb-4 text-xs text-muted-foreground">
-                  Ingredient unit cost is pulled from inventory so recipe cost follows the latest item unit cost.
-                </p>
-
-                <div className="grid grid-cols-5 gap-3 mb-4">
-                  <div className="col-span-2">
-                    <label htmlFor="ingredientName" className="block text-xs mb-1 text-foreground">
-                      Ingredient Name
-                    </label>
-                    <select
-                      id="ingredientName"
-                      name="name"
-                      value={currentIngredient.productId}
-                      onChange={handleIngredientInputChange}
-                      className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="">Select ingredient...</option>
-                      {filteredInventoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.sku}) - {item.stock} {item.unit} on hand
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label htmlFor="quantity" className="block text-xs mb-1 text-foreground">
-                      Quantity
-                    </label>
-                    <input
-                      id="quantity"
-                      name="quantity"
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      value={currentIngredient.quantity}
-                      onChange={handleIngredientInputChange}
-                      className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="unit" className="block text-xs mb-1 text-foreground">
-                      Recipe Unit
-                    </label>
-                    <select
-                      id="unit"
-                      name="unit"
-                      value={currentIngredient.unit}
-                      onChange={handleIngredientInputChange}
-                      className="w-full px-3 py-2 text-sm bg-muted/50 border border-input rounded-lg focus:outline-none"
-                    >
-                      {UNIT_OPTIONS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
-                    </select>
-                    {currentIngredient.inventoryUnit && (
-                      <p className="mt-1 text-[10px] text-muted-foreground">Inventory unit: {currentIngredient.inventoryUnit}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <label htmlFor="unitCost" className="block text-xs mb-1 text-foreground">
-                      Inventory Unit Cost <span className="text-muted-foreground font-normal">(auto)</span>
-                    </label>
-                    <input
-                      id="unitCost"
-                      name="unitCost"
-                      type="number"
-                      step="0.01"
-                      value={currentIngredient.unitCost}
-                      onChange={handleIngredientInputChange}
-                      className="w-full px-3 py-2 text-sm bg-muted/50 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                      readOnly
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleAddIngredient}
-                  className="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 mb-4"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Ingredient
-                </button>
-
-                {ingredients.length > 0 && (
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-semibold text-foreground">Ingredients ({ingredients.length})</h4>
-                    <div className="max-h-60 overflow-y-auto space-y-2">
-                      {ingredients.map((ing) => (
-                        <div key={ing.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-xl">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{ing.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {ing.quantity} {ing.unit} = {(ing.inventoryQuantity ?? ing.quantity).toFixed(2)} {ing.inventoryUnit || ing.unit} x {formatMoney(ing.unitCost)} = {formatMoney(ing.totalCost)}
-                            </p>
-                            {ing.productSku && <p className="text-[10px] text-muted-foreground">SKU: {ing.productSku}</p>}
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveIngredient(ing.id)}
-                            className="p-2 hover:bg-red-100 text-red-600 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="pt-3 border-t border-border">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm font-semibold text-foreground">Total Cost:</span>
-                        <span className="text-xl font-bold text-primary">{formatMoney(calculateTotalCost())}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-muted/30 p-4 md:grid-cols-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Raw ingredient cost</p>
-                  <p className="text-lg font-bold text-foreground">{formatMoney(calculateTotalCost())}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Yield-adjusted cost</p>
-                  <p className="text-lg font-bold text-primary">{formatMoney(calculateYieldAdjustedCost())}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Cost per serving</p>
-                  <p className="text-lg font-bold text-green-600">{formatMoney(calculateCostPerServing())}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Target food cost</p>
-                  <p className="text-sm font-semibold text-foreground">{Number(newRecipe.targetFoodCost) || 0}%</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Suggested menu price</p>
-                  <p className="text-sm font-semibold text-foreground">{formatMoney(calculateSuggestedSellingPrice())}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Final menu price</p>
-                  <p className="text-sm font-semibold text-foreground">{formatMoney(calculateMenuSellingPrice())}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Gross margin</p>
-                  <p className="text-sm font-semibold text-foreground">{formatMoney(calculateGrossMargin())} ({calculateGrossMarginPercent().toFixed(1)}%)</p>
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="instructions" className="block text-sm mb-2 text-foreground font-medium">
-                  Instructions
-                </label>
-                <textarea
-                  id="instructions"
-                  name="instructions"
-                  value={newRecipe.instructions}
-                  onChange={handleInputChange}
-                  rows={4}
-                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all resize-none"
-                  placeholder="Enter cooking instructions..."
-                />
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-border">
-                <button
-                  type="submit"
-                  className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
-                >
-                  <Save className="w-5 h-5" />
-                  {editingRecipe ? "Save Recipe" : "Create Recipe"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* View & Scale Recipe Modal */}
-      {showViewModal && selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">{selectedRecipe.name}</h2>
-                <p className="text-sm text-muted-foreground mt-1">{selectedRecipe.id} - {selectedRecipe.category}</p>
-              </div>
-              <button
-                onClick={() => setShowViewModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-6">
-              {/* Scale Controls */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Scale className="w-5 h-5 text-blue-600" />
-                    <span className="font-semibold text-blue-900">Recipe Scaling</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setScaleMultiplier(Math.max(0.5, scaleMultiplier - 0.5))}
-                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      -
-                    </button>
-                    <span className="text-xl font-bold text-blue-900 min-w-[60px] text-center">
-                      {scaleMultiplier}x
-                    </span>
-                    <button
-                      onClick={() => setScaleMultiplier(scaleMultiplier + 0.5)}
-                      className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-blue-700">Servings: {selectedRecipe.servings} x {scaleMultiplier} = <strong>{selectedRecipe.servings * scaleMultiplier}</strong></span>
-                  <span className="text-blue-700">Yield-adjusted cost: <strong>{formatMoney(calculateRecipeYieldAdjustedCost(selectedRecipe) * scaleMultiplier)}</strong></span>
-                </div>
-              </div>
-
-              {/* Recipe Info */}
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Prep Time</p>
-                  <p className="text-lg font-bold text-foreground">{selectedRecipe.prepTime} min</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Yield %</p>
-                  <p className="text-lg font-bold text-foreground">{selectedRecipe.yieldPercentage}%</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Cost/Serving</p>
-                  <p className="text-lg font-bold text-green-600">{formatMoney(selectedRecipe.costPerServing)}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Ingredients</p>
-                  <p className="text-lg font-bold text-foreground">{selectedRecipe.ingredients.length}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Menu Price</p>
-                  <p className="text-lg font-bold text-foreground">{formatMoney(selectedRecipe.sellingPrice ?? selectedRecipe.suggestedSellingPrice ?? 0)}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Target Food Cost</p>
-                  <p className="text-lg font-bold text-foreground">{selectedRecipe.targetFoodCost || 0}%</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Gross Margin</p>
-                  <p className="text-lg font-bold text-foreground">{calculateRecipeGrossMarginPercent(selectedRecipe).toFixed(1)}%</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">POS Status</p>
-                  <p className={`text-lg font-bold ${(selectedRecipe.isActive ?? true) ? "text-green-600" : "text-muted-foreground"}`}>{(selectedRecipe.isActive ?? true) ? "Active" : "Inactive"}</p>
-                </div>
-              </div>
-
-              {/* Ingredients Table */}
-              <div>
-                <h3 className="text-lg font-semibold text-foreground mb-3">Bill of Materials (Scaled)</h3>
-                <div className="bg-muted/30 rounded-xl overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-muted/50 border-b border-border">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Ingredient</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Quantity</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Inventory Qty</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Unit Cost</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {selectedRecipe.ingredients.map((ing) => (
-                        <tr key={ing.id}>
-                          <td className="px-4 py-3 text-foreground">{ing.name}</td>
-                          <td className="px-4 py-3 text-right text-foreground">
-                            {getScaledQuantity(ing.quantity)} {ing.unit}
-                          </td>
-                          <td className="px-4 py-3 text-right text-foreground">
-                            {getScaledQuantity(ing.inventoryQuantity ?? ing.quantity)} {ing.inventoryUnit || ing.unit}
-                          </td>
-                          <td className="px-4 py-3 text-right text-foreground">{formatMoney(ing.unitCost)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
-                            {formatMoney(Number(getScaledCost(ing.totalCost)))}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                    <tfoot className="bg-muted/50 border-t border-border">
-                      <tr>
-                        <td colSpan={4} className="px-4 py-3 text-right font-semibold text-foreground">
-                          Raw ingredient total:
-                        </td>
-                        <td className="px-4 py-3 text-right text-xl font-bold text-primary">
-                          {formatMoney(Number(getScaledCost(selectedRecipe.totalCost)))}
-                        </td>
-                      </tr>
-                      <tr>
-                        <td colSpan={4} className="px-4 py-3 text-right font-semibold text-foreground">
-                          Yield-adjusted total:
-                        </td>
-                        <td className="px-4 py-3 text-right text-xl font-bold text-green-600">
-                          {formatMoney(calculateRecipeYieldAdjustedCost(selectedRecipe) * scaleMultiplier)}
-                        </td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                </div>
-              </div>
-
-              {/* Instructions */}
-              {selectedRecipe.instructions && (
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-3">Instructions</h3>
-                  <div className="bg-muted/30 rounded-xl p-4">
-                    <p className="text-sm text-foreground whitespace-pre-line">{selectedRecipe.instructions}</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3 pt-4 border-t border-border">
-                <button
-                  onClick={() => setShowViewModal(false)}
-                  className="flex-1 px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 transition-all duration-200"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {showForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"><form onSubmit={handleSave} className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-card p-6 shadow-xl"><div className="mb-5 flex justify-between"><h2 className="text-xl font-bold">{editing ? "Edit Recipe" : "New Recipe"}</h2><button type="button" onClick={() => setShowForm(false)}><X className="h-5 w-5" /></button></div><div className="grid gap-4 md:grid-cols-2">
+          <label className="text-sm">Name<input required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+          <label className="text-sm">Category<input required value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+          <label className="text-sm">Servings<input required type="number" min="1" value={form.servings} onChange={(event) => setForm({ ...form, servings: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+          <label className="text-sm">Yield percentage<input type="number" min="1" value={form.yieldPercentage} onChange={(event) => setForm({ ...form, yieldPercentage: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+          <label className="text-sm">Selling price<input type="number" min="0" step="0.01" value={form.sellingPrice} onChange={(event) => setForm({ ...form, sellingPrice: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+          <label className="text-sm">Prep minutes<input type="number" min="0" value={form.prepTimeMinutes} onChange={(event) => setForm({ ...form, prepTimeMinutes: event.target.value })} className="mt-1 w-full rounded-xl border border-input bg-input-background p-2" /></label>
+        </div><div className="mt-5 space-y-3"><p className="font-medium">Ingredients</p>{ingredients.map((ingredient, index) => <div key={index} className="grid gap-2 rounded-xl border border-border p-3 md:grid-cols-[1fr_100px_100px_120px_auto]"><select required value={ingredient.itemId} onChange={(event) => { const item = inventory.find((candidate) => candidate.id === event.target.value); setIngredients((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, itemId: event.target.value, unit: item?.unit || "", unitCost: String(item?.costPrice ?? item?.price ?? 0) } : line)); }} className="rounded-lg border border-input bg-input-background p-2 text-sm"><option value="">Select ingredient</option>{inventory.map((item) => <option key={item.id} value={item.id}>{item.name} | stock {item.quantity}</option>)}</select><input required type="number" min="0.001" step="0.001" placeholder="Qty" value={ingredient.quantity} onChange={(event) => setIngredients((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, quantity: event.target.value } : line))} className="rounded-lg border border-input bg-input-background p-2 text-sm" /><input placeholder="Unit" value={ingredient.unit} onChange={(event) => setIngredients((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, unit: event.target.value } : line))} className="rounded-lg border border-input bg-input-background p-2 text-sm" /><input type="number" min="0" step="0.01" placeholder="Unit cost" value={ingredient.unitCost} onChange={(event) => setIngredients((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, unitCost: event.target.value } : line))} className="rounded-lg border border-input bg-input-background p-2 text-sm" /><button type="button" disabled={ingredients.length === 1} onClick={() => setIngredients((current) => current.filter((_, lineIndex) => lineIndex !== index))} className="p-2 text-red-700 disabled:opacity-30"><X className="h-4 w-4" /></button></div>)}<button type="button" onClick={() => setIngredients((current) => [...current, blankIngredient()])} className="flex items-center gap-2 text-sm text-primary"><Plus className="h-4 w-4" />Add ingredient</button></div><label className="mt-5 block text-sm">Instructions<textarea value={form.instructions} onChange={(event) => setForm({ ...form, instructions: event.target.value })} className="mt-1 min-h-24 w-full rounded-xl border border-input bg-input-background p-3" /></label><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setShowForm(false)} className="rounded-xl border border-border px-4 py-2">Cancel</button><button disabled={saving} className="rounded-xl bg-primary px-4 py-2 text-white">{saving ? "Saving..." : "Save Recipe"}</button></div></form></div>
       )}
     </div>
   );
 }
-

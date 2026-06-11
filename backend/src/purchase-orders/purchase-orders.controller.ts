@@ -12,6 +12,7 @@ import { PurchaseOrdersService } from './purchase-orders.service';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
+import { RejectPurchaseOrderDto } from './dto/reject-purchase-order.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
@@ -46,6 +47,21 @@ export class PurchaseOrdersController {
     );
   }
 
+  @Get('goods-receipts')
+  findGoodsReceipts(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('purchaseOrderId') purchaseOrderId?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.purchaseOrdersService.findGoodsReceipts(
+      user.businessId,
+      purchaseOrderId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.purchaseOrdersService.findOne(id, user.businessId);
@@ -69,6 +85,21 @@ export class PurchaseOrdersController {
   @Roles('Admin', 'Manager')
   approve(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.purchaseOrdersService.approve(id, user.businessId, user.role);
+  }
+
+  @Patch(':id/reject')
+  @Roles('Admin', 'Manager')
+  reject(
+    @Param('id') id: string,
+    @Body() dto: RejectPurchaseOrderDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.purchaseOrdersService.reject(
+      id,
+      dto.reason,
+      user.businessId,
+      user.role,
+    );
   }
 
   @Patch(':id/receive')

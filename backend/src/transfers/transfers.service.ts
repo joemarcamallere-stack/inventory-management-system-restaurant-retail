@@ -17,6 +17,32 @@ export class TransfersService {
     if (dto.fromLocationId === dto.toLocationId) {
       throw new BadRequestException('Source and destination locations must be different');
     }
+    const locations = await this.prisma.location.count({
+      where: {
+        businessId,
+        id: { in: [dto.fromLocationId, dto.toLocationId] },
+      },
+    });
+    if (locations !== 2) {
+      throw new BadRequestException(
+        'Source or destination location is unavailable for this business',
+      );
+    }
+
+    const itemIds = [...new Set(dto.items.map((item) => item.inventoryItemId))];
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        businessId,
+        locationId: dto.fromLocationId,
+        id: { in: itemIds },
+      },
+      select: { id: true },
+    });
+    if (items.length !== itemIds.length) {
+      throw new BadRequestException(
+        'One or more transfer items are unavailable at the source location',
+      );
+    }
     const transferNumber = `TRF-${Date.now()}`;
     try {
       return await this.prisma.transfer.create({

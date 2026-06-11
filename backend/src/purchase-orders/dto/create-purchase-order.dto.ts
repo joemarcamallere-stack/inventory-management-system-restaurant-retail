@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsEnum,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsString,
@@ -55,6 +56,10 @@ export class CreatePurchaseOrderDto {
   @IsString()
   @MinLength(1)
   paymentTerms?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  expectedDelivery?: string;
 
   @IsArray()
   @ValidateNested({ each: true })
