@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Package, Search, TrendingDown, TrendingUp, AlertCircle, RefreshCw, Download, BarChart3, Calendar, Clock } from "lucide-react";
-import { readLocalStorage } from "../lib/localStorage";
+import { useRestaurantState } from "../lib/restaurantData";
 import { formatQuantity, getDaysUntilExpiry, getInventoryProducts, getStockStatus, splitCategory, StockStatus } from "../lib/inventoryLogic";
 
 type StockItem = {
@@ -62,10 +62,10 @@ export function StockControl() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const products = getInventoryProducts();
-  const wasteLogs = readLocalStorage<WasteLogSummary[]>("transfers.wasteLogs", []);
-  const adjustments = readLocalStorage<AdjustmentSummary[]>("transfers.adjustments", []);
-  const inventoryMovements = readLocalStorage<InventoryMovementSummary[]>("inventory.movements", []);
+  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
+  const [wasteLogs] = useRestaurantState<WasteLogSummary[]>("transfers.wasteLogs", []);
+  const [adjustments] = useRestaurantState<AdjustmentSummary[]>("transfers.adjustments", []);
+  const [inventoryMovements] = useRestaurantState<InventoryMovementSummary[]>("inventory.movements", []);
 
   const getRecordedOutflowQuantity = (productName: string) => {
     const targetName = normalizeName(productName);

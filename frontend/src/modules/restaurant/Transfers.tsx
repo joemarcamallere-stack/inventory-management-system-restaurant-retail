@@ -1,7 +1,16 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Plus, Search, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Clock, X, FileText, Trash2, PhilippinePeso, BarChart3, Calendar } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
+import {
+  cancelTransfer,
+  completeTransfer,
+  createStockMovement,
+  createTransfer,
+  dispatchTransfer,
+  getLocations,
+} from "../../app/api/client";
 
 type TransferStatus = "pending" | "approved" | "in-transit" | "completed" | "rejected";
 type AdjustmentType = "damage" | "shrinkage" | "waste" | "found" | "correction";
@@ -62,11 +71,11 @@ export function Transfers() {
   const [selectedItem, setSelectedItem] = useState<Transfer | Adjustment | WasteLog | null>(null);
   const [dateRange, setDateRange] = useState({ start: "2026-05-01", end: "2026-05-31" });
 
-  const [transfers, setTransfers] = useLocalStorageState<Transfer[]>("transfers.records", []);
+  const [transfers] = useRestaurantState<Transfer[]>("transfers.records", []);
 
-  const [adjustments, setAdjustments] = useLocalStorageState<Adjustment[]>("transfers.adjustments", []);
+  const [adjustments] = useRestaurantState<Adjustment[]>("transfers.adjustments", []);
 
-  const [wasteLogs, setWasteLogs] = useLocalStorageState<WasteLog[]>("transfers.wasteLogs", []);
+  const [wasteLogs] = useRestaurantState<WasteLog[]>("transfers.wasteLogs", []);
 
   const [newTransfer, setNewTransfer] = useState({
     item: "",
@@ -97,10 +106,27 @@ export function Transfers() {
     notes: "",
   });
 
-  const locations = ["Main Warehouse", "Downtown Store", "Central Kitchen", "Airport Branch", "Mall Branch"];
-  const inventoryItems: InventoryProduct[] = getInventoryProducts();
+  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
+  const locations = locationQuery.data ?? [];
+  const [inventoryItems] = useRestaurantState<(InventoryProduct & { backendId?: string; locationId?: string })[]>("inventory.products", getInventoryProducts());
   const availableItems = inventoryItems.filter(item => item.stock > 0);
   const units = ["kg", "g", "L", "ml", "pcs"];
+  const saveTransfer = useRestaurantMutation(
+    (data: unknown) => createTransfer(data),
+    ["transfers.records"],
+  );
+  const moveTransfer = useRestaurantMutation(
+    ({ id, action }: { id: string; action: "dispatch" | "complete" | "cancel" }) => {
+      if (action === "dispatch") return dispatchTransfer(id);
+      if (action === "complete") return completeTransfer(id);
+      return cancelTransfer(id);
+    },
+    ["transfers.records", "inventory.products", "inventory.movements"],
+  );
+  const saveMovement = useRestaurantMutation(
+    (data: unknown) => createStockMovement(data),
+    ["transfers.adjustments", "transfers.wasteLogs", "inventory.products", "inventory.movements"],
+  );
 
   const filteredTransfers = transfers.filter(transfer => {
     const matchesSearch = (transfer.item || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -124,83 +150,70 @@ export function Transfers() {
     return matchesSearch && matchesType && inDateRange;
   });
 
-  const handleCreateTransfer = (e: React.FormEvent) => {
+  const handleCreateTransfer = async (e: React.FormEvent) => {
     e.preventDefault();
-    const transfer: Transfer = {
-      id: `TRF-${String(transfers.length + 1).padStart(3, '0')}`,
-      item: newTransfer.item,
-      quantity: parseFloat(newTransfer.quantity),
-      unit: newTransfer.unit,
-      from: newTransfer.from,
-      to: newTransfer.to,
-      requestedBy: "Admin User",
-      requestDate: new Date().toISOString().split('T')[0],
-      status: "pending",
-      notes: newTransfer.notes,
-    };
-    setTransfers([transfer, ...transfers]);
-    setShowTransferModal(false);
-    setNewTransfer({ item: "", quantity: "", unit: "kg", from: "", to: "", notes: "" });
+    try {
+      await saveTransfer.mutateAsync({
+        fromLocationId: newTransfer.from,
+        toLocationId: newTransfer.to,
+        notes: newTransfer.notes || undefined,
+        items: [{ inventoryItemId: newTransfer.item, quantity: parseFloat(newTransfer.quantity) }],
+      });
+      setShowTransferModal(false);
+      setNewTransfer({ item: "", quantity: "", unit: "kg", from: "", to: "", notes: "" });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create transfer");
+    }
   };
 
-  const handleCreateAdjustment = (e: React.FormEvent) => {
+  const handleCreateAdjustment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const adjustment: Adjustment = {
-      id: `ADJ-${String(adjustments.length + 1).padStart(3, '0')}`,
-      item: newAdjustment.item,
-      quantity: parseFloat(newAdjustment.quantity),
-      unit: newAdjustment.unit,
-      location: newAdjustment.location,
-      type: newAdjustment.type,
-      reason: newAdjustment.reason,
-      adjustedBy: "Admin User",
-      date: new Date().toISOString().split('T')[0],
-      notes: newAdjustment.notes,
-    };
-    setAdjustments([adjustment, ...adjustments]);
-    setShowAdjustmentModal(false);
-    setNewAdjustment({ item: "", quantity: "", unit: "kg", location: "", type: "damage", reason: "", notes: "" });
+    try {
+      await saveMovement.mutateAsync({
+        itemId: newAdjustment.item,
+        locationId: newAdjustment.location,
+        type: newAdjustment.type === "found" ? "STOCK_IN" : newAdjustment.type === "correction" ? "ADJUSTMENT" : "STOCK_OUT",
+        quantity: parseFloat(newAdjustment.quantity),
+        reason: newAdjustment.reason || newAdjustment.type,
+        referenceType: "RESTAURANT_ADJUSTMENT",
+        notes: newAdjustment.notes || undefined,
+      });
+      setShowAdjustmentModal(false);
+      setNewAdjustment({ item: "", quantity: "", unit: "kg", location: "", type: "damage", reason: "", notes: "" });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to save adjustment");
+    }
   };
 
-  const handleLogWaste = (e: React.FormEvent) => {
+  const handleLogWaste = async (e: React.FormEvent) => {
     e.preventDefault();
-    const quantity = parseFloat(newWaste.quantity);
-    const unitCost = parseFloat(newWaste.unitCost);
-    const wasteLog: WasteLog = {
-      id: `WL-${String(wasteLogs.length + 1).padStart(3, '0')}`,
-      item: newWaste.item,
-      quantity: quantity,
-      unit: newWaste.unit,
-      location: newWaste.location,
-      wasteType: newWaste.wasteType,
-      unitCost: unitCost,
-      totalValue: quantity * unitCost,
-      date: new Date().toISOString().split('T')[0],
-      loggedBy: "Admin User",
-      source: "manual",
-      notes: newWaste.notes,
-    };
-    setWasteLogs([wasteLog, ...wasteLogs]);
-    setShowWasteModal(false);
-    setNewWaste({ item: "", quantity: "", unit: "kg", location: "", wasteType: "spoilage", unitCost: "", notes: "" });
+    try {
+      await saveMovement.mutateAsync({
+        itemId: newWaste.item,
+        locationId: newWaste.location,
+        type: newWaste.wasteType === "expiry" ? "EXPIRY" : "SPOILAGE",
+        quantity: parseFloat(newWaste.quantity),
+        reason: newWaste.wasteType,
+        referenceType: "RESTAURANT_WASTE",
+        notes: newWaste.notes || undefined,
+      });
+      setShowWasteModal(false);
+      setNewWaste({ item: "", quantity: "", unit: "kg", location: "", wasteType: "spoilage", unitCost: "", notes: "" });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to log waste");
+    }
   };
 
-  const handleApproveTransfer = (id: string) => {
-    setTransfers(transfers.map(t =>
-      t.id === id ? { ...t, status: "approved" as TransferStatus, approvedBy: "Admin User" } : t
-    ));
+  const handleApproveTransfer = async (id: string) => {
+    await moveTransfer.mutateAsync({ id, action: "dispatch" });
   };
 
-  const handleRejectTransfer = (id: string) => {
-    setTransfers(transfers.map(t =>
-      t.id === id ? { ...t, status: "rejected" as TransferStatus } : t
-    ));
+  const handleRejectTransfer = async (id: string) => {
+    await moveTransfer.mutateAsync({ id, action: "cancel" });
   };
 
-  const handleCompleteTransfer = (id: string) => {
-    setTransfers(transfers.map(t =>
-      t.id === id ? { ...t, status: "completed" as TransferStatus, completedDate: new Date().toISOString().split('T')[0] } : t
-    ));
+  const handleCompleteTransfer = async (id: string) => {
+    await moveTransfer.mutateAsync({ id, action: "complete" });
   };
 
   const getStatusBadge = (status: TransferStatus) => {
@@ -808,7 +821,7 @@ export function Transfers() {
                   disabled={availableItems.length === 0}
                 >
                   <option value="">{availableItems.length === 0 ? "No available inventory items" : "Select item"}</option>
-                  {availableItems.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                  {availableItems.map(item => <option key={item.id} value={item.backendId}>{item.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -844,7 +857,7 @@ export function Transfers() {
                   required
                 >
                   <option value="">Select location</option>
-                  {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
               </div>
               <div>
@@ -856,7 +869,7 @@ export function Transfers() {
                   required
                 >
                   <option value="">Select location</option>
-                  {locations.filter(loc => loc !== newTransfer.from).map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  {locations.filter((loc: any) => loc.id !== newTransfer.from).map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
               </div>
               <div>
@@ -909,7 +922,7 @@ export function Transfers() {
                   disabled={availableItems.length === 0}
                 >
                   <option value="">{availableItems.length === 0 ? "No available inventory items" : "Select item"}</option>
-                  {availableItems.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                  {availableItems.map(item => <option key={item.id} value={item.backendId}>{item.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -945,7 +958,7 @@ export function Transfers() {
                   required
                 >
                   <option value="">Select location</option>
-                  {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
               </div>
               <div>
@@ -1023,7 +1036,7 @@ export function Transfers() {
                   disabled={availableItems.length === 0}
                 >
                   <option value="">{availableItems.length === 0 ? "No available inventory items" : "Select item"}</option>
-                  {availableItems.map(item => <option key={item.id} value={item.name}>{item.name}</option>)}
+                  {availableItems.map(item => <option key={item.id} value={item.backendId}>{item.name}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1059,7 +1072,7 @@ export function Transfers() {
                   required
                 >
                   <option value="">Select location</option>
-                  {locations.map(loc => <option key={loc} value={loc}>{loc}</option>)}
+                  {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                 </select>
               </div>
               <div>

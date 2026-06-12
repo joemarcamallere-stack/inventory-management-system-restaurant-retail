@@ -1,4 +1,4 @@
-import { readLocalStorage } from './localStorage';
+import { readRestaurantData } from './restaurantData';
 
 export type InventoryProduct = {
   id: number;
@@ -39,11 +39,11 @@ export const defaultStorageTemperatureOptions = [
 export const defaultInventoryProducts: InventoryProduct[] = [];
 
 export function getInventoryProducts() {
-  return readLocalStorage<InventoryProduct[]>('inventory.products', defaultInventoryProducts);
+  return readRestaurantData<InventoryProduct[]>('inventory.products', defaultInventoryProducts);
 }
 
 export function getCategoryHierarchy() {
-  const storedHierarchy = readLocalStorage<{ [key: string]: string[] }>('inventory.categoryHierarchy', {});
+  const storedHierarchy = readRestaurantData<{ [key: string]: string[] }>('inventory.categoryHierarchy', {});
 
   return Object.entries(storedHierarchy).reduce(
     (hierarchy, [category, subCategories]) => ({
@@ -55,7 +55,7 @@ export function getCategoryHierarchy() {
 }
 
 export function getStorageTemperatureOptions() {
-  const customOptions = readLocalStorage<string[]>('inventory.storageTemperatureOptions', []);
+  const customOptions = readRestaurantData<string[]>('inventory.storageTemperatureOptions', []);
   return Array.from(new Set([...defaultStorageTemperatureOptions, ...customOptions].filter(Boolean)));
 }
 

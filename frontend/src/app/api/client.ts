@@ -221,6 +221,35 @@ export function deleteUser(id: string) {
   });
 }
 
+export function getCategories(module?: string) {
+  const query = new URLSearchParams();
+  if (module) query.set('module', module);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<any[]>(`/api/categories${suffix}`);
+}
+
+export function createCategory(data: unknown) {
+  return request<any>('/api/categories', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export type RestaurantSettingKey =
+  | 'CATEGORY_HIERARCHY'
+  | 'STORAGE_TEMPERATURE_OPTIONS';
+
+export function getRestaurantSettings() {
+  return request<Array<{ key: RestaurantSettingKey; value: unknown }>>('/api/restaurant-settings');
+}
+
+export function upsertRestaurantSetting(key: RestaurantSettingKey, value: unknown) {
+  return request<any>(`/api/restaurant-settings/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
 // ─── Suppliers ───────────────────────────────────────────────────────────────
 
 export function getSuppliers(params?: { isActive?: boolean }) {
@@ -256,6 +285,13 @@ export function getPurchaseOrder(id: string) {
   return request<any>(`/api/purchase-orders/${id}`);
 }
 
+export function getGoodsReceipts(params?: { purchaseOrderId?: string }) {
+  const query = new URLSearchParams();
+  if (params?.purchaseOrderId) query.set('purchaseOrderId', params.purchaseOrderId);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<any>>(`/api/purchase-orders/goods-receipts${suffix}`).then((r) => r.data);
+}
+
 export function createPurchaseOrder(data: unknown) {
   return request<any>('/api/purchase-orders', { method: 'POST', body: JSON.stringify(data) });
 }
@@ -272,8 +308,30 @@ export function approvePurchaseOrder(id: string) {
   return request<any>(`/api/purchase-orders/${id}/approve`, { method: 'PATCH' });
 }
 
-export function receivePurchaseOrder(id: string, items: { id: string; receivedQty: number; rejectedQty: number }[]) {
-  return request<any>(`/api/purchase-orders/${id}/receive`, { method: 'PATCH', body: JSON.stringify({ items }) });
+export function rejectPurchaseOrder(id: string, reason: string) {
+  return request<any>(`/api/purchase-orders/${id}/reject`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function receivePurchaseOrder(
+  id: string,
+  items: {
+    id: string;
+    receivedQty: number;
+    rejectedQty: number;
+    condition?: string;
+    notes?: string;
+    expiryDate?: string;
+    storageTemperature?: string;
+  }[],
+  notes?: string,
+) {
+  return request<any>(`/api/purchase-orders/${id}/receive`, {
+    method: 'PATCH',
+    body: JSON.stringify({ items, notes }),
+  });
 }
 
 export function cancelPurchaseOrder(id: string) {

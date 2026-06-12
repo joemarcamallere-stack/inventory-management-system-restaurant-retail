@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Boxes, Link2, Merge, PackageSearch, Save, ShieldAlert } from "lucide-react";
-import { readLocalStorage, useLocalStorageState, writeLocalStorage } from "../lib/localStorage";
+import { readRestaurantData, useRestaurantState, writeRestaurantData } from "../lib/restaurantData";
 import { defaultCategoryHierarchy, InventoryProduct } from "../lib/inventoryLogic";
 
 type GlobalProduct = {
@@ -74,9 +74,9 @@ export function ProductManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [mergeKey, setMergeKey] = useState<string>("");
-  const [products, setProducts] = useLocalStorageState<InventoryProduct[]>("inventory.products", []);
-  const [globalProducts, setGlobalProducts] = useLocalStorageState<GlobalProduct[]>("purchaseOrders.globalProducts", []);
-  const [suppliers, setSuppliers] = useLocalStorageState<Supplier[]>("purchaseOrders.suppliers", []);
+  const [products, setProducts] = useRestaurantState<InventoryProduct[]>("inventory.products", []);
+  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>("purchaseOrders.globalProducts", []);
+  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
   const [form, setForm] = useState({
     name: "",
     category: "",
@@ -170,8 +170,8 @@ export function ProductManagement() {
     const oldNameSet = new Set(oldNames.map(normalizeName));
     const oldIdSet = new Set(oldGlobalIds);
 
-    const purchaseOrders = readLocalStorage<PurchaseOrder[]>("purchaseOrders.orders", []);
-    writeLocalStorage(
+    const purchaseOrders = readRestaurantData<PurchaseOrder[]>("purchaseOrders.orders", []);
+    writeRestaurantData(
       "purchaseOrders.orders",
       purchaseOrders.map((order) => ({
         ...order,
@@ -183,8 +183,8 @@ export function ProductManagement() {
       }))
     );
 
-    const goodsRecords = readLocalStorage<GoodsRecord[]>("goodsReceived.records", []);
-    writeLocalStorage(
+    const goodsRecords = readRestaurantData<GoodsRecord[]>("goodsReceived.records", []);
+    writeRestaurantData(
       "goodsReceived.records",
       goodsRecords.map((record) => ({
         ...record,

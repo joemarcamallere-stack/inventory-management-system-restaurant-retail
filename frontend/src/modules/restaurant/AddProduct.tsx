@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router";
 import { Apple, PhilippinePeso, Hash, Tag, Folder, FileText, Save, X, Calendar, Plus, FolderPlus } from "lucide-react";
-import { readLocalStorage, writeLocalStorage } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
+import { createInventoryItem, getLocations, upsertRestaurantSetting } from "../../app/api/client";
 
 type StoredProduct = {
   id: number;
@@ -30,8 +30,10 @@ type Supplier = {
   products: { name: string; price: number }[];
 };
 
+const goToInventory = () =>
+  window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
+
 export function AddProduct() {
-  const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubCategory, setSelectedSubCategory] = useState("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -52,14 +54,51 @@ export function AddProduct() {
     unit: "",
   });
 
-  const [categoryHierarchy, setCategoryHierarchy] = useState<{ [key: string]: string[] }>(getCategoryHierarchy);
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useState<string[]>(getStorageTemperatureOptions);
+  const [products] = useRestaurantState<StoredProduct[]>(
+    "inventory.products",
+    defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" })),
+  );
+  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
+    "inventory.categoryHierarchy",
+    getCategoryHierarchy(),
+  );
+  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
+    "inventory.storageTemperatureOptions",
+    getStorageTemperatureOptions(),
+  );
+  const [storedSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
+  const createProduct = useRestaurantMutation(
+    async (product: StoredProduct) => {
+      const locations = await getLocations();
+      if (!locations[0]) throw new Error("Create a location before adding inventory");
+      return createInventoryItem({
+        name: product.name,
+        itemType: product.itemType,
+        sku: product.sku || undefined,
+        category: product.category,
+        quantity: product.stock,
+        price: product.price,
+        unit: product.unit,
+        minStock: product.minStock ?? 0,
+        maxStock: product.maxStock,
+        reorderPoint: product.reorderPoint ?? 0,
+        expiryDate: product.expiry ? new Date(`${product.expiry}T00:00:00`).toISOString() : undefined,
+        storageTemperature: product.storageTemperature || undefined,
+        locationId: locations[0].id,
+      });
+    },
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
+  const saveSetting = useRestaurantMutation(
+    ({ key, value }: { key: "CATEGORY_HIERARCHY" | "STORAGE_TEMPERATURE_OPTIONS"; value: unknown }) =>
+      upsertRestaurantSetting(key, value),
+    ["inventory.categoryHierarchy", "inventory.storageTemperatureOptions"],
+  );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const products = readLocalStorage<StoredProduct[]>("inventory.products", defaultInventoryProducts);
     const nextId = products.length > 0 ? Math.max(...products.map(product => product.id)) + 1 : 1;
     const stock = Number(formData.stock) || 0;
     const reorderPoint = Number(formData.reorderPoint) || 0;
@@ -81,8 +120,12 @@ export function AddProduct() {
       storageTemperature: formData.storageTemp,
     };
 
-    writeLocalStorage("inventory.products", [productToAdd, ...products]);
-    navigate("/inventory");
+    try {
+      await createProduct.mutateAsync(productToAdd);
+      goToInventory();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create inventory item");
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -97,20 +140,20 @@ export function AddProduct() {
     setSelectedSubCategory("");
   };
 
-  const handleAddMainCategory = () => {
+  const handleAddMainCategory = async () => {
     if (newMainCategory.trim()) {
       const nextHierarchy = {
         ...categoryHierarchy,
         [newMainCategory.trim()]: []
       };
+      await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
       setCategoryHierarchy(nextHierarchy);
-      writeLocalStorage("inventory.categoryHierarchy", nextHierarchy);
       setNewMainCategory("");
       setShowCategoryModal(false);
     }
   };
 
-  const handleAddSubCategory = () => {
+  const handleAddSubCategory = async () => {
     if (categoryForSubCategory && newSubCategory.trim()) {
       const nextHierarchy = {
         ...categoryHierarchy,
@@ -119,25 +162,24 @@ export function AddProduct() {
           newSubCategory.trim()
         ]
       };
+      await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
       setCategoryHierarchy(nextHierarchy);
-      writeLocalStorage("inventory.categoryHierarchy", nextHierarchy);
       setNewSubCategory("");
       setCategoryForSubCategory("");
       setShowCategoryModal(false);
     }
   };
 
-  const handleAddStorageTemperature = () => {
+  const handleAddStorageTemperature = async () => {
     const trimmed = newStorageTemperature.trim();
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
     const nextOptions = [...storageTemperatureOptions, trimmed];
+    await saveSetting.mutateAsync({ key: "STORAGE_TEMPERATURE_OPTIONS", value: nextOptions });
     setStorageTemperatureOptions(nextOptions);
-    writeLocalStorage("inventory.storageTemperatureOptions", nextOptions);
     setFormData({ ...formData, storageTemp: trimmed });
     setNewStorageTemperature("");
   };
 
-  const storedSuppliers = readLocalStorage<Supplier[]>("purchaseOrders.suppliers", []);
   const supplierNames = storedSuppliers.length > 0
     ? storedSuppliers.map((supplier) => supplier.name)
     : ["Fresh Farms Co.", "Ocean Harvest", "Local Dairy Inc.", "Organic Produce LLC"];
@@ -483,7 +525,7 @@ export function AddProduct() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/inventory")}
+                onClick={() => goToInventory()}
                 className="w-full bg-muted text-foreground py-3 text-sm rounded-2xl hover:bg-muted/80 transition-all duration-200 font-medium flex items-center justify-center gap-2"
               >
                 <X className="w-5 h-5" />
@@ -611,4 +653,3 @@ export function AddProduct() {
     </div>
   );
 }
-

@@ -19,6 +19,7 @@ import { BundlesModule } from './bundles/bundles.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { DiningTablesModule } from './dining-tables/dining-tables.module';
 import { CategoriesModule } from './categories/categories.module';
+import { RestaurantSettingsModule } from './restaurant-settings/restaurant-settings.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { CategoriesModule } from './categories/categories.module';
     NotificationsModule,
     DiningTablesModule,
     CategoriesModule,
+    RestaurantSettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

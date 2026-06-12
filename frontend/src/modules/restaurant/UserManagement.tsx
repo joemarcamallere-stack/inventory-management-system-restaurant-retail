@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Search, Edit, Trash2, Shield, Mail, Phone, MoreVertical, X, Save, AlertCircle } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
+import { useRestaurantState } from "../lib/restaurantData";
 
 type User = {
   id: number;
@@ -28,7 +28,7 @@ export function UserManagement() {
     status: "active",
   });
 
-  const [users, setUsers] = useLocalStorageState<User[]>("users.records", []);
+  const [users, setUsers] = useRestaurantState<User[]>("users.records", []);
 
   const roles = ["all", "admin", "manager", "staff"];
 

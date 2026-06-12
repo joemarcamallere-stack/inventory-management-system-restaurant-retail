@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
+import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
 
 type Ingredient = {
   id: string;
@@ -37,7 +38,7 @@ type Recipe = {
 
 // Use the actual inventory product structure from inventory logic
 // The `inventoryItems` list is loaded from localStorage or defaults when needed.
-type InventoryItem = InventoryProduct;
+type InventoryItem = InventoryProduct & { backendId?: string };
 
 const UNIT_OPTIONS = ["kg", "g", "L", "ml", "pcs", "piece", "liter", "bottle", "pack", "box", "dozen"];
 
@@ -106,7 +107,7 @@ export function RecipeBOM() {
     unitCost: "",
   });
 
-  const inventoryItems: InventoryItem[] = getInventoryProducts();
+  const [inventoryItems] = useRestaurantState<InventoryItem[]>("inventory.products", getInventoryProducts());
 
   // Only show products that are actually in stock.
   const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
@@ -114,7 +115,16 @@ export function RecipeBOM() {
   // Extract unique categories from inventory
   const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
 
-  const [recipes, setRecipes] = useLocalStorageState<Recipe[]>("recipes.records", []);
+  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
+  const saveRecipe = useRestaurantMutation(
+    ({ id, data }: { id?: string; data: unknown }) =>
+      id ? updateRecipe(id, data) : createRecipe(data),
+    ["recipes.records"],
+  );
+  const removeRecipe = useRestaurantMutation(
+    (id: string) => deleteRecipe(id),
+    ["recipes.records"],
+  );
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
 
@@ -239,7 +249,7 @@ export function RecipeBOM() {
     return menuSellingPrice > 0 ? (calculateGrossMargin() / menuSellingPrice) * 100 : 0;
   };
 
-  const handleCreateRecipe = (e: React.FormEvent) => {
+  const handleCreateRecipe = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!isAdmin) {
@@ -305,13 +315,36 @@ export function RecipeBOM() {
       instructions: newRecipe.instructions,
     };
 
-    setRecipes(editingRecipe
-      ? recipes.map(recipe => recipe.id === editingRecipe.id ? recipeToAdd : recipe)
-      : [recipeToAdd, ...recipes]
-    );
-    setShowCreateModal(false);
-    setEditingRecipe(null);
-    setNewRecipe({
+    try {
+      await saveRecipe.mutateAsync({
+        id: editingRecipe?.id,
+        data: {
+          name: recipeToAdd.name,
+          category: recipeToAdd.category,
+          servings: recipeToAdd.servings,
+          yieldPercentage: recipeToAdd.yieldPercentage,
+          prepTimeMinutes: recipeToAdd.prepTime,
+          instructions: recipeToAdd.instructions,
+          targetFoodCost: recipeToAdd.targetFoodCost,
+          sellingPrice: recipeToAdd.sellingPrice,
+          isActive: recipeToAdd.isActive,
+          ingredients: recipeToAdd.ingredients.map((ingredient) => {
+            const inventoryItem = inventoryItems.find((item) => item.id === ingredient.productId);
+            if (!inventoryItem?.backendId) {
+              throw new Error(`Inventory link is missing for ${ingredient.name}`);
+            }
+            return {
+              itemId: inventoryItem.backendId,
+              quantity: ingredient.inventoryQuantity ?? ingredient.quantity,
+              unit: ingredient.inventoryUnit ?? ingredient.unit,
+              unitCost: ingredient.unitCost,
+            };
+          }),
+        },
+      });
+      setShowCreateModal(false);
+      setEditingRecipe(null);
+      setNewRecipe({
       name: "",
       category: "",
       servings: "",
@@ -321,8 +354,11 @@ export function RecipeBOM() {
       isActive: true,
       prepTime: "",
       instructions: "",
-    });
-    setIngredients([]);
+      });
+      setIngredients([]);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to save recipe");
+    }
   };
 
   const handleViewRecipe = (recipe: Recipe) => {
@@ -354,14 +390,18 @@ export function RecipeBOM() {
     setShowCreateModal(true);
   };
 
-  const handleDeleteRecipe = (id: string) => {
+  const handleDeleteRecipe = async (id: string) => {
     if (!isAdmin) {
       alert("Only admin users can delete recipes.");
       return;
     }
 
     if (confirm("Are you sure you want to delete this recipe?")) {
-      setRecipes(recipes.filter(r => r.id !== id));
+      try {
+        await removeRecipe.mutateAsync(id);
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to delete recipe");
+      }
     }
   };
 
@@ -1137,4 +1177,3 @@ export function RecipeBOM() {
     </div>
   );
 }
-

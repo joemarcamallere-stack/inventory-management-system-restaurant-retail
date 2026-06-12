@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { getCategoryHierarchy } from "../lib/inventoryLogic";
-import { useLocalStorageState } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
+import { upsertRestaurantSetting } from "../../app/api/client";
 
 type SupplierProduct = {
   name: string;
@@ -57,12 +58,16 @@ export function PurchaseOrderItemInput({
 }: PurchaseOrderItemInputProps) {
   const [query, setQuery] = useState(value.productName);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [categoryHierarchy, setCategoryHierarchy] = useLocalStorageState<{ [key: string]: string[] }>(
+  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
     "inventory.categoryHierarchy",
     getCategoryHierarchy()
   );
   const [newCategory, setNewCategory] = useState("");
   const [newSubCategory, setNewSubCategory] = useState("");
+  const saveHierarchy = useRestaurantMutation(
+    (value: Record<string, string[]>) => upsertRestaurantSetting("CATEGORY_HIERARCHY", value),
+    ["inventory.categoryHierarchy"],
+  );
 
   useEffect(() => {
     setQuery(value.productName);
@@ -171,13 +176,15 @@ export function PurchaseOrderItemInput({
     });
   };
 
-  const handleAddCategory = () => {
+  const handleAddCategory = async () => {
     const trimmed = newCategory.trim();
     if (!trimmed || categoryHierarchy[trimmed]) return;
-    setCategoryHierarchy({
+    const nextHierarchy = {
       ...categoryHierarchy,
       [trimmed]: [],
-    });
+    };
+    await saveHierarchy.mutateAsync(nextHierarchy);
+    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       category: trimmed,
@@ -186,13 +193,15 @@ export function PurchaseOrderItemInput({
     setNewCategory("");
   };
 
-  const handleAddSubCategory = () => {
+  const handleAddSubCategory = async () => {
     const trimmed = newSubCategory.trim();
     if (!value.category || !trimmed || subCategoryOptions.includes(trimmed)) return;
-    setCategoryHierarchy({
+    const nextHierarchy = {
       ...categoryHierarchy,
       [value.category]: [...subCategoryOptions, trimmed],
-    });
+    };
+    await saveHierarchy.mutateAsync(nextHierarchy);
+    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       subCategory: trimmed,

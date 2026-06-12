@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
 import { completeKitchenOrder, voidKitchenOrder } from "../../app/api/client";
-import { readLocalStorage, useLocalStorageState, writeLocalStorageOnly } from "../lib/localStorage";
+import { readRestaurantData, useInvalidateRestaurantData, useRestaurantState, writeRestaurantDataOnly } from "../lib/restaurantData";
 import { InventoryProduct } from "../lib/inventoryLogic";
 
 type Ingredient = {
@@ -78,10 +78,11 @@ export function POSKitchenOrders() {
   const [isVoiding, setIsVoiding] = useState(false);
   const [excludedIngredientIds, setExcludedIngredientIds] = useState<Set<string>>(new Set());
 
-  const [orders, setOrders] = useLocalStorageState<POSOrder[]>("pos.orders", []);
-  const recipes = readLocalStorage<Recipe[]>("recipes.records", []);
+  const [orders, setOrders] = useRestaurantState<POSOrder[]>("pos.orders", []);
+  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
   const activeRecipes = recipes.filter((recipe) => recipe.isActive ?? true);
-  const inventory = readLocalStorage<InventoryProduct[]>("inventory.products", []);
+  const [inventory] = useRestaurantState<InventoryProduct[]>("inventory.products", []);
+  const invalidateRestaurantData = useInvalidateRestaurantData();
 
   const selectedRecipe = activeRecipes.find((recipe) => recipe.id === recipeId);
 
@@ -150,8 +151,8 @@ export function POSKitchenOrders() {
     const now = new Date().toISOString();
     const orderId = `POS-${Date.now()}`;
     const orderQty = Number(quantity) || 1;
-    const products = readLocalStorage<InventoryProduct[]>("inventory.products", []);
-    const movements = readLocalStorage<InventoryMovement[]>("inventory.movements", []);
+    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
+    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
 
     const nextProducts = products.map((product) => {
       const consumed = selectedIngredientPreview.find((item) => item.product?.id === product.id);
@@ -185,27 +186,28 @@ export function POSKitchenOrders() {
 
     setIsCompleting(true);
     try {
-      const recipeIdMap = readLocalStorage<Record<string, string>>("recipes.backendIdByLocalId", {});
+      const recipeIdMap = readRestaurantData<Record<string, string>>("recipes.backendIdByLocalId", {});
       const saved = await completeKitchenOrder({
         receiptNo: order.receiptNo,
         recipeId: recipeIdMap[String(order.recipeId)] ?? order.recipeId,
         quantity: order.quantity,
         notes: order.notes,
       });
-      const orderIdMap = readLocalStorage<Record<string, string>>("pos.backendIdByLocalId", {});
+      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
       orderIdMap[orderId] = saved.id;
-      writeLocalStorageOnly("pos.backendIdByLocalId", orderIdMap);
+      writeRestaurantDataOnly("pos.backendIdByLocalId", orderIdMap);
 
       // The backend has already deducted cloud stock. These writes only mirror
       // the successful result in the legacy UI.
-      writeLocalStorageOnly("inventory.products", nextProducts);
-      writeLocalStorageOnly("inventory.movements", [...nextMovements, ...movements]);
+      writeRestaurantDataOnly("inventory.products", nextProducts);
+      writeRestaurantDataOnly("inventory.movements", [...nextMovements, ...movements]);
       setOrders([order, ...orders]);
       setReceiptNo("");
       setRecipeId("");
       setExcludedIngredientIds(new Set());
       setQuantity("1");
       setNotes("");
+      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {
@@ -216,8 +218,8 @@ export function POSKitchenOrders() {
   const voidOrder = async (order: POSOrder) => {
     if (!voidReason.trim() || isVoiding) return;
 
-    const products = readLocalStorage<InventoryProduct[]>("inventory.products", []);
-    const movements = readLocalStorage<InventoryMovement[]>("inventory.movements", []);
+    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
+    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
     const sourceMovements = movements.filter((movement) => movement.sourceId === order.id && movement.type === "pos-consumption");
     const now = new Date().toISOString();
 
@@ -238,18 +240,18 @@ export function POSKitchenOrders() {
 
     setIsVoiding(true);
     try {
-      const orderIdMap = readLocalStorage<Record<string, string>>("pos.backendIdByLocalId", {});
+      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
       const backendId = orderIdMap[String(order.id)] ?? order.id;
       await voidKitchenOrder(backendId, voidReason.trim());
 
-      const voidedSynced = readLocalStorage<Record<string, boolean>>("pos.voidedSynced", {});
+      const voidedSynced = readRestaurantData<Record<string, boolean>>("pos.voidedSynced", {});
       voidedSynced[String(order.id)] = true;
-      writeLocalStorageOnly("pos.voidedSynced", voidedSynced);
+      writeRestaurantDataOnly("pos.voidedSynced", voidedSynced);
 
       // The backend has already restored cloud stock. These writes only mirror
       // the successful result in the legacy UI.
-      writeLocalStorageOnly("inventory.products", nextProducts);
-      writeLocalStorageOnly("inventory.movements", [...reversalMovements, ...movements]);
+      writeRestaurantDataOnly("inventory.products", nextProducts);
+      writeRestaurantDataOnly("inventory.movements", [...reversalMovements, ...movements]);
       setOrders(orders.map((current) =>
         current.id === order.id
           ? { ...current, status: "voided", voidReason: voidReason.trim(), voidedAt: now }
@@ -257,6 +259,7 @@ export function POSKitchenOrders() {
       ));
       setVoidingOrderId("");
       setVoidReason("");
+      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {

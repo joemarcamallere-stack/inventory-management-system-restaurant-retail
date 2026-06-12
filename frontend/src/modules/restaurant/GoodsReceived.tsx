@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Search, Filter, CheckCircle, Package, Calendar, AlertCircle, ClipboardCheck, X, XCircle, Eye } from "lucide-react";
-import { readLocalStorage, useLocalStorageState, writeLocalStorage } from "../lib/localStorage";
+import { useInvalidateRestaurantData, useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, getStorageTemperatureOptions, InventoryProduct } from "../lib/inventoryLogic";
+import { receivePurchaseOrder, upsertRestaurantSetting } from "../../app/api/client";
 
 type QualityCheckCriteria = {
   appearance: "pass" | "fail" | "";
@@ -20,6 +21,7 @@ type QualityCriterionScore = {
 };
 
 type ReceivedItem = {
+  backendItemId?: string;
   productId?: string;
   inventoryId?: number;
   sku?: string;
@@ -222,13 +224,26 @@ export function GoodsReceived() {
   const [itemCriteriaScores, setItemCriteriaScores] = useState<{
     [itemIndex: number]: Partial<Record<InspectionCriterionKey, { passed: string; total: string; remarks: string }>>;
   }>({});
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useLocalStorageState<string[]>(
+  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
     "inventory.storageTemperatureOptions",
     getStorageTemperatureOptions()
   );
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
 
-  const [receivedGoods, setReceivedGoods] = useLocalStorageState<GoodsItem[]>("goodsReceived.records", []);
+  const [receivedGoods, setReceivedGoods] = useRestaurantState<GoodsItem[]>("goodsReceived.records", []);
+  const [purchaseOrders, setPurchaseOrders] = useRestaurantState<PurchaseOrder[]>("purchaseOrders.orders", []);
+  const [products, setProducts] = useRestaurantState<InventoryProduct[]>("inventory.products", defaultInventoryProducts);
+  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>("purchaseOrders.globalProducts", []);
+  const invalidateRestaurantData = useInvalidateRestaurantData();
+  const receiveOrder = useRestaurantMutation(
+    ({ id, items, notes }: { id: string; items: any[]; notes?: string }) =>
+      receivePurchaseOrder(id, items, notes),
+    ["goodsReceived.records", "purchaseOrders.orders", "inventory.products", "inventory.movements"],
+  );
+  const saveTemperatureOptions = useRestaurantMutation(
+    (value: string[]) => upsertRestaurantSetting("STORAGE_TEMPERATURE_OPTIONS", value),
+    ["inventory.storageTemperatureOptions"],
+  );
 
   const dateFilters = ["all", "today", "week", "month"];
 
@@ -332,10 +347,12 @@ export function GoodsReceived() {
     });
   };
 
-  const handleAddStorageTemperature = () => {
+  const handleAddStorageTemperature = async () => {
     const trimmed = newStorageTemperature.trim();
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
-    setStorageTemperatureOptions([...storageTemperatureOptions, trimmed]);
+    const nextOptions = [...storageTemperatureOptions, trimmed];
+    await saveTemperatureOptions.mutateAsync(nextOptions);
+    setStorageTemperatureOptions(nextOptions);
     setNewStorageTemperature("");
   };
 
@@ -380,7 +397,7 @@ export function GoodsReceived() {
     });
   };
 
-  const handleQualityCheckSubmit = (decision: "accept" | "reject") => {
+  const handleQualityCheckSubmit = async (decision: "accept" | "reject") => {
     if (!selectedItem) return;
 
     const totalItems = selectedItem.receivedItems?.length || 0;
@@ -449,7 +466,7 @@ export function GoodsReceived() {
       }
     }
 
-    const receivedItemsWithExpiry = selectedItem.receivedItems?.map((item, index) => ({
+    const receivedItemsWithExpiry: ReceivedItem[] | undefined = selectedItem.receivedItems?.map((item, index) => ({
       ...item,
       expiryDate: (Number(acceptedQuantities[index]) || 0) > 0 ? expiryDates[index] : item.expiryDate,
       storageTemperature: (Number(acceptedQuantities[index]) || 0) > 0 ? storageTemperatures[index] : item.storageTemperature,
@@ -473,9 +490,32 @@ export function GoodsReceived() {
           ? "rejected"
           : (Number(acceptedQuantities[index]) || 0) < item.quantity
           ? "partial"
-            : "accepted") as "accepted" | "partial" | "rejected",
+            : "accepted") as ReceivedItem["qualityStatus"],
     }));
     const payableTotal = decision === "reject" ? 0 : getPayableTotal(receivedItemsWithExpiry);
+    try {
+      await receiveOrder.mutateAsync({
+        id: selectedItem.poId,
+        notes: newNotes,
+        items: (receivedItemsWithExpiry ?? []).map((item) => {
+          if (!item.backendItemId) throw new Error(`Purchase order line is missing for ${item.productName}`);
+          return {
+          id: item.backendItemId,
+          receivedQty: item.acceptedQuantity ?? 0,
+          rejectedQty: item.rejectedQuantity ?? 0,
+          condition: item.qualityStatus,
+          notes: item.qualityRemarks || undefined,
+          expiryDate: item.acceptedQuantity && item.expiryDate
+            ? new Date(`${item.expiryDate}T00:00:00`).toISOString()
+            : undefined,
+          storageTemperature: item.acceptedQuantity ? item.storageTemperature || undefined : undefined,
+          };
+        }),
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to receive purchase order");
+      return;
+    }
 
     setReceivedGoods(receivedGoods.map(item =>
       item.id === selectedItem.id
@@ -483,15 +523,12 @@ export function GoodsReceived() {
         : item
     ));
 
-    const purchaseOrders = readLocalStorage<PurchaseOrder[]>("purchaseOrders.orders", []);
     const poStatus = newStatus === "verified" ? "received" : newStatus;
-    writeLocalStorage(
-      "purchaseOrders.orders",
+    setPurchaseOrders(
       purchaseOrders.map(order => order.id === selectedItem.poId ? { ...order, status: poStatus } : order)
     );
 
     if (decision === "accept") {
-      const products = readLocalStorage<InventoryProduct[]>("inventory.products", defaultInventoryProducts);
       const checkedReceivedItems = receivedItemsWithExpiry
         ?.filter((item) => (item.acceptedQuantity || 0) > 0)
         .map((item) => ({ ...item, quantity: item.acceptedQuantity || 0 })) || [];
@@ -551,7 +588,7 @@ export function GoodsReceived() {
         return created;
       });
 
-      writeLocalStorage("inventory.products", [...updateMatchedProducts, ...createdProducts]);
+      setProducts([...updateMatchedProducts, ...createdProducts]);
 
       const acceptedInventoryLinks = [
         ...matchedItems
@@ -560,9 +597,7 @@ export function GoodsReceived() {
         ...unmatchedItems.map((item, index) => ({ item, product: createdProducts[index] })),
       ];
 
-      const globalProducts = readLocalStorage<GlobalProduct[]>("purchaseOrders.globalProducts", []);
-      writeLocalStorage(
-        "purchaseOrders.globalProducts",
+      setGlobalProducts(
         globalProducts.map((product) => {
           const link = acceptedInventoryLinks.find(({ item }) =>
             item.productId === product.id ||
@@ -576,6 +611,13 @@ export function GoodsReceived() {
         })
       );
     }
+
+    await invalidateRestaurantData(
+      "goodsReceived.records",
+      "purchaseOrders.orders",
+      "inventory.products",
+      "purchaseOrders.globalProducts",
+    );
 
     setShowQualityCheckModal(false);
     setSelectedItem(null);
@@ -1196,7 +1238,7 @@ export function GoodsReceived() {
                             Payable Grand Total:
                           </td>
                           <td className="px-4 py-3 text-right text-xl font-bold text-primary">
-                            ₱{viewItem.totalValue.toFixed(2)}
+                            ₱{viewItem?.totalValue.toFixed(2)}
                           </td>
                         </tr>
                       </tfoot>
@@ -1206,7 +1248,7 @@ export function GoodsReceived() {
               )}
 
               {/* Quality Check Results */}
-              {false && viewItem.qualityCheck && (
+              {false && viewItem?.qualityCheck && (
                 <div className="border-t border-border pt-6">
                   <h3 className="text-lg font-semibold text-foreground mb-4">Quality Check Results</h3>
                   <div className="grid grid-cols-2 gap-4">
@@ -1217,7 +1259,7 @@ export function GoodsReceived() {
                       { key: "expiration", label: "Expiration Dates" },
                       { key: "packaging", label: "Packaging Integrity" },
                     ].map((criterion) => {
-                      const result = viewItem.qualityCheck?.[criterion.key as keyof typeof viewItem.qualityCheck];
+                      const result = viewItem?.qualityCheck?.[criterion.key as keyof NonNullable<typeof viewItem>["qualityCheck"]];
                       return (
                         <div key={criterion.key} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl">
                           <span className="text-sm text-foreground font-medium">{criterion.label}</span>

@@ -1,10 +1,14 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
-import { useLocalStorageState } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
+import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
 
 type Product = {
   id: number;
+  backendId?: string;
+  locationId?: string;
   name: string;
   sku: string;
   category: string;
@@ -32,9 +36,17 @@ export function Inventory() {
   const categoryHierarchy = getCategoryHierarchy();
   const storageTemperatureOptions = getStorageTemperatureOptions();
 
-  const [products, setProducts] = useLocalStorageState<Product[]>("inventory.products", defaultInventoryProducts);
-
-  const locations = ["Cold Storage A", "Cold Storage B", "Refrigerator 1", "Refrigerator 2", "Dry Storage", "Produce Section", "Bakery Shelf", "Freezer"];
+  const [products] = useRestaurantState<Product[]>("inventory.products", defaultInventoryProducts);
+  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
+  const locations = locationQuery.data ?? [];
+  const updateProduct = useRestaurantMutation(
+    ({ id, data }: { id: string; data: unknown }) => updateInventoryItem(id, data),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
+  const deleteProduct = useRestaurantMutation(
+    (id: string) => deleteInventoryItem(id),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
 
   const mainCategories = Object.keys(categoryHierarchy);
 
@@ -97,17 +109,37 @@ export function Inventory() {
     setEditSubCategory("");
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editingProduct && editMainCategory && editSubCategory) {
       const updatedProduct = {
         ...editingProduct,
         category: `${editMainCategory} > ${editSubCategory}`
       };
-      setProducts(products.map(p => p.id === editingProduct.id ? updatedProduct : p));
-      setShowEditModal(false);
-      setEditingProduct(null);
-      setEditMainCategory("");
-      setEditSubCategory("");
+      try {
+        await updateProduct.mutateAsync({
+          id: editingProduct.backendId ?? String(editingProduct.id),
+          data: {
+            name: updatedProduct.name,
+            sku: updatedProduct.sku,
+            category: updatedProduct.category,
+            quantity: updatedProduct.stock,
+            maxStock: updatedProduct.maxStock,
+            price: updatedProduct.price,
+            expiryDate: updatedProduct.expiry
+              ? new Date(`${updatedProduct.expiry}T00:00:00`).toISOString()
+              : undefined,
+            storageTemperature: updatedProduct.storageTemperature || undefined,
+            unit: updatedProduct.unit,
+            locationId: updatedProduct.locationId,
+          },
+        });
+        setShowEditModal(false);
+        setEditingProduct(null);
+        setEditMainCategory("");
+        setEditSubCategory("");
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to update inventory item");
+      }
     }
   };
 
@@ -119,23 +151,41 @@ export function Inventory() {
     setShowTransferModal(true);
   };
 
-  const handleSaveTransfer = () => {
+  const handleSaveTransfer = async () => {
     if (transferProduct && editMainCategory && editSubCategory) {
       const updatedProduct = {
         ...transferProduct,
         category: `${editMainCategory} > ${editSubCategory}`
       };
-      setProducts(products.map(p => p.id === transferProduct.id ? updatedProduct : p));
-      setShowTransferModal(false);
-      setTransferProduct(null);
-      setEditMainCategory("");
-      setEditSubCategory("");
+      const location = locations.find((item: any) => item.name === updatedProduct.location);
+      if (!location) {
+        alert("Select a valid backend location");
+        return;
+      }
+      try {
+        await updateProduct.mutateAsync({
+          id: transferProduct.backendId ?? String(transferProduct.id),
+          data: { category: updatedProduct.category, locationId: location.id },
+        });
+        setShowTransferModal(false);
+        setTransferProduct(null);
+        setEditMainCategory("");
+        setEditSubCategory("");
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to move inventory item");
+      }
     }
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     if (confirm("Are you sure you want to delete this item?")) {
-      setProducts(products.filter(p => p.id !== id));
+      const product = products.find((item) => item.id === id);
+      if (!product) return;
+      try {
+        await deleteProduct.mutateAsync(product.backendId ?? String(product.id));
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to delete inventory item");
+      }
     }
   };
 
@@ -511,8 +561,8 @@ export function Inventory() {
                     onChange={(e) => setEditingProduct({ ...editingProduct, location: e.target.value })}
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                   >
-                    {locations.map((loc) => (
-                      <option key={loc} value={loc}>{loc}</option>
+                    {locations.map((loc: any) => (
+                      <option key={loc.id} value={loc.name}>{loc.name}</option>
                     ))}
                   </select>
                 </div>
@@ -580,8 +630,8 @@ export function Inventory() {
                   onChange={(e) => setTransferProduct({ ...transferProduct, location: e.target.value })}
                   className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                 >
-                  {locations.map((loc) => (
-                    <option key={loc} value={loc}>{loc}</option>
+                  {locations.map((loc: any) => (
+                    <option key={loc.id} value={loc.name}>{loc.name}</option>
                   ))}
                 </select>
               </div>

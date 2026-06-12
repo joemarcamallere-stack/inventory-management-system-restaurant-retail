@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
 import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { readLocalStorage, useLocalStorageState } from "../lib/localStorage";
-import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory } from "../lib/inventoryLogic";
+import { useRestaurantState } from "../lib/restaurantData";
+import { approvePurchaseOrder, rejectPurchaseOrder } from "../../app/api/client";
+import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
 
 type PendingOrder = {
   id: string;
@@ -29,8 +29,10 @@ type GoodsRecordSummary = {
   status: string;
 };
 
+const goToInventory = () =>
+  window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
+
 export function Dashboard() {
-  const navigate = useNavigate();
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
@@ -47,7 +49,7 @@ export function Dashboard() {
     setUserRole(role);
   }, []);
 
-  const products = getInventoryProducts();
+  const [products] = useRestaurantState<InventoryProduct[]>("inventory.products", getInventoryProducts());
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);
     if (!acc[main]) acc[main] = [];
@@ -66,20 +68,20 @@ export function Dashboard() {
     setSelectedSubCategory("all");
   };
 
-  const [pendingOrders, setPendingOrders] = useLocalStorageState<PendingOrder[]>("dashboard.pendingOrders", []);
+  const [pendingOrders, setPendingOrders] = useRestaurantState<PendingOrder[]>("dashboard.pendingOrders", []);
 
-  const handleApproveOrder = (orderId: string) => {
+  const handleApproveOrder = async (orderId: string) => {
+    await approvePurchaseOrder(orderId);
     setPendingOrders(pendingOrders.filter(order => order.id !== orderId));
     setShowApprovalModal(false);
     setSelectedOrder(null);
-    // In a real app, this would send an API request to approve the order
   };
 
-  const handleRejectOrder = (orderId: string) => {
+  const handleRejectOrder = async (orderId: string) => {
+    await rejectPurchaseOrder(orderId, "Rejected from restaurant dashboard");
     setPendingOrders(pendingOrders.filter(order => order.id !== orderId));
     setShowApprovalModal(false);
     setSelectedOrder(null);
-    // In a real app, this would send an API request to reject the order
   };
 
   const handleViewOrder = (order: PendingOrder) => {
@@ -122,8 +124,8 @@ export function Dashboard() {
     },
   ];
 
-  const purchaseOrders = readLocalStorage<PurchaseOrderSummary[]>("purchaseOrders.orders", []);
-  const goodsRecords = readLocalStorage<GoodsRecordSummary[]>("goodsReceived.records", []);
+  const [purchaseOrders] = useRestaurantState<PurchaseOrderSummary[]>("purchaseOrders.orders", []);
+  const [goodsRecords] = useRestaurantState<GoodsRecordSummary[]>("goodsReceived.records", []);
   const receivedPurchaseOrders = purchaseOrders.filter(order => order.status === "received");
   const receiptTrendData = receivedPurchaseOrders.map((order) => ({
     month: order.date || order.id,
@@ -325,7 +327,7 @@ export function Dashboard() {
                 dataKey="value"
                 nameKey="category"
                 isAnimationActive={false}
-                onClick={(data) => navigate(`/category?category=${encodeURIComponent(data.category)}&sub=all`)}
+                onClick={() => goToInventory()}
                 cursor="pointer"
               >
                 {aggregatedData.map((entry, index) => (
@@ -349,7 +351,7 @@ export function Dashboard() {
               <div
                 key={item.id}
                 className="flex items-center justify-between text-sm p-0.5 rounded hover:bg-muted/50 cursor-pointer transition-colors"
-                onClick={() => navigate(`/category?category=${encodeURIComponent(item.category)}&sub=all`)}
+                onClick={() => goToInventory()}
               >
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[index] }}></div>

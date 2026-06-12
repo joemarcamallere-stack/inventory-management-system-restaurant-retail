@@ -59,14 +59,29 @@ model Business {
   kitchenOrders KitchenOrder[]
   suppliers      Supplier[]
   purchaseOrders PurchaseOrder[]
+  goodsReceipts  GoodsReceipt[]
   transfers      Transfer[]
   sales          Sale[]
   bundles        BundlePackage[]
   diningTables   DiningTable[]
   notifications  Notification[]
   categories     Category[]
+  restaurantSettings RestaurantSetting[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
+}
+
+model RestaurantSetting {
+  id         String   @id @default(uuid())
+  key        String
+  value      Json
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([businessId, key])
+  @@index([businessId])
 }
 
 model User {
@@ -82,6 +97,7 @@ model User {
   kitchenOrders KitchenOrder[]
   purchaseOrders         PurchaseOrder[]  @relation("POCreatedBy")
   receivedPurchaseOrders PurchaseOrder[]  @relation("POReceivedBy")
+  goodsReceipts          GoodsReceipt[]
   transfers              Transfer[]
   sales                  Sale[]
   createdBundles         BundlePackage[]  @relation("BundleCreatedBy")
@@ -203,6 +219,7 @@ model InventoryItem {
   recipeIngredients RecipeIngredient[]
   menuRecipes Recipe[] @relation("RecipeMenuItem")
   purchaseOrderItems PurchaseOrderItem[]
+  goodsReceiptItems  GoodsReceiptItem[]
   transferItems      TransferItem[]
   saleItems          SaleItem[]
   bundleItems        BundleItem[]
@@ -378,7 +395,9 @@ enum PurchaseOrderStatus {
   DRAFT
   SUBMITTED
   APPROVED
+  PARTIALLY_RECEIVED
   RECEIVED
+  REJECTED
   CANCELLED
 }
 
@@ -391,6 +410,9 @@ model PurchaseOrder {
   notes         String?
   paymentMethod String?
   paymentTerms  String?
+  expectedDelivery DateTime?
+  rejectionReason String?
+  rejectedAt      DateTime?
   totalAmount   Float               @default(0)
   businessId    String
   business      Business            @relation(fields: [businessId], references: [id])
@@ -400,6 +422,7 @@ model PurchaseOrder {
   receivedBy    User?               @relation("POReceivedBy", fields: [receivedById], references: [id])
   receivedAt    DateTime?
   items         PurchaseOrderItem[]
+  goodsReceipts GoodsReceipt[]
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
@@ -422,8 +445,46 @@ model PurchaseOrderItem {
   totalPrice      Float
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
+  receiptItems    GoodsReceiptItem[]
 
   @@index([purchaseOrderId])
+}
+
+model GoodsReceipt {
+  id              String             @id @default(uuid())
+  receiptNumber   String
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id])
+  receivedById    String?
+  receivedBy      User?              @relation(fields: [receivedById], references: [id])
+  notes           String?
+  businessId      String
+  business        Business           @relation(fields: [businessId], references: [id])
+  items           GoodsReceiptItem[]
+  createdAt       DateTime           @default(now())
+
+  @@unique([businessId, receiptNumber])
+  @@index([businessId, createdAt])
+  @@index([purchaseOrderId])
+}
+
+model GoodsReceiptItem {
+  id                  String            @id @default(uuid())
+  goodsReceiptId      String
+  goodsReceipt        GoodsReceipt      @relation(fields: [goodsReceiptId], references: [id], onDelete: Cascade)
+  purchaseOrderItemId String
+  purchaseOrderItem   PurchaseOrderItem @relation(fields: [purchaseOrderItemId], references: [id])
+  inventoryItemId     String?
+  inventoryItem       InventoryItem?    @relation(fields: [inventoryItemId], references: [id])
+  receivedQty         Float
+  rejectedQty         Float             @default(0)
+  condition           String?
+  notes               String?
+  createdAt           DateTime          @default(now())
+
+  @@index([goodsReceiptId])
+  @@index([purchaseOrderItemId])
+  @@index([inventoryItemId])
 }
 
 // ─── Transfers ───────────────────────────────────────────────────────────────

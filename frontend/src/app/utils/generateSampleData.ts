@@ -28,7 +28,7 @@ export interface PurchaseOrder {
   orderNumber: string;
   supplier: string;
   date: string;
-  status: 'Pending' | 'Approved' | 'Received' | 'Cancelled' | 'Rejected';
+  status: 'Pending' | 'Approved' | 'Received' | 'Rejected' | 'Cancelled';
   items: { name: string; quantity: number; price: number }[];
   totalAmount: number;
   paymentMethod?: 'Cash' | 'Bank Transfer' | 'Check' | 'Credit Terms';
@@ -718,8 +718,10 @@ export interface ProductReceived {
   id: string;
   receiptNumber: string;
   poNumber: string;
+  poId?: string;
   supplier: string;
   dateReceived: string;
+  receivedDate?: string;
   items: {
     name: string;
     orderedQty: number;
@@ -734,7 +736,7 @@ export interface ProductReceived {
     price: number;
   }[];
   receivedBy: string;
-  status: 'Pending Inspection' | 'Partially Accepted' | 'Fully Accepted';
+  status: 'Pending Inspection' | 'Partially Accepted' | 'Fully Accepted' | 'Completed';
   totalOrdered: number;
   totalAccepted: number;
   totalRejected: number;

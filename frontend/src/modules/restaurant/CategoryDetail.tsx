@@ -12,6 +12,7 @@ type CategoryItem = {
   price: number;
   expiry: string;
   location: string;
+  unit?: string;
 };
 
 export function CategoryDetail() {

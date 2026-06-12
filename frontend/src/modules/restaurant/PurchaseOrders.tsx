@@ -1,8 +1,19 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
-import { readLocalStorage, useLocalStorageState, writeLocalStorage } from "../lib/localStorage";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
+import {
+  approvePurchaseOrder,
+  cancelPurchaseOrder,
+  createInventoryItem,
+  createPurchaseOrder,
+  createSupplier,
+  getLocations,
+  rejectPurchaseOrder,
+  submitPurchaseOrder,
+  updatePurchaseOrder,
+} from "../../app/api/client";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
@@ -48,6 +59,7 @@ type OrderItem = {
 
 type Order = {
   id: string;
+  backendId?: string;
   supplier: string;
   date: string;
   items: number;
@@ -68,6 +80,7 @@ type OrderItemInput = PurchaseOrderItemInputValue;
 
 type GlobalProduct = {
   id: string;
+  backendId?: string;
   inventoryId?: number;
   name: string;
   sku?: string;
@@ -88,6 +101,8 @@ type Product = {
 };
 
 type Supplier = {
+  id?: string;
+  backendId?: string;
   name: string;
   contact: string;
   email: string;
@@ -185,13 +200,13 @@ export function PurchaseOrders() {
   });
 
   // Global products storage
-  const [globalProducts, setGlobalProducts] = useLocalStorageState<GlobalProduct[]>(
+  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>(
     "purchaseOrders.globalProducts",
     []
   );
 
-  const [orders, setOrders] = useLocalStorageState<Order[]>("purchaseOrders.orders", []);
-  const [users] = useLocalStorageState<UserSummary[]>("users.records", []);
+  const [orders] = useRestaurantState<Order[]>("purchaseOrders.orders", []);
+  const [users] = useRestaurantState<UserSummary[]>("users.records", []);
 
   const statuses = ["all", "pending", "approved", "received", "partial", "rejected", "cancelled"];
 
@@ -301,7 +316,84 @@ export function PurchaseOrders() {
     },
   ];
 
-  const [suppliers, setSuppliers] = useLocalStorageState<Supplier[]>("purchaseOrders.suppliers", []);
+  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
+  const saveOrder = useRestaurantMutation(
+    async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
+      const supplier = suppliers.find((item) => item.name === order.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) throw new Error("Select a supplier saved in the database");
+
+      const locations = await getLocations();
+      if (!locations[0]) throw new Error("Create a location before ordering a new product");
+
+      const apiItems = [];
+      for (const line of order.items) {
+        const product = globalProducts.find((item) =>
+          item.id === line.productId || item.inventoryId === line.inventoryId
+        );
+        let inventoryItemId = product?.backendId
+          ?? (product?.id && !product.id.startsWith("gp-") && !product.id.startsWith("inv-") ? product.id : undefined);
+
+        if (!inventoryItemId) {
+          const created = await createInventoryItem({
+            name: line.productName,
+            itemType: "INGREDIENT",
+            sku: line.sku || undefined,
+            category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
+            quantity: 0,
+            price: line.unitPrice,
+            unit: line.unit || "pcs",
+            minStock: 0,
+            maxStock: 0,
+            reorderPoint: 0,
+            locationId: locations[0].id,
+          });
+          inventoryItemId = created.id;
+        }
+
+        apiItems.push({
+          inventoryItemId,
+          name: line.productName,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+        });
+      }
+
+      const payload = {
+        supplierId,
+        expectedDelivery: order.expectedDelivery
+          ? new Date(`${order.expectedDelivery}T00:00:00`).toISOString()
+          : undefined,
+        items: apiItems,
+      };
+      if (editingId) return updatePurchaseOrder(editingId, payload);
+      const created = await createPurchaseOrder(payload);
+      return submitPurchaseOrder(created.id);
+    },
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "purchaseOrders.globalProducts"],
+  );
+  const approveOrder = useRestaurantMutation(
+    (id: string) => approvePurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "goodsReceived.records"],
+  );
+  const rejectOrder = useRestaurantMutation(
+    ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const cancelOrder = useRestaurantMutation(
+    (id: string) => cancelPurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const addSupplier = useRestaurantMutation(
+    (supplier: Supplier) => createSupplier({
+      name: supplier.name,
+      contactPerson: supplier.contact,
+      email: supplier.email,
+      phone: supplier.phone,
+      address: supplier.address,
+    }),
+    ["purchaseOrders.suppliers"],
+  );
 
   // Get available products from selected supplier
   const availableProducts = newOrder.supplier
@@ -397,9 +489,9 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       });
       productId = created.id;
       inventoryId = created.inventoryId;
-      category = created.category;
-      subCategory = created.subCategory;
-      unit = created.unit;
+      category = created.category || "Other";
+      subCategory = created.subCategory || "General";
+      unit = created.unit || "pcs";
     }
 
     const newItem: OrderItem = {
@@ -426,7 +518,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     return orderItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
   };
 
-  const handleCreateOrder = (e: React.FormEvent) => {
+  const handleCreateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (orderItems.length === 0) {
@@ -434,30 +526,17 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       return;
     }
 
-    const orderNumber = orders.length + 1;
-    const newOrderId = `PO-2024-${String(orderNumber).padStart(3, '0')}`;
-    const creator = getCurrentUser(users, userRole);
-
-    const orderToAdd: Order = {
-      id: newOrderId,
-      supplier: newOrder.supplier,
-      date: new Date().toISOString().split('T')[0],
-      items: orderItems.length,
-      orderItems: orderItems,
-      total: calculateTotal(),
-      status: "pending",
-      expectedDelivery: newOrder.expectedDelivery,
-      createdByUserId: creator.id,
-      createdBy: creator.email,
-      createdByRole: creator.role,
-      createdAt: new Date().toISOString(),
-    };
-
-    setOrders([orderToAdd, ...orders]);
-    setShowCreateModal(false);
-    setNewOrder({ supplier: "", expectedDelivery: "" });
-    setOrderItems([]);
-    setCurrentItem(blankOrderItemInput());
+    try {
+      await saveOrder.mutateAsync({
+        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+      });
+      setShowCreateModal(false);
+      setNewOrder({ supplier: "", expectedDelivery: "" });
+      setOrderItems([]);
+      setCurrentItem(blankOrderItemInput());
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create purchase order");
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -519,33 +598,12 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     document.body.removeChild(link);
   };
 
-  const createGoodsReceivedRecord = (order: Order) => {
-    const goodsRecords = readLocalStorage<GoodsItem[]>("goodsReceived.records", []);
-    const alreadyExists = goodsRecords.some(record => record.poId === order.id);
-
-    if (alreadyExists) return;
-
-    const nextNumber = goodsRecords.length + 1;
-    const goodsRecord: GoodsItem = {
-      id: `GR-${new Date().getFullYear()}-${String(nextNumber).padStart(3, "0")}`,
-      poId: order.id,
-      supplier: order.supplier,
-      receivedDate: order.expectedDelivery || new Date().toISOString().split("T")[0],
-      items: order.items,
-      receivedItems: order.orderItems.map(item => ({ ...item, condition: "Pending Check" })),
-      totalValue: order.total,
-      receivedBy: "Receiving Team",
-      status: "pending",
-      notes: "Approved PO. Awaiting goods receipt and quality check.",
-    };
-
-    writeLocalStorage("goodsReceived.records", [goodsRecord, ...goodsRecords]);
-  };
-
-  const handleApproveOrder = (order: Order) => {
-    const approvedOrder = { ...order, status: "approved" };
-    setOrders(orders.map(currentOrder => currentOrder.id === order.id ? approvedOrder : currentOrder));
-    createGoodsReceivedRecord(approvedOrder);
+  const handleApproveOrder = async (order: Order) => {
+    try {
+      await approveOrder.mutateAsync(order.backendId ?? order.id);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to approve purchase order");
+    }
   };
 
   const openRejectOrderModal = (order: Order) => {
@@ -554,7 +612,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     setShowRejectModal(true);
   };
 
-  const handleRejectOrder = () => {
+  const handleRejectOrder = async () => {
     const orderToReject = rejectingOrder || approvingOrder;
     if (!orderToReject) return;
 
@@ -564,23 +622,26 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       return;
     }
 
-    const rejectedOrder: Order = {
-      ...orderToReject,
-      status: "rejected",
-      rejectionNote: trimmedNote,
-      rejectedBy: localStorage.getItem("userEmail") || "Admin",
-      rejectedAt: new Date().toISOString(),
-    };
-
-    setOrders(orders.map(order => order.id === orderToReject.id ? rejectedOrder : order));
-    setShowRejectModal(false);
-    setRejectingOrder(null);
-    setApprovingOrder(null);
-    setRejectionNote("");
+    try {
+      await rejectOrder.mutateAsync({
+        id: orderToReject.backendId ?? orderToReject.id,
+        reason: trimmedNote,
+      });
+      setShowRejectModal(false);
+      setRejectingOrder(null);
+      setApprovingOrder(null);
+      setRejectionNote("");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to reject purchase order");
+    }
   };
 
-  const handleCancelOrder = (orderId: string) => {
-    setOrders(orders.map(order => order.id === orderId ? { ...order, status: "cancelled" } : order));
+  const handleCancelOrder = async (orderId: string) => {
+    try {
+      await cancelOrder.mutateAsync(orderId);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to cancel purchase order");
+    }
   };
 
   const handleEditOrder = (order: Order) => {
@@ -593,7 +654,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     setShowEditModal(true);
   };
 
-  const handleUpdateOrder = (e: React.FormEvent) => {
+  const handleUpdateOrder = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (orderItems.length === 0) {
@@ -603,27 +664,22 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
     if (!editingOrder) return;
 
-    const updatedOrder: Order = {
-      ...editingOrder,
-      supplier: newOrder.supplier,
-      expectedDelivery: newOrder.expectedDelivery,
-      items: orderItems.length,
-      orderItems: orderItems,
-      total: calculateTotal(),
-    };
-
-    setOrders(orders.map(order =>
-      order.id === editingOrder.id ? updatedOrder : order
-    ));
-
-    setShowEditModal(false);
-    setEditingOrder(null);
-    setNewOrder({ supplier: "", expectedDelivery: "" });
-    setOrderItems([]);
-    setCurrentItem(blankOrderItemInput());
+    try {
+      await saveOrder.mutateAsync({
+        editingId: editingOrder.backendId ?? editingOrder.id,
+        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+      });
+      setShowEditModal(false);
+      setEditingOrder(null);
+      setNewOrder({ supplier: "", expectedDelivery: "" });
+      setOrderItems([]);
+      setCurrentItem(blankOrderItemInput());
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update purchase order");
+    }
   };
 
-  const handleAddSupplier = (e: React.FormEvent) => {
+  const handleAddSupplier = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const missingSupplierFields = [
@@ -648,16 +704,20 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       products: [], // New suppliers start with no products
     };
 
-    setSuppliers([...suppliers, supplierToAdd]);
-    setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
-    setNewSupplier({
-      name: "",
-      contact: "",
-      email: "",
-      phone: "",
-      address: "",
-    });
-    setShowSupplierModal(false);
+    try {
+      await addSupplier.mutateAsync(supplierToAdd);
+      setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
+      setNewSupplier({
+        name: "",
+        contact: "",
+        email: "",
+        phone: "",
+        address: "",
+      });
+      setShowSupplierModal(false);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create supplier");
+    }
   };
 
   const handleSupplierInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -1665,11 +1725,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
                         <div className="flex gap-3 mt-4">
                           <button
-                            onClick={() => {
-                              setOrders(orders.map(o =>
-                                o.id === order.id ? { ...o, status: "approved" } : o
-                              ));
-                            }}
+                            onClick={() => void handleApproveOrder(order)}
                             className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
                           >
                             <CheckCircle className="w-5 h-5" />

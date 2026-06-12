@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Download, Calendar, TrendingUp, Package, PhilippinePeso, ShoppingCart, Filter } from "lucide-react";
-import { readLocalStorage } from "../lib/localStorage";
+import { useRestaurantState } from "../lib/restaurantData";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
 
+const goToInventory = () =>
+  window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
+
 export function Reports() {
-  const navigate = useNavigate();
   const [dateRange, setDateRange] = useState("30days");
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
@@ -16,8 +17,8 @@ export function Reports() {
     setChartKey(prev => prev + 1);
   }, [selectedMainCategory, selectedSubCategory]);
 
-  const products = getInventoryProducts();
-  const purchaseOrders = readLocalStorage<{ total: number; status?: string; date?: string }[]>("purchaseOrders.orders", []);
+  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
+  const [purchaseOrders] = useRestaurantState<{ total: number; status?: string; date?: string }[]>("purchaseOrders.orders", []);
   const inventoryValue = getInventoryValue(products);
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);
@@ -265,7 +266,7 @@ export function Reports() {
                   return `${shortName} ${percentage}%`;
                 }}
                 isAnimationActive={false}
-                onClick={(data) => navigate(`/category?category=${encodeURIComponent(data.category)}&sub=all`)}
+                onClick={() => goToInventory()}
                 cursor="pointer"
               >
                 {categoryPerformance.map((entry, index) => (
