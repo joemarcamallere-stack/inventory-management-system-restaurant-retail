@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
 import {
   getPurchaseOrders,
@@ -14,6 +14,11 @@ import {
 } from '../../app/api/client';
 import { categorySubcategories } from '../../app/utils/constants';
 import { retailQueryKeys } from '../lib/retailData';
+import {
+  useInventoryQuery,
+  usePurchaseOrdersQuery,
+  useSuppliersQuery,
+} from '../lib/domainQueries';
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
@@ -41,18 +46,9 @@ export default function PurchaseOrdersView({
   currentUser: { email: string; role: string } | null;
 }) {
   const queryClient = useQueryClient();
-  const ordersQuery = useQuery({
-    queryKey: retailQueryKeys.purchaseOrders,
-    queryFn: () => getPurchaseOrders(),
-  });
-  const suppliersQuery = useQuery({
-    queryKey: retailQueryKeys.suppliers,
-    queryFn: () => getSuppliers(),
-  });
-  const inventoryQuery = useQuery({
-    queryKey: retailQueryKeys.inventory,
-    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
-  });
+  const ordersQuery = usePurchaseOrdersQuery();
+  const suppliersQuery = useSuppliersQuery();
+  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
   const orders = ordersQuery.data ?? [];
   const suppliers = suppliersQuery.data ?? [];
   const inventory = inventoryQuery.data ?? [];

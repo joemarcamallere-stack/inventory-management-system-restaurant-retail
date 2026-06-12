@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw } from 'lucide-react';
 import { getInventory, getSales, createSale, refundSale, getLocations } from '../../app/api/client';
 import { retailQueryKeys } from '../lib/retailData';
+import { useInventoryQuery, useLocationsQuery, useSalesQuery } from '../lib/domainQueries';
 
 export default function POSView({
   currentUser,
@@ -10,18 +11,9 @@ export default function POSView({
   currentUser: { email: string; role: string } | null;
 }) {
   const queryClient = useQueryClient();
-  const inventoryQuery = useQuery({
-    queryKey: retailQueryKeys.inventory,
-    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
-  });
-  const salesQuery = useQuery({
-    queryKey: retailQueryKeys.sales,
-    queryFn: () => getSales(),
-  });
-  const locationsQuery = useQuery({
-    queryKey: retailQueryKeys.locations,
-    queryFn: () => getLocations(),
-  });
+  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
+  const salesQuery = useSalesQuery();
+  const locationsQuery = useLocationsQuery();
   const inventory = inventoryQuery.data ?? [];
   const sales = salesQuery.data ?? [];
   const locations = locationsQuery.data ?? [];

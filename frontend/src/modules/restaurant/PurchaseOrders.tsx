@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
 import {
@@ -14,6 +13,13 @@ import {
   submitPurchaseOrder,
   updatePurchaseOrder,
 } from "../../app/api/client";
+import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
+import {
+  useRestaurantInventoryQuery,
+  useRestaurantPurchaseOrdersQuery,
+  useRestaurantSuppliersQuery,
+  useRestaurantUsersQuery,
+} from "../lib/restaurantQueries";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
@@ -200,14 +206,27 @@ export function PurchaseOrders() {
     address: "",
   });
 
-  // Global products storage
-  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>(
-    "purchaseOrders.globalProducts",
-    []
+  const inventoryQuery = useRestaurantInventoryQuery<GlobalProduct[]>((products) =>
+    products.map((product) => {
+      const { main, sub } = splitCategory(product.category);
+      return {
+        id: product.backendId ?? String(product.id),
+        backendId: product.backendId,
+        inventoryId: product.id,
+        name: product.name,
+        sku: product.sku,
+        category: main,
+        subCategory: sub,
+        unit: product.unit,
+      };
+    }),
   );
-
-  const [orders] = useRestaurantState<Order[]>("purchaseOrders.orders", []);
-  const [users] = useRestaurantState<UserSummary[]>("users.records", []);
+  const [draftProducts, setDraftProducts] = useState<GlobalProduct[]>([]);
+  const globalProducts = [...(inventoryQuery.data ?? []), ...draftProducts];
+  const ordersQuery = useRestaurantPurchaseOrdersQuery<Order[]>();
+  const orders = ordersQuery.data ?? [];
+  const usersQuery = useRestaurantUsersQuery(userRole === "admin");
+  const users = (usersQuery.data ?? []) as UserSummary[];
   const canApprovePurchaseOrders = ["admin", "manager"].includes(userRole);
   const pendingApprovalOrders = orders.filter(
     (order) => order.backendStatus === "SUBMITTED" ||
@@ -322,8 +341,12 @@ export function PurchaseOrders() {
     },
   ];
 
-  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
-  const saveOrder = useRestaurantMutation(
+  const suppliersQuery = useRestaurantSuppliersQuery();
+  const [supplierOverrides, setSupplierOverrides] = useState<Supplier[]>([]);
+  const suppliers = (suppliersQuery.data ?? []).map((supplier) =>
+    supplierOverrides.find((override) => override.id === supplier.id) ?? supplier,
+  ) as Supplier[];
+  const saveOrder = useDomainMutation(
     async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
       const supplier = suppliers.find((item) => item.name === order.supplier);
       const supplierId = supplier?.backendId ?? supplier?.id;
@@ -376,21 +399,21 @@ export function PurchaseOrders() {
       const created = await createPurchaseOrder(payload);
       return submitPurchaseOrder(created.id);
     },
-    ["purchaseOrders.orders", "dashboard.pendingOrders", "purchaseOrders.globalProducts"],
+    [domainQueryKeys.purchaseOrders, domainQueryKeys.inventory],
   );
-  const approveOrder = useRestaurantMutation(
+  const approveOrder = useDomainMutation(
     (id: string) => approvePurchaseOrder(id),
-    ["purchaseOrders.orders", "dashboard.pendingOrders", "goodsReceived.records"],
+    [domainQueryKeys.purchaseOrders, domainQueryKeys.goodsReceipts],
   );
-  const rejectOrder = useRestaurantMutation(
+  const rejectOrder = useDomainMutation(
     ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
-    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+    [domainQueryKeys.purchaseOrders],
   );
-  const cancelOrder = useRestaurantMutation(
+  const cancelOrder = useDomainMutation(
     (id: string) => cancelPurchaseOrder(id),
-    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+    [domainQueryKeys.purchaseOrders],
   );
-  const addSupplier = useRestaurantMutation(
+  const addSupplier = useDomainMutation(
     (supplier: Supplier) => createSupplier({
       name: supplier.name,
       contactPerson: supplier.contact,
@@ -398,7 +421,7 @@ export function PurchaseOrders() {
       phone: supplier.phone,
       address: supplier.address,
     }),
-    ["purchaseOrders.suppliers"],
+    [domainQueryKeys.suppliers],
   );
 
   // Get available products from selected supplier
@@ -455,7 +478,7 @@ export function PurchaseOrders() {
       unit: payload.unit || "pcs",
     };
 
-    setGlobalProducts([...globalProducts, newProduct]);
+    setDraftProducts([...draftProducts, newProduct]);
 
     if (newOrder.supplier) {
       const supplier = suppliers.find(s => s.name === newOrder.supplier);
@@ -467,7 +490,10 @@ export function PurchaseOrders() {
             { name: normalized, price: parseFloat(currentItem.unitPrice) || 0 },
           ],
         };
-        setSuppliers(suppliers.map(s => (s.name === newOrder.supplier ? updatedSupplier : s)));
+        setSupplierOverrides([
+          ...supplierOverrides.filter((item) => item.id !== updatedSupplier.id),
+          updatedSupplier,
+        ]);
       }
     }
 

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
+import { deleteInventoryItem, updateInventoryItem } from "../../app/api/client";
+import { domainQueryKeys, useDomainMutation, useLocationsQuery } from "../lib/domainQueries";
+import { useRestaurantInventoryQuery } from "../lib/restaurantQueries";
 
 type Product = {
   id: number;
@@ -36,16 +36,17 @@ export function Inventory() {
   const categoryHierarchy = getCategoryHierarchy();
   const storageTemperatureOptions = getStorageTemperatureOptions();
 
-  const [products] = useRestaurantState<Product[]>("inventory.products", defaultInventoryProducts);
-  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
+  const productsQuery = useRestaurantInventoryQuery<Product[]>();
+  const products = productsQuery.data ?? defaultInventoryProducts;
+  const locationQuery = useLocationsQuery();
   const locations = locationQuery.data ?? [];
-  const updateProduct = useRestaurantMutation(
+  const updateProduct = useDomainMutation(
     ({ id, data }: { id: string; data: unknown }) => updateInventoryItem(id, data),
-    ["inventory.products", "purchaseOrders.globalProducts"],
+    [domainQueryKeys.inventory],
   );
-  const deleteProduct = useRestaurantMutation(
+  const deleteProduct = useDomainMutation(
     (id: string) => deleteInventoryItem(id),
-    ["inventory.products", "purchaseOrders.globalProducts"],
+    [domainQueryKeys.inventory],
   );
 
   const mainCategories = Object.keys(categoryHierarchy);

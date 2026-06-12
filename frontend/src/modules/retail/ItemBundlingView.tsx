@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
@@ -16,6 +16,7 @@ import type {
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
 import { retailQueryKeys } from '../lib/retailData';
+import { useBundlesQuery, useInventoryQuery } from '../lib/domainQueries';
 
 export function ItemBundlingView({
   currentUser
@@ -23,14 +24,8 @@ export function ItemBundlingView({
   currentUser: { email: string; role: string } | null;
 }) {
   const queryClient = useQueryClient();
-  const bundlesQuery = useQuery({
-    queryKey: retailQueryKeys.bundles,
-    queryFn: () => getBundles(),
-  });
-  const inventoryQuery = useQuery({
-    queryKey: retailQueryKeys.inventory,
-    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
-  });
+  const bundlesQuery = useBundlesQuery();
+  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
   const bundles = bundlesQuery.data ?? [];
   const inventory = inventoryQuery.data ?? [];
   const loading = bundlesQuery.isLoading || inventoryQuery.isLoading;

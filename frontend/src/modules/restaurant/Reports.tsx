@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { Download, Calendar, TrendingUp, Package, PhilippinePeso, ShoppingCart, Filter } from "lucide-react";
-import { useRestaurantState } from "../lib/restaurantData";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
+import { useRestaurantInventoryQuery, useRestaurantPurchaseOrdersQuery } from "../lib/restaurantQueries";
 
 const goToInventory = () =>
   window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
@@ -17,8 +17,10 @@ export function Reports() {
     setChartKey(prev => prev + 1);
   }, [selectedMainCategory, selectedSubCategory]);
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [purchaseOrders] = useRestaurantState<{ total: number; status?: string; date?: string }[]>("purchaseOrders.orders", []);
+  const productsQuery = useRestaurantInventoryQuery();
+  const products = productsQuery.data ?? getInventoryProducts();
+  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<{ total: number; status?: string; date?: string }[]>();
+  const purchaseOrders = purchaseOrdersQuery.data ?? [];
   const inventoryValue = getInventoryValue(products);
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);

@@ -1,8 +1,14 @@
 import { useState } from "react";
 import { Apple, PhilippinePeso, Hash, Tag, Folder, FileText, Save, X, Calendar, Plus, FolderPlus } from "lucide-react";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import { createInventoryItem, getLocations, upsertRestaurantSetting } from "../../app/api/client";
+import { createInventoryItem, upsertRestaurantSetting } from "../../app/api/client";
+import {
+  domainQueryKeys,
+  useDomainMutation,
+  useLocationsQuery,
+  useRestaurantSettingsQuery,
+} from "../lib/domainQueries";
+import { useRestaurantInventoryQuery, useRestaurantSuppliersQuery } from "../lib/restaurantQueries";
 
 type StoredProduct = {
   id: number;
@@ -54,23 +60,25 @@ export function AddProduct() {
     unit: "",
   });
 
-  const [products] = useRestaurantState<StoredProduct[]>(
-    "inventory.products",
-    defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" })),
-  );
-  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
-    "inventory.categoryHierarchy",
-    getCategoryHierarchy(),
-  );
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
-  const [storedSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
+  const productsQuery = useRestaurantInventoryQuery<StoredProduct[]>();
+  const products = productsQuery.data
+    ?? defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" }));
+  const settingsQuery = useRestaurantSettingsQuery();
+  const savedCategoryHierarchy = settingsQuery.data
+    ?.find((setting) => setting.key === "CATEGORY_HIERARCHY")?.value as { [key: string]: string[] } | undefined;
+  const savedTemperatureOptions = settingsQuery.data
+    ?.find((setting) => setting.key === "STORAGE_TEMPERATURE_OPTIONS")?.value as string[] | undefined;
+  const [categoryOverride, setCategoryOverride] = useState<{ [key: string]: string[] }>();
+  const [temperatureOverride, setTemperatureOverride] = useState<string[]>();
+  const categoryHierarchy = categoryOverride ?? savedCategoryHierarchy ?? getCategoryHierarchy();
+  const storageTemperatureOptions = temperatureOverride ?? savedTemperatureOptions ?? getStorageTemperatureOptions();
+  const suppliersQuery = useRestaurantSuppliersQuery();
+  const storedSuppliers = (suppliersQuery.data ?? []) as Supplier[];
+  const locationsQuery = useLocationsQuery();
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
-  const createProduct = useRestaurantMutation(
+  const createProduct = useDomainMutation(
     async (product: StoredProduct) => {
-      const locations = await getLocations();
+      const locations = locationsQuery.data ?? [];
       if (!locations[0]) throw new Error("Create a location before adding inventory");
       return createInventoryItem({
         name: product.name,
@@ -88,12 +96,12 @@ export function AddProduct() {
         locationId: locations[0].id,
       });
     },
-    ["inventory.products", "purchaseOrders.globalProducts"],
+    [domainQueryKeys.inventory],
   );
-  const saveSetting = useRestaurantMutation(
+  const saveSetting = useDomainMutation(
     ({ key, value }: { key: "CATEGORY_HIERARCHY" | "STORAGE_TEMPERATURE_OPTIONS"; value: unknown }) =>
       upsertRestaurantSetting(key, value),
-    ["inventory.categoryHierarchy", "inventory.storageTemperatureOptions"],
+    [domainQueryKeys.restaurantSettings],
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -147,7 +155,7 @@ export function AddProduct() {
         [newMainCategory.trim()]: []
       };
       await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
-      setCategoryHierarchy(nextHierarchy);
+      setCategoryOverride(nextHierarchy);
       setNewMainCategory("");
       setShowCategoryModal(false);
     }
@@ -163,7 +171,7 @@ export function AddProduct() {
         ]
       };
       await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
-      setCategoryHierarchy(nextHierarchy);
+      setCategoryOverride(nextHierarchy);
       setNewSubCategory("");
       setCategoryForSubCategory("");
       setShowCategoryModal(false);
@@ -175,7 +183,7 @@ export function AddProduct() {
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
     const nextOptions = [...storageTemperatureOptions, trimmed];
     await saveSetting.mutateAsync({ key: "STORAGE_TEMPERATURE_OPTIONS", value: nextOptions });
-    setStorageTemperatureOptions(nextOptions);
+    setTemperatureOverride(nextOptions);
     setFormData({ ...formData, storageTemp: trimmed });
     setNewStorageTemperature("");
   };

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import {
   getTransfers,
@@ -12,6 +12,7 @@ import {
   createStockMovement,
 } from '../../app/api/client';
 import { retailQueryKeys } from '../lib/retailData';
+import { useInventoryQuery, useLocationsQuery, useTransfersQuery } from '../lib/domainQueries';
 
 const TRANSFER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
@@ -33,18 +34,9 @@ export default function TransfersView({
   currentUser: { email: string; role: string } | null;
 }) {
   const queryClient = useQueryClient();
-  const transfersQuery = useQuery({
-    queryKey: retailQueryKeys.transfers,
-    queryFn: () => getTransfers(),
-  });
-  const locationsQuery = useQuery({
-    queryKey: retailQueryKeys.locations,
-    queryFn: () => getLocations(),
-  });
-  const inventoryQuery = useQuery({
-    queryKey: retailQueryKeys.inventory,
-    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
-  });
+  const transfersQuery = useTransfersQuery();
+  const locationsQuery = useLocationsQuery();
+  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
   const transfers = transfersQuery.data ?? [];
   const locations = locationsQuery.data ?? [];
   const inventory = inventoryQuery.data ?? [];

@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
 import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { useRestaurantState } from "../lib/restaurantData";
 import { approvePurchaseOrder, rejectPurchaseOrder } from "../../app/api/client";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
+import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
+import {
+  useRestaurantGoodsReceiptsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantPurchaseOrdersQuery,
+} from "../lib/restaurantQueries";
 
 type PendingOrder = {
   id: string;
@@ -49,7 +54,8 @@ export function Dashboard() {
     setUserRole(role);
   }, []);
 
-  const [products] = useRestaurantState<InventoryProduct[]>("inventory.products", getInventoryProducts());
+  const productsQuery = useRestaurantInventoryQuery<InventoryProduct[]>();
+  const products = productsQuery.data ?? getInventoryProducts();
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);
     if (!acc[main]) acc[main] = [];
@@ -68,18 +74,27 @@ export function Dashboard() {
     setSelectedSubCategory("all");
   };
 
-  const [pendingOrders, setPendingOrders] = useRestaurantState<PendingOrder[]>("dashboard.pendingOrders", []);
+  const pendingOrdersQuery = useRestaurantPurchaseOrdersQuery<PendingOrder[]>(
+    (orders) => orders.filter((order) => order.backendStatus === "SUBMITTED"),
+  );
+  const pendingOrders = pendingOrdersQuery.data ?? [];
+  const approveOrder = useDomainMutation(
+    (orderId: string) => approvePurchaseOrder(orderId),
+    [domainQueryKeys.purchaseOrders, domainQueryKeys.goodsReceipts],
+  );
+  const rejectOrder = useDomainMutation(
+    (orderId: string) => rejectPurchaseOrder(orderId, "Rejected from restaurant dashboard"),
+    [domainQueryKeys.purchaseOrders],
+  );
 
   const handleApproveOrder = async (orderId: string) => {
-    await approvePurchaseOrder(orderId);
-    setPendingOrders(pendingOrders.filter(order => order.id !== orderId));
+    await approveOrder.mutateAsync(orderId);
     setShowApprovalModal(false);
     setSelectedOrder(null);
   };
 
   const handleRejectOrder = async (orderId: string) => {
-    await rejectPurchaseOrder(orderId, "Rejected from restaurant dashboard");
-    setPendingOrders(pendingOrders.filter(order => order.id !== orderId));
+    await rejectOrder.mutateAsync(orderId);
     setShowApprovalModal(false);
     setSelectedOrder(null);
   };
@@ -124,8 +139,17 @@ export function Dashboard() {
     },
   ];
 
-  const [purchaseOrders] = useRestaurantState<PurchaseOrderSummary[]>("purchaseOrders.orders", []);
-  const [goodsRecords] = useRestaurantState<GoodsRecordSummary[]>("goodsReceived.records", []);
+  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<PurchaseOrderSummary[]>();
+  const purchaseOrders = purchaseOrdersQuery.data ?? [];
+  const goodsRecordsQuery = useRestaurantGoodsReceiptsQuery<GoodsRecordSummary[]>((receipts) =>
+    receipts.map((receipt: any) => ({
+      id: receipt.receiptNumber ?? receipt.id,
+      poId: receipt.purchaseOrderId,
+      receivedDate: receipt.createdAt,
+      status: (receipt.items ?? []).some((item: any) => item.rejectedQty > 0) ? "partial" : "verified",
+    })),
+  );
+  const goodsRecords = goodsRecordsQuery.data ?? [];
   const receivedPurchaseOrders = purchaseOrders.filter(order => order.status === "received");
   const receiptTrendData = receivedPurchaseOrders.map((order) => ({
     month: order.date || order.id,

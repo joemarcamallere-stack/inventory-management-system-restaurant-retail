@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getUsers, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
@@ -16,6 +16,7 @@ import type {
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
 import { retailQueryKeys } from '../lib/retailData';
+import { useUsersQuery } from '../lib/domainQueries';
 
 
 const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
@@ -36,11 +37,7 @@ export function UserManagementView({
 }) {
   const isAdmin = currentUser?.role === 'Admin';
   const queryClient = useQueryClient();
-  const usersQuery = useQuery({
-    queryKey: retailQueryKeys.users,
-    queryFn: () => getUsers(),
-    enabled: isAdmin,
-  });
+  const usersQuery = useUsersQuery({ enabled: isAdmin });
   const users = (usersQuery.data ?? []).map(mapApiUser);
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');

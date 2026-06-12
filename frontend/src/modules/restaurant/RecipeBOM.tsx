@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
+import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
+import { useRestaurantInventoryQuery, useRestaurantRecipesQuery } from "../lib/restaurantQueries";
 
 type Ingredient = {
   id: string;
@@ -107,7 +108,8 @@ export function RecipeBOM() {
     unitCost: "",
   });
 
-  const [inventoryItems] = useRestaurantState<InventoryItem[]>("inventory.products", getInventoryProducts());
+  const inventoryQuery = useRestaurantInventoryQuery<InventoryItem[]>();
+  const inventoryItems = inventoryQuery.data ?? getInventoryProducts();
 
   // Only show products that are actually in stock.
   const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
@@ -115,15 +117,22 @@ export function RecipeBOM() {
   // Extract unique categories from inventory
   const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
 
-  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
-  const saveRecipe = useRestaurantMutation(
+  const recipesQuery = useRestaurantRecipesQuery();
+  const recipes = (recipesQuery.data ?? []).map((recipe: any) => ({
+    ...recipe,
+    ingredients: (recipe.ingredients ?? []).map((ingredient: any) => ({
+      ...ingredient,
+      productId: inventoryItems.find((item) => item.backendId === ingredient.backendItemId)?.id,
+    })),
+  })) as Recipe[];
+  const saveRecipe = useDomainMutation(
     ({ id, data }: { id?: string; data: unknown }) =>
       id ? updateRecipe(id, data) : createRecipe(data),
-    ["recipes.records"],
+    [domainQueryKeys.recipes],
   );
-  const removeRecipe = useRestaurantMutation(
+  const removeRecipe = useDomainMutation(
     (id: string) => deleteRecipe(id),
-    ["recipes.records"],
+    [domainQueryKeys.recipes],
   );
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];

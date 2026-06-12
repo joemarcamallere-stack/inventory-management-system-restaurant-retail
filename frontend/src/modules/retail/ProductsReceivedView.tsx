@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
@@ -16,6 +16,7 @@ import type {
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
 import { retailQueryKeys } from '../lib/retailData';
+import { usePurchaseOrdersQuery } from '../lib/domainQueries';
 
 export function ProductsReceivedView({
   currentUser
@@ -23,14 +24,8 @@ export function ProductsReceivedView({
   currentUser: { email: string; role: string } | null;
 }) {
   const queryClient = useQueryClient();
-  const approvedQuery = useQuery({
-    queryKey: [...retailQueryKeys.purchaseOrders, 'APPROVED'],
-    queryFn: () => getPurchaseOrders({ status: 'APPROVED' }),
-  });
-  const receivedQuery = useQuery({
-    queryKey: [...retailQueryKeys.purchaseOrders, 'RECEIVED'],
-    queryFn: () => getPurchaseOrders({ status: 'RECEIVED' }),
-  });
+  const approvedQuery = usePurchaseOrdersQuery({ status: 'APPROVED' });
+  const receivedQuery = usePurchaseOrdersQuery({ status: 'RECEIVED' });
   const approvedPOs = approvedQuery.data ?? [];
   const receivedPOs = receivedQuery.data ?? [];
   const loading = approvedQuery.isLoading || receivedQuery.isLoading;

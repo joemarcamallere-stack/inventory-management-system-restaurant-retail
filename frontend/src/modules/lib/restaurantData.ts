@@ -22,7 +22,7 @@ import {
 
 const browserOnlyKeys = new Set(['userRole', 'userEmail']);
 const restaurantMemory = new Map<string, unknown>();
-export const restaurantQueryClient = new QueryClient({
+export const appQueryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: (error) => dispatchSyncError("query", error),
   }),
@@ -40,6 +40,9 @@ export const restaurantQueryClient = new QueryClient({
     },
   },
 });
+
+/** @deprecated Use appQueryClient. */
+export const restaurantQueryClient = appQueryClient;
 
 export function readRestaurantData<T>(key: string, fallback: T): T {
   if (typeof window === 'undefined') return fallback;
@@ -63,7 +66,7 @@ export function writeRestaurantData<T>(key: string, value: T) {
     return;
   }
   restaurantMemory.set(key, value);
-  restaurantQueryClient.setQueryData(['restaurant', key], value);
+  appQueryClient.setQueryData(['restaurant', key], value);
 }
 
 export function writeRestaurantDataOnly<T>(key: string, value: T) {

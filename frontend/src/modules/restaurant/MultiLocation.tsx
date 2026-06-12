@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { MapPin, Search, Package, TrendingDown, AlertCircle, Building2, BarChart3, Eye, ArrowLeftRight } from "lucide-react";
 import { formatQuantity, getInventoryProducts, getStockStatus, getStorageTemperatureOptions, splitCategory, StockStatus } from "../lib/inventoryLogic";
-import { useRestaurantState } from "../lib/restaurantData";
+import { useRestaurantSettingsQuery } from "../lib/domainQueries";
+import { useRestaurantInventoryQuery } from "../lib/restaurantQueries";
 
 type LocationStock = {
   location: string;
@@ -121,11 +122,13 @@ export function MultiLocation() {
     },
   ];
 
-  const [inventoryProducts] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [storageTemperatureOptions] = useRestaurantState(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
+  const inventoryQuery = useRestaurantInventoryQuery();
+  const inventoryProducts = inventoryQuery.data ?? getInventoryProducts();
+  const settingsQuery = useRestaurantSettingsQuery();
+  const storageTemperatureOptions = (
+    settingsQuery.data?.find((setting) => setting.key === "STORAGE_TEMPERATURE_OPTIONS")?.value
+    ?? getStorageTemperatureOptions()
+  ) as string[];
   const products: Product[] = inventoryProducts.map((item) => {
     const locationName = item.location || "Unassigned";
     const { main } = splitCategory(item.category);

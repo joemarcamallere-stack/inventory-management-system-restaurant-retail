@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
@@ -24,19 +24,21 @@ import {
   clearStoredToken,
   createInventoryItem,
   deleteInventoryItem,
-  getGoodsReceipts,
-  getInventory,
-  getLocations,
-  getPurchaseOrders,
-  getStockMovements,
-  getTransfers,
-  getUsers,
   loginUser,
   logoutUser,
   storeToken,
   updateInventoryItem,
 } from './api/client';
 import { retailQueryKeys, useRetailMutation } from '../modules/lib/retailData';
+import {
+  useGoodsReceiptsQuery,
+  useInventoryQuery,
+  useLocationsQuery,
+  usePurchaseOrdersQuery,
+  useStockMovementsQuery,
+  useTransfersQuery,
+  useUsersQuery,
+} from '../modules/lib/domainQueries';
 
 // Import types and sample data generation
 import type {
@@ -218,45 +220,34 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
   const queryClient = useQueryClient();
   const retailEnabled = isLoggedIn && hasRetailModule;
-  const inventoryQuery = useQuery({
-    queryKey: retailQueryKeys.inventory,
-    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+  const inventoryQuery = useInventoryQuery(
+    { itemType: 'RETAIL_ITEM' },
+    {
     enabled: retailEnabled,
     select: (items) => items.map(mapApiInventoryItem),
-  });
-  const locationsQuery = useQuery({
-    queryKey: retailQueryKeys.locations,
-    queryFn: getLocations,
+    },
+  );
+  const locationsQuery = useLocationsQuery({
     enabled: isLoggedIn,
     select: (items) => items.map(mapApiLocation),
   });
-  const usersQuery = useQuery({
-    queryKey: retailQueryKeys.users,
-    queryFn: getUsers,
+  const usersQuery = useUsersQuery({
     enabled: isLoggedIn && currentUser?.role === 'Admin',
     select: (items) => items.map(mapApiUser),
   });
-  const purchaseOrdersQuery = useQuery({
-    queryKey: retailQueryKeys.purchaseOrders,
-    queryFn: getPurchaseOrders,
+  const purchaseOrdersQuery = usePurchaseOrdersQuery(undefined, {
     enabled: retailEnabled,
     select: (items) => items.map(mapApiPurchaseOrder),
   });
-  const goodsReceiptsQuery = useQuery({
-    queryKey: retailQueryKeys.goodsReceipts,
-    queryFn: () => getGoodsReceipts(),
+  const goodsReceiptsQuery = useGoodsReceiptsQuery(undefined, {
     enabled: retailEnabled,
     select: (items) => items.map(mapApiGoodsReceipt),
   });
-  const transfersQuery = useQuery({
-    queryKey: retailQueryKeys.transfers,
-    queryFn: getTransfers,
+  const transfersQuery = useTransfersQuery(undefined, {
     enabled: retailEnabled,
     select: (items) => items.map(mapApiTransfer),
   });
-  const adjustmentsQuery = useQuery({
-    queryKey: retailQueryKeys.stockMovements,
-    queryFn: () => getStockMovements({ type: 'ADJUSTMENT' }),
+  const adjustmentsQuery = useStockMovementsQuery({ type: 'ADJUSTMENT' }, {
     enabled: retailEnabled,
     select: (items) => items.map(mapApiAdjustment),
   });
