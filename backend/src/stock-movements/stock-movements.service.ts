@@ -21,7 +21,13 @@ export class StockMovementsService {
     createdById?: string,
     modules: string[] = [],
   ) {
-    if (createStockMovementDto.quantity <= 0) {
+    if (createStockMovementDto.quantity < 0) {
+      throw new BadRequestException('Movement quantity cannot be negative');
+    }
+    if (
+      createStockMovementDto.type !== StockMovementType.Adjustment &&
+      createStockMovementDto.quantity === 0
+    ) {
       throw new BadRequestException('Movement quantity must be greater than zero');
     }
     this.assertCanUseMovementType(createStockMovementDto.type, modules);

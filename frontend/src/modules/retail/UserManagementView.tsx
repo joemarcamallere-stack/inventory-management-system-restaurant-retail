@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
+import { createUser, deleteUser, updateUser, getUsers, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,6 +15,7 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { retailQueryKeys } from '../lib/retailData';
 
 
 const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
@@ -28,14 +30,18 @@ const mapApiUser = (user: any): User => ({
 });
 // Dashboard View
 export function UserManagementView({
-  users,
-  setUsers,
   currentUser
 }: {
-  users: User[];
-  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   currentUser: { id?: string; name?: string; email: string; role: string } | null;
 }) {
+  const isAdmin = currentUser?.role === 'Admin';
+  const queryClient = useQueryClient();
+  const usersQuery = useQuery({
+    queryKey: retailQueryKeys.users,
+    queryFn: () => getUsers(),
+    enabled: isAdmin,
+  });
+  const users = (usersQuery.data ?? []).map(mapApiUser);
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,9 +56,6 @@ export function UserManagementView({
     password: '',
     confirmPassword: ''
   });
-
-  // Check if current user is admin
-  const isAdmin = currentUser?.role === 'Admin';
 
   // If not admin, show access denied
   if (!isAdmin) {
@@ -115,7 +118,7 @@ export function UserManagementView({
         status: 'Active'
       });
 
-      setUsers([...users, mapApiUser(newUser)]);
+      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
       setShowAddModal(false);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
       alert(`User ${newUser.name} has been created successfully!`);
@@ -141,16 +144,14 @@ export function UserManagementView({
     }
 
     try {
-      const updatedUser = await updateUser(selectedUser.id, {
+      await updateUser(selectedUser.id, {
         name: userForm.name,
         email: userForm.email,
         role: userForm.role,
         status: selectedUser.status
       });
 
-      setUsers(users.map(user =>
-        user.id === selectedUser.id ? mapApiUser(updatedUser) : user
-      ));
+      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
 
       setShowEditModal(false);
       setSelectedUser(null);
@@ -202,10 +203,8 @@ export function UserManagementView({
 
     if (confirm(`Are you sure you want to ${newStatus === 'Active' ? 'activate' : 'deactivate'} ${user.name}?`)) {
       try {
-        const updatedUser = await updateUser(user.id, { status: newStatus });
-        setUsers(users.map(u =>
-          u.id === user.id ? mapApiUser(updatedUser) : u
-        ));
+        await updateUser(user.id, { status: newStatus });
+        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to update user status');
       }
@@ -221,7 +220,7 @@ export function UserManagementView({
     if (confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
       try {
         await deleteUser(user.id);
-        setUsers(users.filter(u => u.id !== user.id));
+        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
         alert(`User ${user.name} has been deleted`);
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to delete user');

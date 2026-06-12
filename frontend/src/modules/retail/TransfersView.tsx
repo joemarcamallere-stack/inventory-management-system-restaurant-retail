@@ -1,4 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import {
   getTransfers,
@@ -10,6 +11,7 @@ import {
   getInventory,
   createStockMovement,
 } from '../../app/api/client';
+import { retailQueryKeys } from '../lib/retailData';
 
 const TRANSFER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
@@ -30,10 +32,23 @@ export default function TransfersView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const transfersQuery = useQuery({
+    queryKey: retailQueryKeys.transfers,
+    queryFn: () => getTransfers(),
+  });
+  const locationsQuery = useQuery({
+    queryKey: retailQueryKeys.locations,
+    queryFn: () => getLocations(),
+  });
+  const inventoryQuery = useQuery({
+    queryKey: retailQueryKeys.inventory,
+    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+  });
+  const transfers = transfersQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = transfersQuery.isLoading || locationsQuery.isLoading || inventoryQuery.isLoading;
   const [activeTab, setActiveTab] = useState<'transfers' | 'adjustments'>('transfers');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
@@ -57,25 +72,12 @@ export default function TransfersView({
     items: [] as { inventoryItemId: string; name: string; quantityChange: number; locationId: string; currentQuantity: number }[],
   });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [transfersData, locationsData, inventoryData] = await Promise.all([
-        getTransfers(),
-        getLocations(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setTransfers(transfersData);
-      setLocations(locationsData);
-      setInventory(inventoryData);
-    } catch (err) {
-      console.error('Failed to load transfers data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadData = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.transfers }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.stockMovements }),
+  ]);
 
   const availableItemsForTransfer = inventory.filter(
     (item: any) => item.locationId === transferForm.fromLocationId && item.quantity > 0
@@ -191,15 +193,14 @@ export default function TransfersView({
       for (const adjItem of adjustmentForm.items) {
         const invItem = inventory.find((i: any) => i.id === adjItem.inventoryItemId);
         if (!invItem) continue;
-        const qty = Math.abs(adjItem.quantityChange);
-        if (qty === 0) continue;
-        const movType = adjItem.quantityChange >= 0 ? 'STOCK_IN' : 'STOCK_OUT';
+        const newQuantity = invItem.quantity + adjItem.quantityChange;
+        if (newQuantity < 0) {
+          throw new Error(`${invItem.name} cannot be adjusted below zero`);
+        }
+        if (newQuantity === invItem.quantity) continue;
         await createStockMovement({
           type: 'ADJUSTMENT',
-          quantity: qty,
-          previousQuantity: invItem.quantity,
-          newQuantity: Math.max(0, invItem.quantity + adjItem.quantityChange),
-          unit: invItem.unit,
+          quantity: newQuantity,
           reason: adjustmentForm.reason,
           notes: `${adjustmentForm.type} adjustment`,
           itemId: invItem.id,

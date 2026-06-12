@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
@@ -14,17 +15,29 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { retailQueryKeys } from '../lib/retailData';
 
 export function ItemBundlingView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [bundles, setBundles] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const bundlesQuery = useQuery({
+    queryKey: retailQueryKeys.bundles,
+    queryFn: () => getBundles(),
+  });
+  const inventoryQuery = useQuery({
+    queryKey: retailQueryKeys.inventory,
+    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+  });
+  const bundles = bundlesQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = bundlesQuery.isLoading || inventoryQuery.isLoading;
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const queryError = bundlesQuery.error ?? inventoryQuery.error;
+  const error = actionError ?? (queryError instanceof Error ? queryError.message : null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -45,24 +58,11 @@ export function ItemBundlingView({
 
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [bundleData, inventoryData] = await Promise.all([
-        getBundles(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setBundles(bundleData);
-      setInventory(inventoryData);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  const setError = setActionError;
+  const loadData = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.bundles }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
+  ]);
 
   // ─── Derived state ───────────────────────────────────────────────────────────
 

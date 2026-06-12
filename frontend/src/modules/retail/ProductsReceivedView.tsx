@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
@@ -14,17 +15,29 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { retailQueryKeys } from '../lib/retailData';
 
 export function ProductsReceivedView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [approvedPOs, setApprovedPOs] = useState<any[]>([]);
-  const [receivedPOs, setReceivedPOs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const approvedQuery = useQuery({
+    queryKey: [...retailQueryKeys.purchaseOrders, 'APPROVED'],
+    queryFn: () => getPurchaseOrders({ status: 'APPROVED' }),
+  });
+  const receivedQuery = useQuery({
+    queryKey: [...retailQueryKeys.purchaseOrders, 'RECEIVED'],
+    queryFn: () => getPurchaseOrders({ status: 'RECEIVED' }),
+  });
+  const approvedPOs = approvedQuery.data ?? [];
+  const receivedPOs = receivedQuery.data ?? [];
+  const loading = approvedQuery.isLoading || receivedQuery.isLoading;
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const queryError = approvedQuery.error ?? receivedQuery.error;
+  const error = actionError ?? (queryError instanceof Error ? queryError.message : null);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
   const [selectedPO, setSelectedPO] = useState<any | null>(null);
@@ -39,24 +52,11 @@ export function ProductsReceivedView({
   }>({});
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [approved, received] = await Promise.all([
-        getPurchaseOrders({ status: 'APPROVED' }),
-        getPurchaseOrders({ status: 'RECEIVED' }),
-      ]);
-      setApprovedPOs(approved);
-      setReceivedPOs(received);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadData = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.purchaseOrders }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.goodsReceipts }),
+  ]);
 
   const poTotalAccepted = (po: any) =>
     (po.items ?? []).reduce((sum: number, item: any) => sum + (item.receivedQty - item.rejectedQty), 0);
@@ -81,7 +81,7 @@ export function ProductsReceivedView({
 
   const handleStartReceiving = async (po: any) => {
     try {
-      setError(null);
+      setActionError(null);
       const fullPO = await getPurchaseOrder(po.id);
       setSelectedPO(fullPO);
       const initialForm: typeof inspectionForm = {};
@@ -98,7 +98,7 @@ export function ProductsReceivedView({
       setShowReceiveModal(false);
       setShowInspectionModal(true);
     } catch (e: any) {
-      setError(e.message);
+      setActionError(e.message);
     }
   };
 
@@ -118,7 +118,7 @@ export function ProductsReceivedView({
     if (!selectedPO || saving) return;
     try {
       setSaving(true);
-      setError(null);
+      setActionError(null);
       const items = (selectedPO.items ?? []).map((item: any) => {
         const ins = inspectionForm[item.id] ?? { receivedQty: item.quantity, rejectedQty: 0 };
         return { id: item.id, receivedQty: ins.receivedQty, rejectedQty: ins.rejectedQty };
@@ -129,7 +129,7 @@ export function ProductsReceivedView({
       setInspectionForm({});
       await loadData();
     } catch (e: any) {
-      setError(e.message);
+      setActionError(e.message);
     } finally {
       setSaving(false);
     }

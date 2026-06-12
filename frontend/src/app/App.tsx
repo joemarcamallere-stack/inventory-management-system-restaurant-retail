@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
@@ -23,13 +24,19 @@ import {
   clearStoredToken,
   createInventoryItem,
   deleteInventoryItem,
+  getGoodsReceipts,
   getInventory,
   getLocations,
+  getPurchaseOrders,
+  getStockMovements,
+  getTransfers,
   getUsers,
   loginUser,
+  logoutUser,
   storeToken,
   updateInventoryItem,
 } from './api/client';
+import { retailQueryKeys, useRetailMutation } from '../modules/lib/retailData';
 
 // Import types and sample data generation
 import type {
@@ -105,6 +112,99 @@ const mapApiUser = (user: any): User => ({
   lastLogin: formatDate(user.lastLogin)
 });
 
+const mapApiPurchaseOrder = (order: any): PurchaseOrder => ({
+  id: order.id,
+  orderNumber: order.orderNumber,
+  supplier: order.supplier?.name ?? 'Unassigned supplier',
+  date: formatDate(order.createdAt),
+  status: ({
+    DRAFT: 'Pending',
+    SUBMITTED: 'Pending',
+    APPROVED: 'Approved',
+    PARTIALLY_RECEIVED: 'Approved',
+    RECEIVED: 'Received',
+    REJECTED: 'Rejected',
+    CANCELLED: 'Cancelled',
+  } as Record<string, PurchaseOrder['status']>)[order.status] ?? 'Pending',
+  items: (order.items ?? []).map((item: any) => ({
+    name: item.name,
+    quantity: item.quantity,
+    price: item.unitPrice,
+  })),
+  totalAmount: order.totalAmount ?? 0,
+  paymentMethod: order.paymentMethod,
+  paymentTerms: order.paymentTerms,
+  createdBy: order.createdBy?.name ?? order.createdBy?.email ?? '',
+});
+
+const mapApiTransfer = (transfer: any): Transfer => ({
+  id: transfer.id,
+  transferNumber: transfer.transferNumber,
+  fromLocation: transfer.fromLocation?.name ?? '',
+  toLocation: transfer.toLocation?.name ?? '',
+  date: formatDate(transfer.createdAt),
+  status: ({
+    PENDING: 'Pending',
+    IN_TRANSIT: 'In Transit',
+    COMPLETED: 'Completed',
+    CANCELLED: 'Cancelled',
+  } as Record<string, Transfer['status']>)[transfer.status] ?? 'Pending',
+  items: (transfer.items ?? []).map((item: any) => ({
+    itemId: item.inventoryItemId,
+    name: item.inventoryItem?.name ?? 'Item',
+    quantity: item.quantity,
+  })),
+  createdBy: transfer.createdBy?.name ?? transfer.createdBy?.email ?? '',
+  notes: transfer.notes,
+});
+
+const mapApiAdjustment = (movement: any): Adjustment => ({
+  id: movement.id,
+  adjustmentNumber: movement.referenceId ?? movement.id,
+  date: formatDate(movement.createdAt),
+  type: movement.newQuantity >= movement.previousQuantity ? 'Add' : 'Remove',
+  reason: movement.reason ?? movement.notes ?? 'Inventory adjustment',
+  items: [{
+    itemId: movement.itemId,
+    name: movement.item?.name ?? 'Item',
+    quantityChange: (movement.newQuantity ?? 0) - (movement.previousQuantity ?? 0),
+    location: movement.location?.name ?? '',
+  }],
+  createdBy: movement.createdBy?.name ?? movement.createdBy?.email ?? '',
+  status: 'Approved',
+});
+
+const mapApiGoodsReceipt = (receipt: any): ProductReceived => {
+  const items = (receipt.items ?? []).map((item: any) => ({
+    name: item.purchaseOrderItem?.name ?? item.inventoryItem?.name ?? 'Item',
+    orderedQty: item.purchaseOrderItem?.quantity ?? item.receivedQty + item.rejectedQty,
+    receivedQty: item.receivedQty + item.rejectedQty,
+    acceptedQty: item.receivedQty,
+    rejectedQty: item.rejectedQty,
+    category: item.inventoryItem?.category ?? 'Uncategorized',
+    condition: item.condition ?? 'Good',
+    inspectionNotes: item.notes,
+    price: item.purchaseOrderItem?.unitPrice ?? 0,
+  }));
+  const totalAccepted = items.reduce((sum: number, item: any) => sum + item.acceptedQty, 0);
+  const totalRejected = items.reduce((sum: number, item: any) => sum + item.rejectedQty, 0);
+  return {
+    id: receipt.id,
+    receiptNumber: receipt.receiptNumber,
+    poNumber: receipt.purchaseOrder?.orderNumber ?? '',
+    poId: receipt.purchaseOrderId,
+    supplier: receipt.purchaseOrder?.supplier?.name ?? '',
+    dateReceived: formatDate(receipt.createdAt),
+    receivedDate: formatDate(receipt.createdAt),
+    items,
+    receivedBy: receipt.receivedBy?.name ?? receipt.receivedBy?.email ?? '',
+    status: totalRejected > 0 ? 'Partially Accepted' : 'Fully Accepted',
+    totalOrdered: totalAccepted + totalRejected,
+    totalAccepted,
+    totalRejected,
+  };
+};
+
 
 type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-add-food-item' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation';
 
@@ -112,17 +212,70 @@ export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [productsReceived, setProductsReceived] = useState<ProductReceived[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
+  const queryClient = useQueryClient();
+  const retailEnabled = isLoggedIn && hasRetailModule;
+  const inventoryQuery = useQuery({
+    queryKey: retailQueryKeys.inventory,
+    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+    enabled: retailEnabled,
+    select: (items) => items.map(mapApiInventoryItem),
+  });
+  const locationsQuery = useQuery({
+    queryKey: retailQueryKeys.locations,
+    queryFn: getLocations,
+    enabled: isLoggedIn,
+    select: (items) => items.map(mapApiLocation),
+  });
+  const usersQuery = useQuery({
+    queryKey: retailQueryKeys.users,
+    queryFn: getUsers,
+    enabled: isLoggedIn && currentUser?.role === 'Admin',
+    select: (items) => items.map(mapApiUser),
+  });
+  const purchaseOrdersQuery = useQuery({
+    queryKey: retailQueryKeys.purchaseOrders,
+    queryFn: getPurchaseOrders,
+    enabled: retailEnabled,
+    select: (items) => items.map(mapApiPurchaseOrder),
+  });
+  const goodsReceiptsQuery = useQuery({
+    queryKey: retailQueryKeys.goodsReceipts,
+    queryFn: () => getGoodsReceipts(),
+    enabled: retailEnabled,
+    select: (items) => items.map(mapApiGoodsReceipt),
+  });
+  const transfersQuery = useQuery({
+    queryKey: retailQueryKeys.transfers,
+    queryFn: getTransfers,
+    enabled: retailEnabled,
+    select: (items) => items.map(mapApiTransfer),
+  });
+  const adjustmentsQuery = useQuery({
+    queryKey: retailQueryKeys.stockMovements,
+    queryFn: () => getStockMovements({ type: 'ADJUSTMENT' }),
+    enabled: retailEnabled,
+    select: (items) => items.map(mapApiAdjustment),
+  });
+  const inventory = inventoryQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const purchaseOrders = purchaseOrdersQuery.data ?? [];
+  const productsReceived = goodsReceiptsQuery.data ?? [];
+  const transfers = transfersQuery.data ?? [];
+  const adjustments = adjustmentsQuery.data ?? [];
+  const saveInventoryMutation = useRetailMutation(
+    ({ id, data }: { id?: string; data: unknown }) =>
+      id ? updateInventoryItem(id, data) : createInventoryItem(data),
+    [retailQueryKeys.inventory],
+  );
+  const deleteInventoryMutation = useRetailMutation(
+    (id: string) => deleteInventoryItem(id),
+    [retailQueryKeys.inventory],
+  );
   const navigateToView = (view: ViewType, replace = false) => {
     setCurrentView(view);
     const url = new URL(window.location.href);
@@ -188,34 +341,6 @@ export default function App() {
       document.removeEventListener('blur', handleNumberInput, true);
     };
   }, []);
-
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const loadPhaseOneData = async () => {
-      try {
-        const inventoryRequest = hasRetailModule
-          ? getInventory({ itemType: 'RETAIL_ITEM' })
-          : Promise.resolve([]);
-        const [inventoryData, locationData] = await Promise.all([
-          inventoryRequest,
-          getLocations()
-        ]);
-
-        setInventory(inventoryData.map(mapApiInventoryItem));
-        setLocations(locationData.map(mapApiLocation));
-
-        if (currentUser?.role === 'Admin') {
-          const userData = await getUsers();
-          setUsers(userData.map(mapApiUser));
-        }
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to load backend data');
-      }
-    };
-
-    loadPhaseOneData();
-  }, [isLoggedIn, currentUser?.role, hasRetailModule]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -299,14 +424,10 @@ export default function App() {
 
     try {
       if (editingId) {
-        const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-        setInventory(inventory.map(item =>
-          item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-        ));
+        await saveInventoryMutation.mutateAsync({ id: editingId, data: toInventoryPayload() });
         setEditingId(null);
       } else {
-        const newItem = await createInventoryItem(toInventoryPayload());
-        setInventory([...inventory, mapApiInventoryItem(newItem)]);
+        await saveInventoryMutation.mutateAsync({ data: toInventoryPayload() });
       }
 
       setFormData({
@@ -350,10 +471,7 @@ export default function App() {
     }
 
     try {
-      const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-      setInventory(inventory.map(item =>
-        item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-      ));
+      await saveInventoryMutation.mutateAsync({ id: editingId, data: toInventoryPayload() });
 
       setEditingId(null);
       setShowEditModal(false);
@@ -392,8 +510,7 @@ export default function App() {
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this item?')) {
       try {
-        await deleteInventoryItem(id);
-        setInventory(inventory.filter(item => item.id !== id));
+        await deleteInventoryMutation.mutateAsync(id);
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to delete inventory item');
       }
@@ -446,13 +563,18 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => {
-    clearStoredToken();
-    setIsLoggedIn(false);
-    setCurrentUser(null);
-    setCurrentView('dashboard');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userEmail');
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } finally {
+      clearStoredToken();
+      queryClient.clear();
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      setCurrentView('dashboard');
+      localStorage.removeItem('userRole');
+      localStorage.removeItem('userEmail');
+    }
   };
 
   if (!isLoggedIn) {
@@ -490,7 +612,7 @@ export default function App() {
         case 'restaurant-reports':
           return <RestaurantReports />;
         case 'user-management':
-          return <UserManagementView users={users} setUsers={setUsers} currentUser={currentUser} />;
+          return <UserManagementView currentUser={currentUser} />;
         default:
           return <RestaurantDashboard />;
       }
@@ -690,7 +812,6 @@ export default function App() {
           {currentView === 'multilocation' && (
             <MultilocationView
               locations={locations}
-              setLocations={setLocations}
               inventory={inventory}
               transfers={transfers}
               purchaseOrders={purchaseOrders}
@@ -710,8 +831,6 @@ export default function App() {
           )}
           {currentView === 'user-management' && (
             <UserManagementView
-              users={users}
-              setUsers={setUsers}
               currentUser={currentUser}
             />
           )}

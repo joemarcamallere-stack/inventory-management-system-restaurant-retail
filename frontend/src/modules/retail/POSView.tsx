@@ -1,17 +1,32 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw } from 'lucide-react';
 import { getInventory, getSales, createSale, refundSale, getLocations } from '../../app/api/client';
+import { retailQueryKeys } from '../lib/retailData';
 
 export default function POSView({
   currentUser,
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [sales, setSales] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
+  const queryClient = useQueryClient();
+  const inventoryQuery = useQuery({
+    queryKey: retailQueryKeys.inventory,
+    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+  });
+  const salesQuery = useQuery({
+    queryKey: retailQueryKeys.sales,
+    queryFn: () => getSales(),
+  });
+  const locationsQuery = useQuery({
+    queryKey: retailQueryKeys.locations,
+    queryFn: () => getLocations(),
+  });
+  const inventory = inventoryQuery.data ?? [];
+  const sales = salesQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
   const [selectedLocationId, setSelectedLocationId] = useState('');
-  const [loading, setLoading] = useState(true);
+  const loading = inventoryQuery.isLoading || salesQuery.isLoading || locationsQuery.isLoading;
   const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'returns'>('sales');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -35,28 +50,17 @@ export default function POSView({
   const [returnReason, setReturnReason] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [invData, salesData, locData] = await Promise.all([
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-        getSales(),
-        getLocations(),
-      ]);
-      setInventory(invData);
-      setSales(salesData);
-      setLocations(locData);
-      if (locData.length > 0 && !selectedLocationId) {
-        setSelectedLocationId(locData[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to load POS data', err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!selectedLocationId && locations.length > 0) {
+      setSelectedLocationId(locations[0].id);
     }
-  }, []);
+  }, [locations, selectedLocationId]);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadData = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.sales }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations }),
+  ]);
 
   const availableItems = inventory.filter((item: any) => item.quantity > 0);
   const availableCategories = Array.from(new Set(availableItems.map((item: any) => item.category))).sort() as string[];

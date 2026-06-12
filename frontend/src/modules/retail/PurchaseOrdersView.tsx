@@ -1,22 +1,27 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
 import {
   getPurchaseOrders,
   createPurchaseOrder,
   submitPurchaseOrder,
   approvePurchaseOrder,
+  rejectPurchaseOrder,
   cancelPurchaseOrder,
   getSuppliers,
   createSupplier,
   getInventory,
 } from '../../app/api/client';
 import { categorySubcategories } from '../../app/utils/constants';
+import { retailQueryKeys } from '../lib/retailData';
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
   APPROVED: 'Approved',
+  PARTIALLY_RECEIVED: 'Partially Received',
   RECEIVED: 'Received',
+  REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
 };
 
@@ -24,7 +29,9 @@ const STATUS_CLASS: Record<string, string> = {
   DRAFT: 'bg-[#f3f4f6] text-[#6b7280]',
   SUBMITTED: 'bg-[#fff4e6] text-[#FFA500]',
   APPROVED: 'bg-[#E0F2F2] text-[#007A5E]',
+  PARTIALLY_RECEIVED: 'bg-[#E0F2F2] text-[#007A5E]',
   RECEIVED: 'bg-[#E0F5F1] text-[#008967]',
+  REJECTED: 'bg-[#ffe2e2] text-[#E7000B]',
   CANCELLED: 'bg-[#ffe2e2] text-[#E7000B]',
 };
 
@@ -33,10 +40,23 @@ export default function PurchaseOrdersView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const ordersQuery = useQuery({
+    queryKey: retailQueryKeys.purchaseOrders,
+    queryFn: () => getPurchaseOrders(),
+  });
+  const suppliersQuery = useQuery({
+    queryKey: retailQueryKeys.suppliers,
+    queryFn: () => getSuppliers(),
+  });
+  const inventoryQuery = useQuery({
+    queryKey: retailQueryKeys.inventory,
+    queryFn: () => getInventory({ itemType: 'RETAIL_ITEM' }),
+  });
+  const orders = ordersQuery.data ?? [];
+  const suppliers = suppliersQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = ordersQuery.isLoading || suppliersQuery.isLoading || inventoryQuery.isLoading;
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showNewPOModal, setShowNewPOModal] = useState(false);
   const [showNewItemModal, setShowNewItemModal] = useState(false);
@@ -98,25 +118,11 @@ export default function PurchaseOrdersView({
     t.toLowerCase().includes(newItemForm.baleType.toLowerCase())
   );
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [ordersData, suppliersData, inventoryData] = await Promise.all([
-        getPurchaseOrders(),
-        getSuppliers(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setOrders(ordersData);
-      setSuppliers(suppliersData);
-      setInventory(inventoryData);
-    } catch (err) {
-      console.error('Failed to load purchase orders data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadData = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.purchaseOrders }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.suppliers }),
+    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
+  ]);
 
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(poForm.supplierName.toLowerCase())
@@ -200,7 +206,7 @@ export default function PurchaseOrdersView({
       return;
     }
     try {
-      await cancelPurchaseOrder(id);
+      await rejectPurchaseOrder(id, rejectionRemarks);
       setRejectionRemarks('');
       setSelectedPOForAction(null);
       await loadData();
@@ -219,8 +225,7 @@ export default function PurchaseOrdersView({
       await createSupplier(newSupplierForm);
       setNewSupplierForm({ name: '', contactPerson: '', email: '', phone: '', address: '', category: '' });
       setShowNewSupplierModal(false);
-      const updated = await getSuppliers();
-      setSuppliers(updated);
+      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.suppliers });
     } catch (err: any) {
       alert(err.message ?? 'Failed to create supplier');
     } finally {

@@ -1,7 +1,9 @@
 ﻿import { useState, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
 import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
 import { createLocation, deleteLocation, updateLocation } from '../../app/api/client';
+import { retailQueryKeys } from '../lib/retailData';
 
 const mapApiLocation = (location: any): Location => ({
   id: location.id,
@@ -14,17 +16,16 @@ const mapApiLocation = (location: any): Location => ({
 
 export default function MultilocationView({
   locations,
-  setLocations,
   inventory,
   transfers,
   purchaseOrders
 }: {
   locations: Location[];
-  setLocations: React.Dispatch<React.SetStateAction<Location[]>>;
   inventory: InventoryItem[];
   transfers: Transfer[];
   purchaseOrders: PurchaseOrder[];
 }) {
+  const queryClient = useQueryClient();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -52,8 +53,8 @@ export default function MultilocationView({
     }
 
     try {
-      const newLocation = await createLocation(locationForm);
-      setLocations([...locations, mapApiLocation(newLocation)]);
+      await createLocation(locationForm);
+      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setShowAddModal(false);
     } catch (error) {
@@ -68,10 +69,8 @@ export default function MultilocationView({
     }
 
     try {
-      const updatedLocation = await updateLocation(selectedLocation.id, locationForm);
-      setLocations(locations.map(loc =>
-        loc.id === selectedLocation.id ? mapApiLocation(updatedLocation) : loc
-      ));
+      await updateLocation(selectedLocation.id, locationForm);
+      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
 
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setSelectedLocation(null);
@@ -93,7 +92,7 @@ export default function MultilocationView({
     if (confirm(`Delete ${location?.name}?`)) {
       try {
         await deleteLocation(locationId);
-        setLocations(locations.filter(loc => loc.id !== locationId));
+        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to delete location');
       }
