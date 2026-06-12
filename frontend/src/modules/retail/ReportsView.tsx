@@ -1184,8 +1184,8 @@ export function ReportsView({
                     productsReceived.map(pr => (
                       <tr key={pr.id} className="hover:bg-[#F8F9FA] transition-colors">
                         <td className="px-4 py-3 text-[13px] text-[#323B42] font-medium">{pr.id}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#007A5E] font-medium">{pr.poId}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{pr.receivedDate}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#007A5E] font-medium">{pr.poNumber}</td>
+                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{pr.dateReceived}</td>
                         <td className="px-4 py-3 text-[13px] text-[#323B42]">{pr.receivedBy}</td>
                         <td className="px-4 py-3 text-[13px] text-[#6b7280]">
                           {pr.items.reduce((sum, item) => sum + item.receivedQty, 0)}
@@ -1198,7 +1198,7 @@ export function ReportsView({
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 text-[11px] font-medium rounded-full ${
-                            pr.status === 'Completed' ? 'bg-[#d1f4e8] text-[#00a63e]' :
+                            pr.status === 'Fully Accepted' ? 'bg-[#d1f4e8] text-[#00a63e]' :
                             'bg-[#fff3cd] text-[#856404]'
                           }`}>
                             {pr.status}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Apple, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import logoImage from "../../imports/12a1de61-2780-4cbc-a843-0bf1eeabc835.png";
+import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import logoImage from "../../imports/ims-logo.png";
 
 export function Login() {
   const [email, setEmail] = useState("");
@@ -38,10 +38,10 @@ export function Login() {
         <div className="relative z-10">
           <div className="flex items-center gap-3 text-white">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-white shadow-lg flex-shrink-0">
-              <img src={logoImage} alt="CoCoders Logo" className="w-full h-full object-cover" />
+              <img src={logoImage} alt="Bukolabs.io Logo" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">CoCoders</h1>
+              <h1 className="text-2xl font-bold">Bukolabs.io</h1>
               <p className="text-white/80 text-sm">Cracking Ideas, Coding the Future</p>
             </div>
           </div>
@@ -56,7 +56,7 @@ export function Login() {
           <div className="mt-12 space-y-4">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0">
-                <img src={logoImage} alt="CoCoders" className="w-full h-full object-cover" />
+                <img src={logoImage} alt="Bukolabs.io" className="w-full h-full object-cover" />
               </div>
               <div>
                 <h3 className="font-semibold mb-1">Expiration Tracking</h3>
@@ -65,7 +65,7 @@ export function Login() {
             </div>
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0">
-                <img src={logoImage} alt="CoCoders" className="w-full h-full object-cover" />
+                <img src={logoImage} alt="Bukolabs.io" className="w-full h-full object-cover" />
               </div>
               <div>
                 <h3 className="font-semibold mb-1">Freshness Alerts</h3>
@@ -82,9 +82,9 @@ export function Login() {
           <div className="mb-8">
             <div className="lg:hidden flex items-center gap-3 mb-8">
               <div className="w-10 h-10 rounded-full overflow-hidden bg-white shadow-md flex-shrink-0">
-                <img src={logoImage} alt="CoCoders Logo" className="w-full h-full object-cover" />
+                <img src={logoImage} alt="Bukolabs.io Logo" className="w-full h-full object-cover" />
               </div>
-              <h1 className="text-xl font-bold">CoCoders</h1>
+              <h1 className="text-xl font-bold">Bukolabs.io</h1>
             </div>
 
             <h2 className="text-3xl font-bold text-foreground mb-2">Welcome</h2>
@@ -167,13 +167,13 @@ export function Login() {
             <div className="space-y-3">
               <div className="rounded-xl p-4 text-sm" style={{ background: "linear-gradient(to right, #E0F7F7, #E0F2F0)", border: "1px solid #009BA5" }}>
                 <p className="font-semibold mb-2" style={{ color: "#005656" }}>Admin Account (Full Access)</p>
-                <p className="mb-1" style={{ color: "#007A5E" }}>Email: <span className="text-foreground font-medium">admin@cocoders.com</span></p>
+                <p className="mb-1" style={{ color: "#007A5E" }}>Email: <span className="text-foreground font-medium">admin@bukolabs.io</span></p>
                 <p style={{ color: "#007A5E" }}>Password: <span className="text-foreground font-medium">admin123</span></p>
               </div>
 
               <div className="rounded-xl p-4 text-sm" style={{ background: "linear-gradient(to right, #D1F2E8, #E8F5F0)", border: "1px solid #008967" }}>
                 <p className="font-semibold mb-2" style={{ color: "#005656" }}>Staff Account (Limited Access)</p>
-                <p className="mb-1" style={{ color: "#007A5E" }}>Email: <span className="text-foreground font-medium">staff@cocoders.com</span></p>
+                <p className="mb-1" style={{ color: "#007A5E" }}>Email: <span className="text-foreground font-medium">staff@bukolabs.io</span></p>
                 <p style={{ color: "#007A5E" }}>Password: <span className="text-foreground font-medium">staff123</span></p>
               </div>
 

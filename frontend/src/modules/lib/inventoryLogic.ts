@@ -4,6 +4,7 @@ export type InventoryProduct = {
   id: number;
   name: string;
   sku: string;
+  itemType?: string;
   category: string;
   stock: number;
   maxStock: number;

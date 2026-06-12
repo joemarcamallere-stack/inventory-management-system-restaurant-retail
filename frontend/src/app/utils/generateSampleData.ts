@@ -29,11 +29,11 @@ export interface PurchaseOrder {
   supplier: string;
   date: string;
   status: 'Pending' | 'Approved' | 'Received' | 'Rejected' | 'Cancelled';
-  createdBy?: string;
   items: { name: string; quantity: number; price: number }[];
   totalAmount: number;
   paymentMethod?: 'Cash' | 'Bank Transfer' | 'Check' | 'Credit Terms';
   paymentTerms?: string;
+  createdBy?: string;
 }
 
 export interface Transfer {

@@ -366,7 +366,7 @@ export function UserManagement() {
                   type="email"
                   value={newUser.email}
                   onChange={handleInputChange}
-                  placeholder="e.g., john.smith@cocoders.com"
+                  placeholder="e.g., john.smith@bukolabs.io"
                   className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                   required
                 />
@@ -484,7 +484,7 @@ export function UserManagement() {
                   type="email"
                   value={newUser.email}
                   onChange={handleInputChange}
-                  placeholder="e.g., john.smith@cocoders.com"
+                  placeholder="e.g., john.smith@bukolabs.io"
                   className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                   required
                 />

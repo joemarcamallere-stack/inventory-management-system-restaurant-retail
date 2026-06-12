@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
+import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
 import MultilocationView from '../modules/retail/MultilocationView';
@@ -515,12 +516,12 @@ export default function App() {
       <div className="h-full w-[256px] flex flex-col" style={{ background: "#003534" }}>
         {/* Header */}
         <div className="p-6 flex items-center gap-3">
-          <div className="bg-white rounded-full size-[40px] flex items-center justify-center shadow-sm">
-            <Store className="size-6 text-[#007A5E]" strokeWidth={2.2} />
+          <div className="bg-white rounded-full size-[40px] flex items-center justify-center shadow-sm overflow-hidden">
+            <img src={logoImage} alt="IMS Logo" className="w-full h-full object-contain p-1" />
           </div>
           <div>
             <p className="text-white text-[20px] leading-[28px]" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
-              CoCoders
+              Bukolabs.io
             </p>
             <p className="text-[#00A7A5] text-[12px] leading-[16px]" style={{ fontFamily: 'Inter, sans-serif' }}>Retail</p>
           </div>

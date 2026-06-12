@@ -1,6 +1,6 @@
 import { Outlet, Link, useLocation, useNavigate } from "react-router";
 import { LayoutDashboard, Apple, FileText, ShoppingCart, ClipboardCheck, Users, PlusCircle, LogOut, Package, ChefHat, ArrowLeftRight, MapPin, Shield, User, Boxes, ReceiptText } from "lucide-react";
-import logoImage from "../../imports/12a1de61-2780-4cbc-a843-0bf1eeabc835.png";
+import logoImage from "../../imports/ims-logo.png";
 import { useState, useEffect } from "react";
 
 export function Layout() {
@@ -11,7 +11,7 @@ export function Layout() {
 
   useEffect(() => {
     const role = localStorage.getItem("userRole") || "staff";
-    const email = localStorage.getItem("userEmail") || "user@cocoders.com";
+    const email = localStorage.getItem("userEmail") || "user@bukolabs.io";
     setUserRole(role);
     setUserEmail(email);
   }, []);
@@ -49,10 +49,10 @@ export function Layout() {
         <div className="p-6 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full overflow-hidden bg-white shadow-lg flex-shrink-0">
-              <img src={logoImage} alt="Cocoder Logo" className="w-full h-full object-cover" />
+              <img src={logoImage} alt="Bukolabs.io Logo" className="w-full h-full object-cover" />
             </div>
             <div>
-              <h1 className="text-xl font-bold">Cocoder</h1>
+              <h1 className="text-xl font-bold">Bukolabs.io</h1>
               <p className="text-xs text-sidebar-foreground/70">Restaurant</p>
             </div>
           </div>

@@ -7,7 +7,7 @@ import { createInventoryItem, getLocations, upsertRestaurantSetting } from "../.
 type StoredProduct = {
   id: number;
   name: string;
-  itemType: string;
+  itemType?: string;
   sku: string;
   category: string;
   stock: number;

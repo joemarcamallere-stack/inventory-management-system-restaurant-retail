@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, Package, Tag, DollarSign, TrendingUp } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, Tag, DollarSign, TrendingUp } from 'lucide-react';
+import logoImage from '../../imports/ims-logo.png';
 
 interface LoginPageProps {
   onLogin: (email: string, password: string) => void;
@@ -74,7 +75,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
                   {/* Central Icon Container */}
                   <div className="relative w-[200px] h-[200px] bg-white bg-opacity-20 backdrop-blur-sm rounded-full flex items-center justify-center border-4 border-white border-opacity-30">
-                    <Package className="w-24 h-24 text-white opacity-60" strokeWidth={1.5} />
+                    <img src={logoImage} alt="IMS Logo" className="w-28 h-28 object-contain opacity-80" />
                   </div>
 
                   {/* Floating Tags Around */}
@@ -105,13 +106,13 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
               {/* Logo and Title */}
               <div className="absolute content-stretch flex gap-[12px] items-center left-[48px] top-[48px] w-[476px] z-[50]" style={{ animation: 'slide-in-left 0.6s ease-out' }}>
-                <div className="relative rounded-full shadow-lg shrink-0 size-[48px] bg-white flex items-center justify-center" style={{ animation: 'pulse-glow 3s ease-in-out infinite' }}>
-                  <Package className="w-7 h-7 text-[#007A5E]" strokeWidth={2.2} />
+                <div className="relative rounded-full shadow-lg shrink-0 size-[48px] bg-white flex items-center justify-center overflow-hidden" style={{ animation: 'pulse-glow 3s ease-in-out infinite' }}>
+                  <img src={logoImage} alt="IMS Logo" className="w-full h-full object-contain p-1" />
                 </div>
                 <div className="relative shrink-0 w-[208.65px]">
                   <div className="bg-clip-padding border-0 border-[transparent] border-solid content-stretch flex flex-col items-start relative size-full">
                     <p className="font-['Poppins',sans-serif] font-bold leading-[32px] text-[24px] text-white whitespace-nowrap" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
-                      CoCoders
+                      Bukolabs.io
                     </p>
                     <p className="font-['Inter',sans-serif] font-normal leading-[20px] text-[14px] text-[rgba(255,255,255,0.95)] whitespace-nowrap" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}>
                       Inventory Management System
