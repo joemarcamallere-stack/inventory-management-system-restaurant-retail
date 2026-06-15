@@ -85,7 +85,9 @@ export function useRetailAdjustmentsQuery<TData = ReturnType<typeof mapRetailAdj
 export function useSaveRetailInventoryMutation() {
   return useRetailMutation(
     ({ id, data }: { id?: string; data: Record<string, unknown> }) =>
-      id ? updateInventoryItem(id, data) : createInventoryItem(data),
+      id
+        ? updateInventoryItem(id, data)
+        : createInventoryItem({ ...data, itemType: 'RETAIL_ITEM' }),
     [
       retailQueryKeys.inventory,
       retailQueryKeys.bundles,

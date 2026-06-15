@@ -1,92 +1,80 @@
-import { useState, useMemo, useEffect } from 'react';
+import { lazy, useState, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
-import TransfersView from '../modules/retail/TransfersView';
-import MultilocationView from '../modules/retail/MultilocationView';
-import PurchaseOrdersView from '../modules/retail/PurchaseOrdersView';
-import POSView from '../modules/retail/POSView';
-import { DashboardView, StockAlertsView, InventoryView, ProductsReceivedView, ItemBundlingView, ReportsView, UserManagementView } from '../modules/retail/RetailViews';
-import { Dashboard as RestaurantDashboard } from '../modules/restaurant/Dashboard';
-import { StockControl as RestaurantStockControl } from '../modules/restaurant/StockControl';
-import { Inventory as RestaurantInventory } from '../modules/restaurant/Inventory';
-import { AddProduct as RestaurantAddProduct } from '../modules/restaurant/AddProduct';
-import { PurchaseOrders as RestaurantPurchaseOrders } from '../modules/restaurant/PurchaseOrders';
-import { GoodsReceived as RestaurantGoodsReceived } from '../modules/restaurant/GoodsReceived';
-import { POSKitchenOrders as RestaurantPOSKitchenOrders } from '../modules/restaurant/POSKitchenOrders';
-import { RecipeBOM as RestaurantRecipeBOM } from '../modules/restaurant/RecipeBOM';
-import { Transfers as RestaurantTransfers } from '../modules/restaurant/Transfers';
-import { Reports as RestaurantReports } from '../modules/restaurant/Reports';
-import { MultiLocation as RestaurantMultiLocation } from '../modules/restaurant/MultiLocation';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
-import { UserManagement as RestaurantUserManagement } from '../modules/restaurant/UserManagement';
-import {
-  clearStoredToken,
-  loginUser,
-  logoutUser,
-  storeToken,
-} from './api/client';
-import {
-  useDeleteRetailInventoryMutation,
-  useRetailAdjustmentsQuery,
-  useRetailGoodsReceiptsQuery,
-  useRetailInventoryQuery,
-  useRetailLocationsQuery,
-  useRetailPurchaseOrdersQuery,
-  useRetailTransfersQuery,
-  useRetailUsersQuery,
-  useSaveRetailInventoryMutation,
-  type RetailStockAlert,
-} from '../modules/lib/retailQueries';
-import type { InventoryItem } from '../models/retail';
+import { useSession } from './hooks/useSession';
+import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
+import { useRetailWorkspace } from './hooks/useRetailWorkspace';
 
-type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-add-food-item' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation';
+const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
+const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
+const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
+const POSView = lazy(() => import('../modules/retail/POSView'));
+const DashboardView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.DashboardView })));
+const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.StockAlertsView })));
+const InventoryView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.InventoryView })));
+const ProductsReceivedView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.ProductsReceivedView })));
+const ItemBundlingView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.ItemBundlingView })));
+const ReportsView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.ReportsView })));
+const UserManagementView = lazy(() => import('../modules/retail/RetailViews').then((module) => ({ default: module.UserManagementView })));
+const RestaurantDashboard = lazy(() => import('../modules/restaurant/Dashboard').then((module) => ({ default: module.Dashboard })));
+const RestaurantStockControl = lazy(() => import('../modules/restaurant/StockControl').then((module) => ({ default: module.StockControl })));
+const RestaurantInventory = lazy(() => import('../modules/restaurant/Inventory').then((module) => ({ default: module.Inventory })));
+const RestaurantAddProduct = lazy(() => import('../modules/restaurant/AddProduct').then((module) => ({ default: module.AddProduct })));
+const RestaurantPurchaseOrders = lazy(() => import('../modules/restaurant/PurchaseOrders').then((module) => ({ default: module.PurchaseOrders })));
+const RestaurantGoodsReceived = lazy(() => import('../modules/restaurant/GoodsReceived').then((module) => ({ default: module.GoodsReceived })));
+const RestaurantPOSKitchenOrders = lazy(() => import('../modules/restaurant/POSKitchenOrders').then((module) => ({ default: module.POSKitchenOrders })));
+const RestaurantRecipeBOM = lazy(() => import('../modules/restaurant/RecipeBOM').then((module) => ({ default: module.RecipeBOM })));
+const RestaurantTransfers = lazy(() => import('../modules/restaurant/Transfers').then((module) => ({ default: module.Transfers })));
+const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').then((module) => ({ default: module.Reports })));
+const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then((module) => ({ default: module.MultiLocation })));
+const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then((module) => ({ default: module.UserManagement })));
 
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const {
+    currentUser,
+    isLoggedIn,
+    isRestoringSession,
+    login,
+    logout,
+  } = useSession();
+  const { currentView, setCurrentView, navigateToView } = useViewNavigation();
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
-  const queryClient = useQueryClient();
   const retailEnabled = isLoggedIn && hasRetailModule;
-  const inventoryQuery = useRetailInventoryQuery(retailEnabled);
-  const locationsQuery = useRetailLocationsQuery(isLoggedIn);
-  const usersQuery = useRetailUsersQuery(isLoggedIn && currentUser?.role === 'Admin');
-  const purchaseOrdersQuery = useRetailPurchaseOrdersQuery(undefined, retailEnabled);
-  const goodsReceiptsQuery = useRetailGoodsReceiptsQuery(undefined, retailEnabled);
-  const transfersQuery = useRetailTransfersQuery(retailEnabled);
-  const adjustmentsQuery = useRetailAdjustmentsQuery(retailEnabled);
-  const inventory = inventoryQuery.data ?? [];
-  const locations = locationsQuery.data ?? [];
-  const users = usersQuery.data ?? [];
-  const purchaseOrders = purchaseOrdersQuery.data ?? [];
-  const productsReceived = goodsReceiptsQuery.data ?? [];
-  const transfers = transfersQuery.data ?? [];
-  const adjustments = adjustmentsQuery.data ?? [];
-  const saveInventoryMutation = useSaveRetailInventoryMutation();
-  const deleteInventoryMutation = useDeleteRetailInventoryMutation();
-  const navigateToView = (view: ViewType, replace = false) => {
-    setCurrentView(view);
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', view);
-    window.history[replace ? 'replaceState' : 'pushState']({ view }, '', url);
-  };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const view = new URL(window.location.href).searchParams.get('view') as ViewType | null;
-      if (view) setCurrentView(view);
-    };
-    handlePopState();
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
-
+  const {
+    inventory,
+    locations,
+    users,
+    purchaseOrders,
+    productsReceived,
+    transfers,
+    adjustments,
+    stats,
+    stockAlerts,
+    filteredInventory,
+    formData,
+    setFormData,
+    searchTerm,
+    setSearchTerm,
+    editingId,
+    showEditModal,
+    expandedCategories,
+    expandedSubcategories,
+    handleEdit,
+    handleSaveEdit,
+    handleCancelEdit,
+    handleDelete,
+    toggleCategory,
+    toggleSubcategory,
+  } = useRetailWorkspace({
+    enabled: retailEnabled,
+    loadSharedData: isLoggedIn,
+    loadUsers: isLoggedIn && currentUser?.role === 'Admin',
+  });
   // When user logs in and has only RESTAURANT module, switch to it automatically
   useEffect(() => {
     if (hasRestaurantModule && currentView.startsWith('restaurant-')) {
@@ -103,15 +91,6 @@ export default function App() {
     setActiveModule(module);
     navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
   };
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const view = (e as CustomEvent<string>).detail;
-      if (view) navigateToView(view as ViewType);
-    };
-    window.addEventListener('restaurant-navigate', handler);
-    return () => window.removeEventListener('restaurant-navigate', handler);
-  }, []);
 
   // Global handler to remove leading zeros from number inputs
   useEffect(() => {
@@ -136,248 +115,18 @@ export default function App() {
     };
   }, []);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    targetCustomer: 'Unisex' as 'Male' | 'Female' | 'Unisex',
-    subcategory: '',
-    size: '',
-    condition: 'Good' as 'Excellent' | 'Good' | 'Fair' | 'Damaged',
-    quantity: 1,
-    price: 0,
-    location: 'Main Store'
-  });
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
-
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
-    const availableStock = inventory.filter(item => item.condition !== 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const damagedItems = inventory.filter(item => item.condition === 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const stockMovements = inventory.length;
-
-    const lastMonthItems = 15; // Mock data
-    const itemsChange = ((totalItems - lastMonthItems) / lastMonthItems * 100).toFixed(1);
-
-    const lastMonthAvailable = 12;
-    const availableChange = ((availableStock - lastMonthAvailable) / lastMonthAvailable * 100).toFixed(1);
-
-    return {
-      totalItems,
-      availableStock,
-      damagedItems,
-      stockMovements,
-      itemsChange: parseFloat(itemsChange),
-      availableChange: parseFloat(availableChange)
-    };
-  }, [inventory]);
-
-  const stockAlerts = useMemo<RetailStockAlert[]>(() => {
-    return inventory
-      .filter(item => item.quantity <= 3 && item.condition !== 'Damaged')
-      .map(item => ({
-        id: item.id,
-        itemName: item.name,
-        currentStock: item.quantity,
-        threshold: 5,
-        severity: (item.quantity <= 1 ? 'critical' : 'low') as 'low' | 'critical'
-      }));
-  }, [inventory]);
-
-  const getLocationIdByName = (name: string) => {
-    return locations.find(location => location.name === name)?.id;
-  };
-
-  const toInventoryPayload = () => {
-    const locationId = getLocationIdByName(formData.location);
-    if (!locationId) {
-      throw new Error('Please select a valid location');
-    }
-
-    return {
-      name: formData.name,
-      category: formData.category,
-      targetCustomer: formData.targetCustomer,
-      subcategory: formData.subcategory,
-      size: formData.size,
-      condition: formData.condition,
-      quantity: Number(formData.quantity),
-      price: Number(formData.price),
-      locationId
-    };
-  };
-
-  const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.category || !formData.size) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    const wasEditing = Boolean(editingId);
-    try {
-      if (editingId) {
-        await saveInventoryMutation.mutateAsync({ id: editingId, data: toInventoryPayload() });
-        setEditingId(null);
-      } else {
-        await saveInventoryMutation.mutateAsync({ data: toInventoryPayload() });
-      }
-
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-      toast.success(wasEditing ? 'Inventory item updated' : 'Inventory item created');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to save inventory item');
-    }
-  };
-
-  const handleEdit = (item: InventoryItem) => {
-    setFormData({
-      name: item.name,
-      category: item.category,
-      targetCustomer: item.targetCustomer,
-      subcategory: item.subcategory,
-      size: item.size,
-      condition: item.condition,
-      quantity: item.quantity,
-      price: item.price,
-      location: item.location
-    });
-    setEditingId(item.id);
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingId) return;
-
-    if (!formData.name || !formData.category || !formData.size) {
-      toast.error('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      await saveInventoryMutation.mutateAsync({ id: editingId, data: toInventoryPayload() });
-
-      setEditingId(null);
-      setShowEditModal(false);
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-      toast.success('Inventory item updated');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update inventory item');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setShowEditModal(false);
-    setFormData({
-      name: '',
-      category: '',
-      targetCustomer: 'Unisex',
-      subcategory: '',
-      size: '',
-      condition: 'Good',
-      quantity: 1,
-      price: 0,
-      location: 'Main Store'
-    });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this item?')) {
-      try {
-        await deleteInventoryMutation.mutateAsync(id);
-        toast.success('Inventory item deleted');
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to delete inventory item');
-      }
-    }
-  };
-
-  const filteredInventory = inventory.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.subcategory.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
-  };
-
-  const toggleSubcategory = (key: string) => {
-    const newExpanded = new Set(expandedSubcategories);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedSubcategories(newExpanded);
-  };
-
   const handleLogin = async (email: string, password: string) => {
-    try {
-      const response = await loginUser(email, password);
-      storeToken(response.accessToken);
-      setCurrentUser({
-        id: response.user.id,
-        name: response.user.name,
-        email: response.user.email,
-        role: response.user.role,
-        businessId: response.user.businessId,
-        modules: response.user.modules
-      });
-      localStorage.setItem('userRole', response.user.role.toLowerCase());
-      localStorage.setItem('userEmail', response.user.email);
-      setIsLoggedIn(true);
-      toast.success('Signed in successfully');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Invalid credentials');
-    }
+    await login(email, password);
   };
 
   const handleLogout = async () => {
-    try {
-      await logoutUser();
-    } finally {
-      clearStoredToken();
-      queryClient.clear();
-      setIsLoggedIn(false);
-      setCurrentUser(null);
-      setCurrentView('dashboard');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('userEmail');
-    }
+    await logout();
+    setCurrentView('dashboard');
   };
+
+  if (isRestoringSession) {
+    return <div className="min-h-screen grid place-items-center text-muted-foreground">Restoring session...</div>;
+  }
 
   if (!isLoggedIn) {
     return <LoginPage onLogin={handleLogin} />;

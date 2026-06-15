@@ -1,1 +1,5 @@
-export { useRestaurantLocationsQuery } from './core';
+import { useLocationsQuery } from '../domainQueries';
+
+export function useRestaurantLocationsQuery() {
+  return useLocationsQuery();
+}
