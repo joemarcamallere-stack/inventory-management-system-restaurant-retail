@@ -20,6 +20,7 @@ import { Transfers as RestaurantTransfers } from '../modules/restaurant/Transfer
 import { Reports as RestaurantReports } from '../modules/restaurant/Reports';
 import { MultiLocation as RestaurantMultiLocation } from '../modules/restaurant/MultiLocation';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
+import { UserManagement as RestaurantUserManagement } from '../modules/restaurant/UserManagement';
 import {
   clearStoredToken,
   createInventoryItem,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
+import { toast } from "sonner";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
 import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
@@ -63,7 +64,7 @@ const toInventoryQuantity = (quantity: number, recipeUnit: string, inventoryUnit
   return null;
 };
 
-const formatMoney = (value: number) => `PHP ${Number.isFinite(value) ? value.toFixed(2) : "0.00"}`;
+const formatMoney = (value: number) => `₱${Number.isFinite(value) ? value.toFixed(2) : "0.00"}`;
 
 const calculateRecipeYieldAdjustedCost = (recipe: Recipe) => {
   return recipe.yieldAdjustedCost ?? recipe.totalCost / Math.max((recipe.yieldPercentage || 100) / 100, 0.01);
@@ -85,6 +86,7 @@ export function RecipeBOM() {
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [scaleMultiplier, setScaleMultiplier] = useState(1);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const [newRecipe, setNewRecipe] = useState({
     name: "",
@@ -157,25 +159,25 @@ export function RecipeBOM() {
           : item.name === currentIngredient.name
       );
       if (!selectedItem) {
-        alert("Please select a valid inventory item");
+        toast.error("Please select a valid inventory item");
         return;
       }
 
       const quantity = parseFloat(currentIngredient.quantity);
       const unitCost = parseFloat(currentIngredient.unitCost);
       if (!Number.isFinite(quantity) || quantity <= 0) {
-        alert("Ingredient quantity must be greater than zero");
+        toast.error("Ingredient quantity must be greater than zero");
         return;
       }
 
       const inventoryQuantity = toInventoryQuantity(quantity, currentIngredient.unit, selectedItem.unit);
       if (inventoryQuantity === null) {
-        alert(`Cannot convert ${currentIngredient.unit} to inventory unit ${selectedItem.unit}. Please choose a compatible unit.`);
+        toast.error(`Cannot convert ${currentIngredient.unit} to inventory unit ${selectedItem.unit}. Please choose a compatible unit.`);
         return;
       }
 
       if (inventoryQuantity > selectedItem.stock) {
-        alert(`This recipe needs ${inventoryQuantity.toFixed(2)} ${selectedItem.unit}, but only ${selectedItem.stock.toFixed(2)} ${selectedItem.unit} is in stock.`);
+        toast.warning(`This recipe needs ${inventoryQuantity.toFixed(2)} ${selectedItem.unit}, but only ${selectedItem.stock.toFixed(2)} ${selectedItem.unit} is in stock.`);
       }
 
       const totalCost = inventoryQuantity * unitCost;
@@ -262,12 +264,12 @@ export function RecipeBOM() {
     e.preventDefault();
 
     if (!isAdmin) {
-      alert("Only admin users can create or edit recipes and pricing.");
+      toast.error("Only admin users can create or edit recipes and pricing.");
       return;
     }
 
     if (ingredients.length === 0) {
-      alert("Please add at least one ingredient");
+      toast.error("Please add at least one ingredient");
       return;
     }
 
@@ -278,23 +280,23 @@ export function RecipeBOM() {
     const prepTime = parseInt(newRecipe.prepTime);
 
     if (!Number.isFinite(servings) || servings <= 0) {
-      alert("Servings must be greater than zero");
+      toast.error("Servings must be greater than zero");
       return;
     }
     if (!Number.isFinite(yieldPercentage) || yieldPercentage <= 0 || yieldPercentage > 100) {
-      alert("Yield percentage must be between 1 and 100");
+      toast.error("Yield percentage must be between 1 and 100");
       return;
     }
     if (!Number.isFinite(targetFoodCost) || targetFoodCost <= 0 || targetFoodCost > 100) {
-      alert("Target food cost percentage must be between 1 and 100");
+      toast.error("Target food cost percentage must be between 1 and 100");
       return;
     }
     if (newRecipe.sellingPrice && (!Number.isFinite(sellingPriceInput) || sellingPriceInput <= 0)) {
-      alert("Menu selling price must be greater than zero when entered");
+      toast.error("Menu selling price must be greater than zero when entered");
       return;
     }
     if (!Number.isFinite(prepTime) || prepTime < 0) {
-      alert("Prep time cannot be negative");
+      toast.error("Prep time cannot be negative");
       return;
     }
 
@@ -366,7 +368,7 @@ export function RecipeBOM() {
       });
       setIngredients([]);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to save recipe");
+      toast.error(error instanceof Error ? error.message : "Failed to save recipe");
     }
   };
 
@@ -378,7 +380,7 @@ export function RecipeBOM() {
 
   const handleEditRecipe = (recipe: Recipe) => {
     if (!isAdmin) {
-      alert("Only admin users can edit recipes and pricing.");
+      toast.error("Only admin users can edit recipes and pricing.");
       return;
     }
 
@@ -399,18 +401,23 @@ export function RecipeBOM() {
     setShowCreateModal(true);
   };
 
-  const handleDeleteRecipe = async (id: string) => {
+  const handleDeleteRecipe = (id: string) => {
     if (!isAdmin) {
-      alert("Only admin users can delete recipes.");
+      toast.error("Only admin users can delete recipes.");
       return;
     }
+    setPendingDeleteId(id);
+  };
 
-    if (confirm("Are you sure you want to delete this recipe?")) {
-      try {
-        await removeRecipe.mutateAsync(id);
-      } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to delete recipe");
-      }
+  const confirmDeleteRecipe = async () => {
+    if (!pendingDeleteId) return;
+    const id = pendingDeleteId;
+    setPendingDeleteId(null);
+    try {
+      await removeRecipe.mutateAsync(id);
+      toast.success("Recipe deleted successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete recipe");
     }
   };
 
@@ -658,7 +665,7 @@ export function RecipeBOM() {
 
       {/* Create Recipe Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-3xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
               <h2 className="text-2xl font-bold text-foreground">{editingRecipe ? "Edit Recipe" : "Create New Recipe"}</h2>
@@ -1025,7 +1032,7 @@ export function RecipeBOM() {
 
       {/* View & Scale Recipe Modal */}
       {showViewModal && selectedRecipe && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
               <div>
@@ -1177,6 +1184,37 @@ export function RecipeBOM() {
                   className="flex-1 px-6 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 transition-all duration-200"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Recipe Confirmation Modal */}
+      {pendingDeleteId !== null && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-sm">
+            <div className="p-6 border-b border-border flex items-center gap-3">
+              <Trash2 className="w-6 h-6 text-red-600 flex-shrink-0" />
+              <h2 className="text-lg font-bold text-foreground">Delete Recipe</h2>
+            </div>
+            <div className="p-6">
+              <p className="text-foreground mb-1">Are you sure you want to delete this recipe?</p>
+              <p className="text-sm text-muted-foreground mb-6">This action cannot be undone.</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={confirmDeleteRecipe}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+                <button
+                  onClick={() => setPendingDeleteId(null)}
+                  className="px-4 py-2 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-colors"
+                >
+                  Cancel
                 </button>
               </div>
             </div>

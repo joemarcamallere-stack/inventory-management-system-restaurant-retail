@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeftRight, Plus, Search, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Clock, X, FileText, Trash2, PhilippinePeso, BarChart3, Calendar } from "lucide-react";
+import { toast } from "sonner";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import {
   cancelTransfer,
@@ -168,7 +169,7 @@ export function Transfers() {
       setShowTransferModal(false);
       setNewTransfer({ item: "", quantity: "", unit: "kg", from: "", to: "", notes: "" });
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to create transfer");
+      toast.error(error instanceof Error ? error.message : "Failed to create transfer");
     }
   };
 
@@ -187,7 +188,7 @@ export function Transfers() {
       setShowAdjustmentModal(false);
       setNewAdjustment({ item: "", quantity: "", unit: "kg", location: "", type: "damage", reason: "", notes: "" });
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to save adjustment");
+      toast.error(error instanceof Error ? error.message : "Failed to save adjustment");
     }
   };
 
@@ -206,7 +207,7 @@ export function Transfers() {
       setShowWasteModal(false);
       setNewWaste({ item: "", quantity: "", unit: "kg", location: "", wasteType: "spoilage", unitCost: "", notes: "" });
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to log waste");
+      toast.error(error instanceof Error ? error.message : "Failed to log waste");
     }
   };
 
@@ -329,12 +330,12 @@ export function Transfers() {
   ];
 
   return (
-    <div className="p-6">
+    <div className="p-8">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-6">
+      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-foreground mb-1">Transfers & Adjustments</h1>
-          <p className="text-sm text-muted-foreground">Manage stock transfers, adjustments, and waste logging</p>
+          <h1 className="text-3xl font-bold text-foreground mb-1">Transfers & Adjustments</h1>
+          <p className="text-muted-foreground">Manage stock transfers, adjustments, and waste logging</p>
         </div>
         <div className="flex gap-2 mt-3 md:mt-0">
           {activeTab === "transfers" && (
@@ -368,18 +369,18 @@ export function Transfers() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         {transferStats.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div key={index} className="bg-card rounded-xl p-4 shadow-sm border border-border">
-              <div className="flex items-center gap-2 mb-2">
-                <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-lg flex items-center justify-center`}>
+            <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center`}>
                   <Icon className="w-5 h-5 text-white" />
                 </div>
               </div>
-              <p className="text-muted-foreground text-xs mb-1">{stat.label}</p>
-              <p className="text-xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-muted-foreground text-sm mb-1">{stat.label}</p>
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
             </div>
           );
         })}
@@ -443,13 +444,13 @@ export function Transfers() {
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            Wastage & Expiry Report
+            Waste Report
           </button>
         </div>
       )}
 
       {/* Filters */}
-      <div className="bg-card rounded-xl p-4 shadow-sm border border-border mb-6">
+      <div className="bg-card rounded-2xl p-6 shadow-sm border border-border mb-6">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -808,7 +809,7 @@ export function Transfers() {
 
       {/* Create Transfer Modal */}
       {showTransferModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl shadow-xl w-full max-w-md border border-border">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-bold text-foreground">Create Transfer Request</h2>
@@ -909,7 +910,7 @@ export function Transfers() {
 
       {/* Create Adjustment Modal */}
       {showAdjustmentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl shadow-xl w-full max-w-md border border-border">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-bold text-foreground">Create Inventory Adjustment</h2>
@@ -1023,7 +1024,7 @@ export function Transfers() {
 
       {/* Log Waste Modal */}
       {showWasteModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl shadow-xl w-full max-w-md border border-border">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-bold text-foreground">Log Waste & Write-Off</h2>
@@ -1149,7 +1150,7 @@ export function Transfers() {
 
       {/* Details Modal */}
       {showDetailsModal && selectedItem && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl shadow-xl w-full max-w-md border border-border max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-border sticky top-0 bg-card">
               <h2 className="text-lg font-bold text-foreground">

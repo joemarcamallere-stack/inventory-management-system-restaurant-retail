@@ -45,7 +45,7 @@ export class DiningTablesService {
       ...(locationId ? { locationId } : {}),
       ...(status ? { status } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.diningTable.findMany({
         where,
         include: this.tableInclude,

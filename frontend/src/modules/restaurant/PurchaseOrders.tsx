@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
+import { toast } from "sonner";
 import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
 import {
@@ -554,7 +555,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     e.preventDefault();
 
     if (orderItems.length === 0) {
-      alert("Please add at least one item to the order");
+      toast.error("Please add at least one item to the order");
       return;
     }
 
@@ -567,7 +568,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       setOrderItems([]);
       setCurrentItem(blankOrderItemInput());
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to create purchase order");
+      toast.error(error instanceof Error ? error.message : "Failed to create purchase order");
     }
   };
 
@@ -634,7 +635,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     try {
       await approveOrder.mutateAsync(order.backendId ?? order.id);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to approve purchase order");
+      toast.error(error instanceof Error ? error.message : "Failed to approve purchase order");
     }
   };
 
@@ -650,7 +651,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
     const trimmedNote = rejectionNote.trim();
     if (!trimmedNote) {
-      alert("Please enter a rejection note before rejecting this order.");
+      toast.error("Please enter a rejection note before rejecting this order.");
       return;
     }
 
@@ -664,7 +665,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       setApprovingOrder(null);
       setRejectionNote("");
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to reject purchase order");
+      toast.error(error instanceof Error ? error.message : "Failed to reject purchase order");
     }
   };
 
@@ -672,7 +673,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     try {
       await cancelOrder.mutateAsync(orderId);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to cancel purchase order");
+      toast.error(error instanceof Error ? error.message : "Failed to cancel purchase order");
     }
   };
 
@@ -690,7 +691,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     e.preventDefault();
 
     if (orderItems.length === 0) {
-      alert("Please add at least one item to the order");
+      toast.error("Please add at least one item to the order");
       return;
     }
 
@@ -707,7 +708,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       setOrderItems([]);
       setCurrentItem(blankOrderItemInput());
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to update purchase order");
+      toast.error(error instanceof Error ? error.message : "Failed to update purchase order");
     }
   };
 
@@ -723,7 +724,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     ].filter(([, value]) => !String(value).trim());
 
     if (missingSupplierFields.length > 0) {
-      alert(`Please complete supplier ${missingSupplierFields.map(([field]) => field).join(", ")}`);
+      toast.error(`Please complete supplier ${missingSupplierFields.map(([field]) => field).join(", ")}`);
       return;
     }
 
@@ -748,7 +749,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       });
       setShowSupplierModal(false);
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to create supplier");
+      toast.error(error instanceof Error ? error.message : "Failed to create supplier");
     }
   };
 
@@ -764,7 +765,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
         <div>
-          <h1 className="text-xl font-bold text-foreground mb-2">Purchase Orders</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">Purchase Orders</h1>
           <p className="text-muted-foreground text-sm hidden">Manage and track all purchase orders</p>
         </div>
         <div className="flex gap-3 mt-4 md:mt-0">
@@ -800,11 +801,11 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-card rounded-2xl p-2 shadow-sm border border-border">
-            <p className="text-muted-foreground text-sm mb-6">{stat.label}</p>
-            <p className="text-xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
+          <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+            <p className="text-muted-foreground text-sm mb-1">{stat.label}</p>
+            <p className="text-2xl font-bold" style={{ color: stat.color }}>{stat.value}</p>
           </div>
         ))}
       </div>
@@ -846,7 +847,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       )}
 
       {/* Search and Filter */}
-      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border mb-8">
+      <div className="bg-card rounded-2xl p-6 shadow-sm border border-border mb-8">
         <div className="flex flex-col md:flex-row gap-6">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
@@ -855,7 +856,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
               placeholder="Search by order ID or supplier..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-2 py-1 bg-input-background border border-input rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+              className="w-full pl-12 pr-4 py-3 bg-input-background border border-input rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
             />
           </div>
           <div className="relative">
@@ -919,14 +920,14 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleViewDetails(order)}
-                        className="p-6 hover:bg-blue-50 text-blue-600 rounded-2xl transition-colors"
+                        className="p-2 hover:bg-blue-50 text-blue-600 rounded-xl transition-colors"
                         title="View Details"
                       >
                         <Eye className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleEditOrder(order)}
-                        className={`p-6 rounded-2xl transition-colors ${
+                        className={`p-2 rounded-xl transition-colors ${
                           order.status === "received" || order.status === "cancelled" || order.status === "rejected"
                             ? "text-muted-foreground cursor-not-allowed opacity-50"
                             : "hover:bg-orange-50 text-orange-600"
@@ -938,7 +939,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                       </button>
                       <button
                         onClick={() => handleDownload(order)}
-                        className="p-6 hover:bg-green-50 text-green-600 rounded-2xl transition-colors"
+                        className="p-2 hover:bg-green-50 text-green-600 rounded-xl transition-colors"
                         title="Download"
                       >
                         <Download className="w-4 h-4" />
@@ -951,7 +952,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                             className="px-4 py-2 hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-colors text-sm font-semibold"
                             title="Approve and create GRN"
                           >
-                            Approved
+                            Approve
                           </button>
                           <button
                             onClick={() => openRejectOrderModal(order)}
@@ -959,14 +960,14 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                             className="px-4 py-2 hover:bg-red-50 text-red-700 border border-red-200 rounded-xl transition-colors text-sm font-semibold"
                             title="Reject Order"
                           >
-                            Rejected
+                            Reject
                           </button>
                         </>
                       )}
                       {order.status === "pending" && !canApprovePurchaseOrders && (
                         <button
                           onClick={() => handleCancelOrder(order.id)}
-                          className="p-6 hover:bg-red-50 text-red-600 rounded-2xl transition-colors"
+                          className="p-2 hover:bg-red-50 text-red-600 rounded-xl transition-colors"
                           title="Cancel Order"
                         >
                           <XCircle className="w-4 h-4" />
@@ -983,7 +984,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* Create Order Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowCreateModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-foreground">Create New Order</h2>
@@ -1117,7 +1118,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* View Order Details Modal */}
       {showViewModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowViewModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-4xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
               <div>
@@ -1251,7 +1252,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* Reject Order Modal */}
       {showRejectModal && (rejectingOrder || approvingOrder) && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowRejectModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowRejectModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 mb-6">
               <div>
@@ -1321,7 +1322,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* Edit Order Modal */}
       {showEditModal && editingOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowEditModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowEditModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -1445,7 +1446,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* Add Supplier Modal */}
       {showSupplierModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSupplierModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowSupplierModal(false)}>
           <div className="bg-card rounded-xl shadow-xl max-w-md w-full" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-card">
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
@@ -1573,7 +1574,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* View Suppliers Modal */}
       {showSuppliersListModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowSuppliersListModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowSuppliersListModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-5xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-card p-6 border-b border-border flex items-center justify-between">
               <div>
@@ -1672,7 +1673,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
       {/* Pending Approval Modal */}
       {showApprovalModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
             <div className="p-6 border-b border-border bg-gradient-to-r from-primary to-secondary">
               <div className="flex items-center justify-between">

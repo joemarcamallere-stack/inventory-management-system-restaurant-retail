@@ -28,7 +28,7 @@ export class UsersService {
 
   async findAll(businessId: string, page = 1, limit = 50): Promise<PaginatedResult<any>> {
     const where = { businessId };
-    const [users, total] = await this.prisma.$transaction([
+    const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },

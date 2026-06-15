@@ -265,39 +265,39 @@ export function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-1.5 mb-8">
+      <div className="grid grid-cols-4 gap-6 mb-8">
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div key={`stat-${index}`} className="bg-card rounded-2xl p-2 shadow-sm border border-border hover:shadow-md transition-all duration-200">
-              <div className="flex items-start justify-between mb-8">
-                <div className={`w-6 h-6 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center shadow-lg`}>
+            <div key={`stat-${index}`} className="bg-card rounded-2xl p-6 shadow-sm border border-border hover:shadow-md transition-all duration-200">
+              <div className="flex items-start justify-between mb-4">
+                <div className={`w-10 h-10 bg-gradient-to-br ${stat.color} rounded-xl flex items-center justify-center shadow-lg`}>
                   <Icon className="w-5 h-5 text-white" />
                 </div>
-                <div className={`flex items-center gap-0.5 text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                <div className={`flex items-center gap-1 text-sm ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
                   {stat.trend === 'up' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />}
                   <span>{stat.change}</span>
                 </div>
               </div>
-              <h3 className="text-muted-foreground text-sm mb-2">{stat.title}</h3>
-              <p className="text-sm font-bold text-foreground">{stat.value}</p>
+              <h3 className="text-muted-foreground text-sm mb-1">{stat.title}</h3>
+              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
             </div>
           );
         })}
       </div>
 
-      <div className="grid grid-cols-3 gap-1.5 mb-8">
+      <div className="grid grid-cols-3 gap-6 mb-8">
         {/* Inventory Receipt Trend Chart */}
-        <div className="col-span-2 bg-card rounded-2xl p-2 shadow-sm border border-border">
-          <div className="flex items-center justify-between mb-8">
+        <div className="col-span-2 bg-card rounded-2xl p-6 shadow-sm border border-border">
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold text-foreground">Inventory Receipt Trend</h2>
-              <p className="text-sm text-muted-foreground">Shows received purchase orders only; true sales data is not available in this inventory module.</p>
+              <h2 className="text-lg font-bold text-foreground">Receipt Trend</h2>
+              <p className="text-sm text-muted-foreground">Based on received purchase orders.</p>
             </div>
             {receiptTrendData.length > 0 && (
-              <div className="flex items-center gap-0.5 text-green-600 bg-green-50 px-1.5 py-2 rounded-xl">
-                <TrendingUp className="w-5 h-5" />
-                <span className="text-sm">{receiptTrendData.length} received PO</span>
+              <div className="flex items-center gap-2 text-green-600 bg-green-50 px-3 py-1.5 rounded-xl">
+                <TrendingUp className="w-4 h-4" />
+                <span className="text-sm">{receiptTrendData.length} POs</span>
               </div>
             )}
           </div>
@@ -336,9 +336,9 @@ export function Dashboard() {
         </div>
 
         {/* Inventory Distribution */}
-        <div className="bg-card rounded-2xl p-2 shadow-sm border border-border">
-          <h2 className="text-xl font-bold text-foreground mb-8">Inventory</h2>
-          <ResponsiveContainer width="100%" height={90} key={`pie-container-${chartKey}`}>
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+          <h2 className="text-lg font-bold text-foreground mb-4">By Category</h2>
+          <ResponsiveContainer width="100%" height={120} key={`pie-container-${chartKey}`}>
             <PieChart key={`piechart-${chartKey}`}>
               <Pie
                 key={`pie-slice-${chartKey}`}
@@ -370,18 +370,18 @@ export function Dashboard() {
               />
             </PieChart>
           </ResponsiveContainer>
-          <div className="mt-1.5 space-y-0">
+          <div className="mt-4 space-y-1.5">
             {aggregatedData.map((item, index) => (
               <div
                 key={item.id}
-                className="flex items-center justify-between text-sm p-0.5 rounded hover:bg-muted/50 cursor-pointer transition-colors"
+                className="flex items-center justify-between text-sm p-1.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                 onClick={() => goToInventory()}
               >
-                <div className="flex items-center gap-1">
-                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: COLORS[index] }}></div>
-                  <span className="text-foreground">{item.category}</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[index] }}></div>
+                  <span className="text-foreground truncate">{item.category}</span>
                 </div>
-                <span className="text-muted-foreground">{item.value}</span>
+                <span className="text-muted-foreground font-medium ml-2">{item.value}</span>
               </div>
             ))}
           </div>
@@ -483,14 +483,14 @@ export function Dashboard() {
       )}
 
       {/* Recent Activity */}
-      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border">
-        <h2 className="text-xl font-bold text-foreground mb-6">Recent Activity</h2>
-        <div className="space-y-0.5">
+      <div className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+        <h2 className="text-lg font-bold text-foreground mb-4">Recent Activity</h2>
+        <div className="space-y-2">
           {recentActivity.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">No activity yet</div>
+            <div className="py-8 text-center text-sm text-muted-foreground">No activity yet</div>
           ) : recentActivity.map((activity) => (
-            <div key={activity.id} className="flex items-center gap-1.5 p-1 rounded hover:bg-muted/50 transition-colors">
-              <div className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${
+            <div key={activity.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted/50 transition-colors">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                 activity.type === 'add' ? 'bg-green-100 text-green-600' :
                 activity.type === 'update' ? 'bg-blue-100 text-blue-600' :
                 activity.type === 'alert' ? 'bg-orange-100 text-orange-600' :
@@ -501,7 +501,7 @@ export function Dashboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-foreground font-medium text-sm truncate">{activity.action}: {activity.item}</p>
               </div>
-              <span className="text-muted-foreground text-[10px] whitespace-nowrap">{formatActivityTimestamp(activity.time)}</span>
+              <span className="text-muted-foreground text-xs whitespace-nowrap">{formatActivityTimestamp(activity.time)}</span>
             </div>
           ))}
         </div>
@@ -509,7 +509,7 @@ export function Dashboard() {
 
       {/* Approval Modal */}
       {showApprovalModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowApprovalModal(false)}>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowApprovalModal(false)}>
           <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 border-b border-border flex items-center justify-between">
               <div>

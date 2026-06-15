@@ -495,7 +495,7 @@ async function main() {
     },
   });
 
-  await prisma.location.upsert({
+  const restColdStorage = await prisma.location.upsert({
     where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Cold Storage' } },
     update: { address: 'Cold Storage Room', manager: 'Restaurant Admin', phone: '+63 900 200 0002' },
     create: {
@@ -507,7 +507,7 @@ async function main() {
     },
   });
 
-  await prisma.location.upsert({
+  const restDryStorage = await prisma.location.upsert({
     where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dry Storage' } },
     update: { address: 'Dry Storage Room', manager: 'Restaurant Admin', phone: '+63 900 200 0003' },
     create: {
@@ -521,20 +521,20 @@ async function main() {
 
   const restChicken = await prisma.inventoryItem.upsert({
     where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-001' } },
-    update: { name: 'Chicken Breast', itemType: 'INGREDIENT', category: 'Meat & Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id },
-    create: { name: 'Chicken Breast', itemType: 'INGREDIENT', sku: 'REST2-ING-001', category: 'Meat & Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+    update: { name: 'Chicken Breast', itemType: 'INGREDIENT', category: 'Meat > Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id },
+    create: { name: 'Chicken Breast', itemType: 'INGREDIENT', sku: 'REST2-ING-001', category: 'Meat > Poultry', quantity: 15, price: 185, unit: 'kg', minStock: 3, reorderPoint: 5, storageTemperature: 'Frozen', locationId: restKitchen.id, businessId: restaurantBusiness.id },
   });
 
   const restRice = await prisma.inventoryItem.upsert({
     where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-002' } },
-    update: { name: 'White Rice', itemType: 'INGREDIENT', category: 'Grains', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id },
-    create: { name: 'White Rice', itemType: 'INGREDIENT', sku: 'REST2-ING-002', category: 'Grains', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+    update: { name: 'White Rice', itemType: 'INGREDIENT', category: 'Grains > Rice', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id },
+    create: { name: 'White Rice', itemType: 'INGREDIENT', sku: 'REST2-ING-002', category: 'Grains > Rice', quantity: 50, price: 48, unit: 'kg', minStock: 10, reorderPoint: 20, storageTemperature: 'Dry storage', locationId: restKitchen.id, businessId: restaurantBusiness.id },
   });
 
   const chickenRiceMenu = await prisma.inventoryItem.upsert({
     where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-001' } },
-    update: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', category: 'Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id },
-    create: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', sku: 'REST2-MENU-001', category: 'Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+    update: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', category: 'Menu Items > Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Chicken Rice Bowl', itemType: 'MENU_ITEM', sku: 'REST2-MENU-001', category: 'Menu Items > Main Course', quantity: 0, price: 150, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
   });
 
   const chickenRiceRecipe = await prisma.recipe.upsert({
@@ -550,6 +550,352 @@ async function main() {
       { recipeId: chickenRiceRecipe.id, itemId: restRice.id, quantity: 0.2, unit: 'kg', unitCost: 48, totalCost: 9.6 },
     ],
   });
+
+  // ─── Restaurant-Only: Dining Area + Extra Staff ───────────────────────────
+  const diningArea = await prisma.location.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dining Area' } },
+    update: { address: 'Main Dining Floor', manager: 'Restaurant Admin', phone: '+63 900 200 0004' },
+    create: { name: 'Dining Area', address: 'Main Dining Floor', manager: 'Restaurant Admin', phone: '+63 900 200 0004', businessId: restaurantBusiness.id },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'kitchen@restaurant.com' },
+    update: { name: 'Kitchen Staff', role: 'KitchenStaff', status: 'Active', passwordHash: staffPasswordHash, businessId: restaurantBusiness.id },
+    create: { name: 'Kitchen Staff', email: 'kitchen@restaurant.com', role: 'KitchenStaff', status: 'Active', passwordHash: staffPasswordHash, businessId: restaurantBusiness.id },
+  });
+
+  await prisma.user.upsert({
+    where: { email: 'manager@restaurant.com' },
+    update: { name: 'Floor Manager', role: 'Manager', status: 'Active', passwordHash: staffPasswordHash, businessId: restaurantBusiness.id },
+    create: { name: 'Floor Manager', email: 'manager@restaurant.com', role: 'Manager', status: 'Active', passwordHash: staffPasswordHash, businessId: restaurantBusiness.id },
+  });
+
+  // ─── Restaurant-Only: More Ingredients ───────────────────────────────────
+  const restTomatoes = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-003' } },
+    update: { name: 'Tomatoes', itemType: 'INGREDIENT', category: 'Vegetables > Nightshades', quantity: 10, price: 60, unit: 'kg', minStock: 2, reorderPoint: 4, expiryDate: new Date('2026-06-18T00:00:00.000Z'), storageTemperature: 'Chilled', locationId: restColdStorage.id },
+    create: { name: 'Tomatoes', itemType: 'INGREDIENT', sku: 'REST2-ING-003', category: 'Vegetables > Nightshades', quantity: 10, price: 60, unit: 'kg', minStock: 2, reorderPoint: 4, expiryDate: new Date('2026-06-18T00:00:00.000Z'), storageTemperature: 'Chilled', locationId: restColdStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restOnions = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-004' } },
+    update: { name: 'Onions', itemType: 'INGREDIENT', category: 'Vegetables > Root Vegetables', quantity: 8, price: 70, unit: 'kg', minStock: 2, reorderPoint: 3, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Onions', itemType: 'INGREDIENT', sku: 'REST2-ING-004', category: 'Vegetables > Root Vegetables', quantity: 8, price: 70, unit: 'kg', minStock: 2, reorderPoint: 3, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restGarlic = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-005' } },
+    update: { name: 'Garlic', itemType: 'INGREDIENT', category: 'Vegetables > Root Vegetables', quantity: 0.4, price: 150, unit: 'kg', minStock: 0.5, reorderPoint: 1, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Garlic', itemType: 'INGREDIENT', sku: 'REST2-ING-005', category: 'Vegetables > Root Vegetables', quantity: 0.4, price: 150, unit: 'kg', minStock: 0.5, reorderPoint: 1, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restPorkBelly = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-006' } },
+    update: { name: 'Pork Belly', itemType: 'INGREDIENT', category: 'Meat > Pork', quantity: 12, price: 250, unit: 'kg', minStock: 3, reorderPoint: 5, expiryDate: new Date('2026-06-15T00:00:00.000Z'), storageTemperature: 'Frozen', locationId: restColdStorage.id },
+    create: { name: 'Pork Belly', itemType: 'INGREDIENT', sku: 'REST2-ING-006', category: 'Meat > Pork', quantity: 12, price: 250, unit: 'kg', minStock: 3, reorderPoint: 5, expiryDate: new Date('2026-06-15T00:00:00.000Z'), storageTemperature: 'Frozen', locationId: restColdStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restSoySauce = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-007' } },
+    update: { name: 'Soy Sauce', itemType: 'INGREDIENT', category: 'Oils & Condiments > Sauces', quantity: 6, price: 85, unit: 'L', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Soy Sauce', itemType: 'INGREDIENT', sku: 'REST2-ING-007', category: 'Oils & Condiments > Sauces', quantity: 6, price: 85, unit: 'L', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restVinegar = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-008' } },
+    update: { name: 'Vinegar', itemType: 'INGREDIENT', category: 'Oils & Condiments > Vinegars', quantity: 4, price: 65, unit: 'L', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Vinegar', itemType: 'INGREDIENT', sku: 'REST2-ING-008', category: 'Oils & Condiments > Vinegars', quantity: 4, price: 65, unit: 'L', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restShrimp = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-009' } },
+    update: { name: 'Tiger Shrimp', itemType: 'INGREDIENT', category: 'Seafood > Crustaceans', quantity: 5, price: 380, unit: 'kg', minStock: 1, reorderPoint: 2, expiryDate: new Date('2026-06-14T00:00:00.000Z'), storageTemperature: 'Frozen', locationId: restColdStorage.id },
+    create: { name: 'Tiger Shrimp', itemType: 'INGREDIENT', sku: 'REST2-ING-009', category: 'Seafood > Crustaceans', quantity: 5, price: 380, unit: 'kg', minStock: 1, reorderPoint: 2, expiryDate: new Date('2026-06-14T00:00:00.000Z'), storageTemperature: 'Frozen', locationId: restColdStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restTamarind = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-010' } },
+    update: { name: 'Tamarind', itemType: 'INGREDIENT', category: 'Oils & Condiments > Spices', quantity: 0.8, price: 120, unit: 'kg', minStock: 0.5, reorderPoint: 1, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Tamarind', itemType: 'INGREDIENT', sku: 'REST2-ING-010', category: 'Oils & Condiments > Spices', quantity: 0.8, price: 120, unit: 'kg', minStock: 0.5, reorderPoint: 1, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restEggs = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-011' } },
+    update: { name: 'Eggs', itemType: 'INGREDIENT', category: 'Dairy > Eggs', quantity: 120, price: 8, unit: 'pcs', minStock: 24, reorderPoint: 48, expiryDate: new Date('2026-06-22T00:00:00.000Z'), storageTemperature: 'Chilled', locationId: restColdStorage.id },
+    create: { name: 'Eggs', itemType: 'INGREDIENT', sku: 'REST2-ING-011', category: 'Dairy > Eggs', quantity: 120, price: 8, unit: 'pcs', minStock: 24, reorderPoint: 48, expiryDate: new Date('2026-06-22T00:00:00.000Z'), storageTemperature: 'Chilled', locationId: restColdStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restCondensedMilk = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-012' } },
+    update: { name: 'Condensed Milk', itemType: 'INGREDIENT', category: 'Dairy > Milk Products', quantity: 24, price: 45, unit: 'cans', minStock: 6, reorderPoint: 12, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Condensed Milk', itemType: 'INGREDIENT', sku: 'REST2-ING-012', category: 'Dairy > Milk Products', quantity: 24, price: 45, unit: 'cans', minStock: 6, reorderPoint: 12, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restSugar = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-013' } },
+    update: { name: 'Sugar', itemType: 'INGREDIENT', category: 'Oils & Condiments > Seasonings', quantity: 10, price: 55, unit: 'kg', minStock: 2, reorderPoint: 4, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Sugar', itemType: 'INGREDIENT', sku: 'REST2-ING-013', category: 'Oils & Condiments > Seasonings', quantity: 10, price: 55, unit: 'kg', minStock: 2, reorderPoint: 4, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  const restIcedTeaMix = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-ING-014' } },
+    update: { name: 'Iced Tea Mix', itemType: 'INGREDIENT', category: 'Beverages > Mixes', quantity: 5, price: 180, unit: 'kg', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id },
+    create: { name: 'Iced Tea Mix', itemType: 'INGREDIENT', sku: 'REST2-ING-014', category: 'Beverages > Mixes', quantity: 5, price: 180, unit: 'kg', minStock: 1, reorderPoint: 2, storageTemperature: 'Dry storage', locationId: restDryStorage.id, businessId: restaurantBusiness.id },
+  });
+
+  // ─── Restaurant-Only: More Menu Items ────────────────────────────────────
+  const porkAdoboMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-002' } },
+    update: { name: 'Pork Adobo', itemType: 'MENU_ITEM', category: 'Menu Items > Main Course', quantity: 0, price: 165, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Pork Adobo', itemType: 'MENU_ITEM', sku: 'REST2-MENU-002', category: 'Menu Items > Main Course', quantity: 0, price: 165, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const sinigangMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-003' } },
+    update: { name: 'Sinigang na Baboy', itemType: 'MENU_ITEM', category: 'Menu Items > Soups', quantity: 0, price: 185, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Sinigang na Baboy', itemType: 'MENU_ITEM', sku: 'REST2-MENU-003', category: 'Menu Items > Soups', quantity: 0, price: 185, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const shrimpMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-004' } },
+    update: { name: 'Garlic Butter Shrimp', itemType: 'MENU_ITEM', category: 'Menu Items > Main Course', quantity: 0, price: 280, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Garlic Butter Shrimp', itemType: 'MENU_ITEM', sku: 'REST2-MENU-004', category: 'Menu Items > Main Course', quantity: 0, price: 280, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const lecheFlanMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-005' } },
+    update: { name: 'Leche Flan', itemType: 'MENU_ITEM', category: 'Menu Items > Desserts', quantity: 0, price: 95, unit: 'serving', locationId: restKitchen.id },
+    create: { name: 'Leche Flan', itemType: 'MENU_ITEM', sku: 'REST2-MENU-005', category: 'Menu Items > Desserts', quantity: 0, price: 95, unit: 'serving', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  const icedTeaMenu = await prisma.inventoryItem.upsert({
+    where: { businessId_sku: { businessId: restaurantBusiness.id, sku: 'REST2-MENU-006' } },
+    update: { name: 'Iced Tea', itemType: 'MENU_ITEM', category: 'Menu Items > Beverages', quantity: 0, price: 55, unit: 'glass', locationId: restKitchen.id },
+    create: { name: 'Iced Tea', itemType: 'MENU_ITEM', sku: 'REST2-MENU-006', category: 'Menu Items > Beverages', quantity: 0, price: 55, unit: 'glass', locationId: restKitchen.id, businessId: restaurantBusiness.id },
+  });
+
+  // ─── Restaurant-Only: More Recipes ───────────────────────────────────────
+  const porkAdoboRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Pork Adobo' } },
+    update: { category: 'Main Course', servings: 4, prepTimeMinutes: 45, sellingPrice: 165, targetFoodCost: 38, isActive: true, menuItemId: porkAdoboMenu.id, instructions: 'Marinate pork in soy sauce and vinegar. Sauté garlic and onions, add pork, simmer until tender.' },
+    create: { name: 'Pork Adobo', category: 'Main Course', servings: 4, prepTimeMinutes: 45, sellingPrice: 165, targetFoodCost: 38, isActive: true, menuItemId: porkAdoboMenu.id, instructions: 'Marinate pork in soy sauce and vinegar. Sauté garlic and onions, add pork, simmer until tender.', businessId: restaurantBusiness.id },
+  });
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: porkAdoboRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: porkAdoboRecipe.id, itemId: restPorkBelly.id, quantity: 0.5, unit: 'kg', unitCost: 250, totalCost: 125 },
+      { recipeId: porkAdoboRecipe.id, itemId: restSoySauce.id, quantity: 0.1, unit: 'L', unitCost: 85, totalCost: 8.5 },
+      { recipeId: porkAdoboRecipe.id, itemId: restVinegar.id, quantity: 0.05, unit: 'L', unitCost: 65, totalCost: 3.25 },
+      { recipeId: porkAdoboRecipe.id, itemId: restGarlic.id, quantity: 0.05, unit: 'kg', unitCost: 150, totalCost: 7.5 },
+      { recipeId: porkAdoboRecipe.id, itemId: restOnions.id, quantity: 0.1, unit: 'kg', unitCost: 70, totalCost: 7 },
+    ],
+  });
+
+  const sinigangRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Sinigang na Baboy' } },
+    update: { category: 'Soups', servings: 4, prepTimeMinutes: 60, sellingPrice: 185, targetFoodCost: 40, isActive: true, menuItemId: sinigangMenu.id, instructions: 'Boil pork until tender. Add tamarind broth, tomatoes, and onions. Simmer and season.' },
+    create: { name: 'Sinigang na Baboy', category: 'Soups', servings: 4, prepTimeMinutes: 60, sellingPrice: 185, targetFoodCost: 40, isActive: true, menuItemId: sinigangMenu.id, instructions: 'Boil pork until tender. Add tamarind broth, tomatoes, and onions. Simmer and season.', businessId: restaurantBusiness.id },
+  });
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: sinigangRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: sinigangRecipe.id, itemId: restPorkBelly.id, quantity: 0.5, unit: 'kg', unitCost: 250, totalCost: 125 },
+      { recipeId: sinigangRecipe.id, itemId: restTamarind.id, quantity: 0.1, unit: 'kg', unitCost: 120, totalCost: 12 },
+      { recipeId: sinigangRecipe.id, itemId: restTomatoes.id, quantity: 0.2, unit: 'kg', unitCost: 60, totalCost: 12 },
+      { recipeId: sinigangRecipe.id, itemId: restOnions.id, quantity: 0.1, unit: 'kg', unitCost: 70, totalCost: 7 },
+    ],
+  });
+
+  const shrimpRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Garlic Butter Shrimp' } },
+    update: { category: 'Main Course', servings: 2, prepTimeMinutes: 20, sellingPrice: 280, targetFoodCost: 42, isActive: true, menuItemId: shrimpMenu.id, instructions: 'Sauté garlic in butter. Add shrimp, toss until pink, season and serve.' },
+    create: { name: 'Garlic Butter Shrimp', category: 'Main Course', servings: 2, prepTimeMinutes: 20, sellingPrice: 280, targetFoodCost: 42, isActive: true, menuItemId: shrimpMenu.id, instructions: 'Sauté garlic in butter. Add shrimp, toss until pink, season and serve.', businessId: restaurantBusiness.id },
+  });
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: shrimpRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: shrimpRecipe.id, itemId: restShrimp.id, quantity: 0.3, unit: 'kg', unitCost: 380, totalCost: 114 },
+      { recipeId: shrimpRecipe.id, itemId: restGarlic.id, quantity: 0.03, unit: 'kg', unitCost: 150, totalCost: 4.5 },
+    ],
+  });
+
+  const lecheFlanRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Leche Flan' } },
+    update: { category: 'Desserts', servings: 6, prepTimeMinutes: 90, sellingPrice: 95, targetFoodCost: 30, isActive: true, menuItemId: lecheFlanMenu.id, instructions: 'Caramelize sugar. Mix eggs and condensed milk, pour over caramel, steam until set.' },
+    create: { name: 'Leche Flan', category: 'Desserts', servings: 6, prepTimeMinutes: 90, sellingPrice: 95, targetFoodCost: 30, isActive: true, menuItemId: lecheFlanMenu.id, instructions: 'Caramelize sugar. Mix eggs and condensed milk, pour over caramel, steam until set.', businessId: restaurantBusiness.id },
+  });
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: lecheFlanRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: lecheFlanRecipe.id, itemId: restEggs.id, quantity: 8, unit: 'pcs', unitCost: 8, totalCost: 64 },
+      { recipeId: lecheFlanRecipe.id, itemId: restCondensedMilk.id, quantity: 2, unit: 'cans', unitCost: 45, totalCost: 90 },
+      { recipeId: lecheFlanRecipe.id, itemId: restSugar.id, quantity: 0.2, unit: 'kg', unitCost: 55, totalCost: 11 },
+    ],
+  });
+
+  const icedTeaRecipe = await prisma.recipe.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Iced Tea' } },
+    update: { category: 'Beverages', servings: 1, prepTimeMinutes: 2, sellingPrice: 55, targetFoodCost: 20, isActive: true, menuItemId: icedTeaMenu.id, instructions: 'Mix iced tea powder with cold water and sugar. Serve over ice.' },
+    create: { name: 'Iced Tea', category: 'Beverages', servings: 1, prepTimeMinutes: 2, sellingPrice: 55, targetFoodCost: 20, isActive: true, menuItemId: icedTeaMenu.id, instructions: 'Mix iced tea powder with cold water and sugar. Serve over ice.', businessId: restaurantBusiness.id },
+  });
+  await prisma.recipeIngredient.deleteMany({ where: { recipeId: icedTeaRecipe.id } });
+  await prisma.recipeIngredient.createMany({
+    data: [
+      { recipeId: icedTeaRecipe.id, itemId: restIcedTeaMix.id, quantity: 0.025, unit: 'kg', unitCost: 180, totalCost: 4.5 },
+      { recipeId: icedTeaRecipe.id, itemId: restSugar.id, quantity: 0.02, unit: 'kg', unitCost: 55, totalCost: 1.1 },
+    ],
+  });
+
+  // ─── Restaurant-Only: Dining Tables ──────────────────────────────────────
+  const tableData = [
+    { number: 'T01', capacity: 2, status: 'AVAILABLE', floor: 'Ground Floor' },
+    { number: 'T02', capacity: 4, status: 'OCCUPIED',  floor: 'Ground Floor' },
+    { number: 'T03', capacity: 4, status: 'AVAILABLE', floor: 'Ground Floor' },
+    { number: 'T04', capacity: 6, status: 'RESERVED',  floor: 'Ground Floor' },
+    { number: 'T05', capacity: 2, status: 'AVAILABLE', floor: 'Ground Floor' },
+    { number: 'T06', capacity: 4, status: 'OCCUPIED',  floor: 'Ground Floor' },
+    { number: 'T07', capacity: 8, status: 'AVAILABLE', floor: '2nd Floor' },
+    { number: 'T08', capacity: 4, status: 'CLEANING',  floor: '2nd Floor' },
+    { number: 'T09', capacity: 2, status: 'AVAILABLE', floor: '2nd Floor' },
+    { number: 'T10', capacity: 6, status: 'AVAILABLE', floor: '2nd Floor' },
+  ];
+  for (const t of tableData) {
+    await prisma.diningTable.upsert({
+      where: { businessId_locationId_tableNumber: { businessId: restaurantBusiness.id, locationId: diningArea.id, tableNumber: t.number } },
+      update: { capacity: t.capacity, status: t.status as any, floor: t.floor },
+      create: { tableNumber: t.number, capacity: t.capacity, status: t.status as any, floor: t.floor, locationId: diningArea.id, businessId: restaurantBusiness.id },
+    });
+  }
+
+  // ─── Restaurant-Only: Suppliers ───────────────────────────────────────────
+  const freshMarket = await prisma.supplier.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Fresh Market Suppliers' } },
+    update: { contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true },
+    create: { name: 'Fresh Market Suppliers', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true, businessId: restaurantBusiness.id },
+  });
+
+  const primeMeats = await prisma.supplier.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Prime Meats & Poultry' } },
+    update: { contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true },
+    create: { name: 'Prime Meats & Poultry', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true, businessId: restaurantBusiness.id },
+  });
+
+  const dryGoodsDepot = await prisma.supplier.upsert({
+    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dry Goods Depot' } },
+    update: { contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true },
+    create: { name: 'Dry Goods Depot', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true, businessId: restaurantBusiness.id },
+  });
+
+  // ─── Restaurant-Only: Purchase Orders ────────────────────────────────────
+  const restAdmin = await prisma.user.findUnique({ where: { email: 'admin@restaurant.com' }, select: { id: true } });
+
+  const po1 = await prisma.purchaseOrder.upsert({
+    where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-001' } },
+    update: { status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-001', status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+  });
+  if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po1.id } })) === 0) {
+    await prisma.purchaseOrderItem.createMany({
+      data: [
+        { purchaseOrderId: po1.id, inventoryItemId: restChicken.id, name: 'Chicken Breast', quantity: 20, receivedQty: 20, unitPrice: 185, totalPrice: 3700 },
+        { purchaseOrderId: po1.id, inventoryItemId: restPorkBelly.id, name: 'Pork Belly', quantity: 12, receivedQty: 12, unitPrice: 250, totalPrice: 3000 },
+      ],
+    });
+  }
+
+  const po2 = await prisma.purchaseOrder.upsert({
+    where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-002' } },
+    update: { status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-002', status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+  });
+  if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po2.id } })) === 0) {
+    await prisma.purchaseOrderItem.createMany({
+      data: [
+        { purchaseOrderId: po2.id, inventoryItemId: restTomatoes.id, name: 'Tomatoes', quantity: 10, unitPrice: 60, totalPrice: 600 },
+        { purchaseOrderId: po2.id, inventoryItemId: restShrimp.id, name: 'Tiger Shrimp', quantity: 5, unitPrice: 380, totalPrice: 1900 },
+      ],
+    });
+  }
+
+  const po3 = await prisma.purchaseOrder.upsert({
+    where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-003' } },
+    update: { status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-003', status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+  });
+  if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po3.id } })) === 0) {
+    await prisma.purchaseOrderItem.createMany({
+      data: [
+        { purchaseOrderId: po3.id, inventoryItemId: restRice.id, name: 'White Rice', quantity: 25, unitPrice: 48, totalPrice: 1200 },
+        { purchaseOrderId: po3.id, inventoryItemId: restSoySauce.id, name: 'Soy Sauce', quantity: 6, unitPrice: 85, totalPrice: 510 },
+        { purchaseOrderId: po3.id, inventoryItemId: restVinegar.id, name: 'Vinegar', quantity: 4, unitPrice: 65, totalPrice: 260 },
+        { purchaseOrderId: po3.id, inventoryItemId: restSugar.id, name: 'Sugar', quantity: 2, unitPrice: 55, totalPrice: 110 },
+      ],
+    });
+  }
+
+  // ─── Restaurant-Only: Kitchen Orders ─────────────────────────────────────
+  const diningTables = await prisma.diningTable.findMany({ where: { businessId: restaurantBusiness.id }, orderBy: { tableNumber: 'asc' } });
+
+  const koData = [
+    { receiptNo: 'KO-REST-001', recipeId: chickenRiceRecipe.id,  quantity: 2, status: 'COMPLETED', tIdx: 0 },
+    { receiptNo: 'KO-REST-002', recipeId: porkAdoboRecipe.id,    quantity: 1, status: 'COMPLETED', tIdx: 1 },
+    { receiptNo: 'KO-REST-003', recipeId: sinigangRecipe.id,     quantity: 2, status: 'COMPLETED', tIdx: 2 },
+    { receiptNo: 'KO-REST-004', recipeId: shrimpRecipe.id,       quantity: 1, status: 'READY',     tIdx: 3 },
+    { receiptNo: 'KO-REST-005', recipeId: chickenRiceRecipe.id,  quantity: 3, status: 'PREPARING', tIdx: 4 },
+    { receiptNo: 'KO-REST-006', recipeId: lecheFlanRecipe.id,    quantity: 4, status: 'PENDING',   tIdx: 5 },
+    { receiptNo: 'KO-REST-007', recipeId: icedTeaRecipe.id,      quantity: 5, status: 'COMPLETED', tIdx: 6 },
+    { receiptNo: 'KO-REST-008', recipeId: porkAdoboRecipe.id,    quantity: 2, status: 'COMPLETED', tIdx: 7 },
+  ];
+
+  for (const ko of koData) {
+    await prisma.kitchenOrder.upsert({
+      where: { businessId_receiptNo: { businessId: restaurantBusiness.id, receiptNo: ko.receiptNo } },
+      update: { status: ko.status as any, quantity: ko.quantity },
+      create: { receiptNo: ko.receiptNo, recipeId: ko.recipeId, quantity: ko.quantity, status: ko.status as any, tableId: diningTables[ko.tIdx]?.id ?? null, locationId: restKitchen.id, businessId: restaurantBusiness.id, completedById: restAdmin?.id },
+    });
+  }
+
+  // ─── Restaurant-Only: Sales ───────────────────────────────────────────────
+  const salesData = [
+    { txNo: 'TXN-REST-001', items: [{ item: chickenRiceMenu, qty: 2, price: 150 }, { item: icedTeaMenu, qty: 2, price: 55 }], method: 'Cash' },
+    { txNo: 'TXN-REST-002', items: [{ item: porkAdoboMenu,   qty: 1, price: 165 }, { item: icedTeaMenu, qty: 1, price: 55 }], method: 'GCash' },
+    { txNo: 'TXN-REST-003', items: [{ item: sinigangMenu,    qty: 2, price: 185 }, { item: icedTeaMenu, qty: 3, price: 55 }], method: 'Cash' },
+    { txNo: 'TXN-REST-004', items: [{ item: shrimpMenu,      qty: 1, price: 280 }, { item: lecheFlanMenu, qty: 2, price: 95 }], method: 'Card' },
+    { txNo: 'TXN-REST-005', items: [{ item: porkAdoboMenu,   qty: 2, price: 165 }, { item: sinigangMenu, qty: 1, price: 185 }], method: 'Cash' },
+    { txNo: 'TXN-REST-006', items: [{ item: chickenRiceMenu, qty: 3, price: 150 }, { item: lecheFlanMenu, qty: 1, price: 95 }], method: 'GCash' },
+  ];
+
+  for (const sd of salesData) {
+    const exists = await prisma.sale.findUnique({ where: { businessId_transactionNumber: { businessId: restaurantBusiness.id, transactionNumber: sd.txNo } } });
+    if (!exists) {
+      const subtotal = sd.items.reduce((sum, it) => sum + it.qty * it.price, 0);
+      await prisma.sale.create({
+        data: {
+          transactionNumber: sd.txNo,
+          locationId: diningArea.id,
+          cashierId: restAdmin?.id ?? null,
+          subtotal,
+          discount: 0,
+          tax: 0,
+          total: subtotal,
+          paymentMethod: sd.method,
+          amountPaid: subtotal,
+          change: 0,
+          status: 'COMPLETED',
+          businessId: restaurantBusiness.id,
+          items: {
+            create: sd.items.map(it => ({
+              inventoryItemId: it.item.id,
+              name: it.item.name,
+              quantity: it.qty,
+              unitPrice: it.price,
+              totalPrice: it.qty * it.price,
+            })),
+          },
+        },
+      });
+    }
+  }
 }
 
 main()

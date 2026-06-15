@@ -126,7 +126,7 @@ export class StockMovementsService {
       ...(filters.referenceId ? { referenceId: filters.referenceId } : {}),
     };
     const include = { item: true, location: true, createdBy: true };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.stockMovement.findMany({
         where,
         include,

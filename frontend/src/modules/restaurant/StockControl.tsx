@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Package, Search, TrendingDown, TrendingUp, AlertCircle, RefreshCw, Download, BarChart3, Calendar, Clock } from "lucide-react";
+import { toast } from "sonner";
 import {
   useRestaurantAdjustmentsQuery,
   useRestaurantInventoryQuery,
@@ -199,14 +200,14 @@ export function StockControl() {
 
     if (!style || !label) {
       return (
-        <span className="px-3 py-1 rounded-full text-xs font-medium border" style={{ backgroundColor: "#E5E7EB", color: "#374151", borderColor: "#9CA3AF" }}>
+        <span className="px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap" style={{ backgroundColor: "#E5E7EB", color: "#374151", borderColor: "#9CA3AF" }}>
           {status}
         </span>
       );
     }
 
     return (
-      <span className="px-3 py-1 rounded-full text-xs font-medium border" style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}>
+      <span className="px-3 py-1 rounded-full text-xs font-medium border whitespace-nowrap" style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}>
         {label}
       </span>
     );
@@ -295,7 +296,7 @@ export function StockControl() {
     setTimeout(() => {
       setIsRefreshing(false);
       // In a real app, this would fetch fresh data from the backend
-      alert("Stock data refreshed successfully!");
+      toast.success("Stock data refreshed successfully!");
     }, 1000);
   };
 
@@ -378,14 +379,14 @@ export function StockControl() {
         {stats.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border">
+            <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border overflow-hidden min-w-0">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: stat.color }}>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: stat.color }}>
                   <Icon className="w-6 h-6 text-white" />
                 </div>
               </div>
-              <p className="text-muted-foreground text-sm mb-2">{stat.label}</p>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-muted-foreground text-sm mb-2 truncate">{stat.label}</p>
+              <p className="text-xl font-bold text-foreground break-words">{stat.value}</p>
             </div>
           );
         })}
@@ -402,7 +403,7 @@ export function StockControl() {
           }`}
         >
           <BarChart3 className="w-4 h-4" />
-          Stock Control
+          Overview
         </button>
         <button
           onClick={() => setViewType("low-stock")}
@@ -487,7 +488,7 @@ export function StockControl() {
                   <th className="px-6 py-4 text-right text-sm font-medium text-foreground">Total Value</th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-foreground">Turnover</th>
                   <th className="px-6 py-4 text-center text-sm font-medium text-foreground">ABC</th>
-                  <th className="px-6 py-4 text-center text-sm font-medium text-foreground">Status</th>
+                  <th className="px-6 py-4 text-center text-sm font-medium text-foreground min-w-[150px]">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -515,7 +516,7 @@ export function StockControl() {
                       <p className="text-[10px] text-muted-foreground">Outflow: {formatQuantity(item.movementQuantity, item.unit)}</p>
                     </td>
                     <td className="px-6 py-4 text-center">{getClassificationBadge(item.classification)}</td>
-                    <td className="px-6 py-4 text-center">{getStatusBadge(item.status)}</td>
+                    <td className="px-6 py-4 text-center min-w-[150px]">{getStatusBadge(item.status)}</td>
                   </tr>
                 ))}
               </tbody>

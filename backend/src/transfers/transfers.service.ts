@@ -84,7 +84,7 @@ export class TransfersService {
       ...(fromLocationId ? { fromLocationId } : {}),
       ...(toLocationId ? { toLocationId } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.transfer.findMany({
         where,
         include: this.transferInclude,

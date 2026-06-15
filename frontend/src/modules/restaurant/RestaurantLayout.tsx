@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "sonner";
 import {
   Apple,
   ArrowLeftRight,
@@ -104,14 +105,14 @@ export function RestaurantLayout({
                 key={item.view}
                 type="button"
                 onClick={() => onNavigate(item.view)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                className={`w-full flex items-start gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                   isActive
                     ? "bg-primary text-primary-foreground shadow-lg shadow-primary/30"
                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-foreground"
                 }`}
               >
-                <Icon className="w-5 h-5" />
-                <span className="text-sm font-medium">{item.label}</span>
+                <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <span className="text-sm font-medium text-left leading-snug">{item.label}</span>
               </button>
             );
           })}
@@ -130,10 +131,7 @@ export function RestaurantLayout({
               {userRole === "Admin" ? <Shield className="w-5 h-5" /> : <UserIcon className="w-5 h-5" />}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  {userRole === "Admin" ? "Admin User" : "Staff User"}
-                </p>
+              <div className="mb-1">
                 <span
                   className="px-2 py-0.5 rounded text-xs font-medium"
                   style={{
@@ -168,6 +166,7 @@ export function RestaurantLayout({
         )}
         {children}
       </main>
+      <Toaster richColors position="top-right" />
     </div>
   );
 }
