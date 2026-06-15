@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { Toaster } from "sonner";
 import {
   Apple,
   ArrowLeftRight,
@@ -165,6 +166,7 @@ export function RestaurantLayout({
         )}
         {children}
       </main>
+      <Toaster richColors position="top-right" />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { BadRequestException } from '@nestjs/common';
-import { BusinessModule } from '@prisma/client';
 import { PurchaseOrdersService } from './purchase-orders.service';
 
 describe('PurchaseOrdersService', () => {
@@ -23,7 +22,6 @@ describe('PurchaseOrdersService', () => {
           ],
         },
         'business-1',
-        BusinessModule.RESTAURANT,
         'user-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -68,7 +66,6 @@ describe('PurchaseOrdersService', () => {
           ],
         },
         'business-1',
-        BusinessModule.RESTAURANT,
         'user-1',
       ),
     ).rejects.toThrow('exceeds the remaining ordered quantity');

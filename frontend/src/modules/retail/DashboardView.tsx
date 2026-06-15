@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
+import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -10,18 +11,17 @@ import type {
   Adjustment,
   Location,
   User,
-} from '../../models/retail';
+} from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
-import type { RetailStockAlert } from '../lib/retailQueries';
 
-interface DashboardStats {
-  totalItems: number;
-  availableStock: number;
-  damagedItems: number;
-  stockMovements: number;
-  itemsChange: number;
-  availableChange: number;
+
+export interface StockAlert {
+  id: string;
+  itemName: string;
+  currentStock: number;
+  threshold: number;
+  severity: 'low' | 'critical';
 }
 
 export function DashboardView({
@@ -31,8 +31,8 @@ export function DashboardView({
   purchaseOrders,
   productsReceived
 }: {
-  stats: DashboardStats;
-  stockAlerts: RetailStockAlert[];
+  stats: any;
+  stockAlerts: StockAlert[];
   inventory: InventoryItem[];
   purchaseOrders: PurchaseOrder[];
   productsReceived: ProductReceived[];
@@ -338,25 +338,7 @@ export function DashboardView({
 }
 
 // Stat Card Component
-function StatCard({
-  title,
-  value,
-  change,
-  subtitle,
-  color,
-  iconColor,
-  isWarning,
-  icon,
-}: {
-  title: string;
-  value: React.ReactNode;
-  change?: number;
-  subtitle?: string;
-  color: string;
-  iconColor: string;
-  isWarning?: boolean;
-  icon: React.ReactNode;
-}) {
+function StatCard({ title, value, change, subtitle, color, iconColor, isWarning, icon }: any) {
   return (
     <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
       <div className="flex items-start justify-between mb-3">

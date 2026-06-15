@@ -1,25 +1,3 @@
-import type {
-  ApiBundle,
-  ApiGoodsReceipt,
-  ApiInventoryItem,
-  ApiKitchenOrder,
-  ApiLocation,
-  ApiCategory,
-  ApiPurchaseOrder,
-  ApiRecipe,
-  ApiRestaurantSetting,
-  ApiSale,
-  ApiStockMovement,
-  ApiSupplier,
-  ApiTransfer,
-  ApiUser,
-  BusinessModule,
-  KitchenOrderStatus,
-  RestaurantSettingKey,
-} from './domainTypes';
-
-export type { KitchenOrderStatus, RestaurantSettingKey } from './domainTypes';
-
 type RequestOptions = Omit<RequestInit, 'credentials'>;
 
 type PagedResponse<T> = { data: T[]; total: number; page: number; limit: number; totalPages: number };
@@ -81,40 +59,35 @@ export function logoutUser() {
   return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
 }
 
-export function getCurrentSession() {
-  return request<{ user: AuthUser }>('/api/auth/me');
-}
-
 export function getInventory(params?: { search?: string; itemType?: string }) {
   const query = new URLSearchParams();
   if (params?.search) query.set('search', params.search);
   if (params?.itemType) query.set('itemType', params.itemType);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiInventoryItem>>(`/api/inventory${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/inventory${suffix}`).then((r) => r.data);
 }
 
-export function createInventoryItem(data: Record<string, unknown>) {
-  return request<ApiInventoryItem>('/api/inventory', {
+export function createInventoryItem(data: unknown) {
+  return request<any>('/api/inventory', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateInventoryItem(id: string, data: Record<string, unknown>) {
-  return request<ApiInventoryItem>(`/api/inventory/${id}`, {
+export function updateInventoryItem(id: string, data: unknown) {
+  return request<any>(`/api/inventory/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
 export function deleteInventoryItem(id: string) {
-  return request<ApiInventoryItem>(`/api/inventory/${id}`, {
+  return request<any>(`/api/inventory/${id}`, {
     method: 'DELETE',
   });
 }
 
 export function getStockMovements(params?: {
-  module?: BusinessModule;
   itemId?: string;
   locationId?: string;
   type?: string;
@@ -122,18 +95,17 @@ export function getStockMovements(params?: {
   referenceId?: string;
 }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.itemId) query.set('itemId', params.itemId);
   if (params?.locationId) query.set('locationId', params.locationId);
   if (params?.type) query.set('type', params.type);
   if (params?.referenceType) query.set('referenceType', params.referenceType);
   if (params?.referenceId) query.set('referenceId', params.referenceId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiStockMovement>>(`/api/stock-movements${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/stock-movements${suffix}`).then((r) => r.data);
 }
 
-export function createStockMovement(data: Record<string, unknown>) {
-  return request<ApiStockMovement>('/api/stock-movements', {
+export function createStockMovement(data: unknown) {
+  return request<any>('/api/stock-movements', {
     method: 'POST',
     body: JSON.stringify(data),
   });
@@ -143,101 +115,108 @@ export function getRecipes(params?: { active?: boolean }) {
   const query = new URLSearchParams();
   if (params?.active !== undefined) query.set('active', String(params.active));
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiRecipe>>(`/api/recipes${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/recipes${suffix}`).then((r) => r.data);
 }
 
-export function createRecipe(data: Record<string, unknown>) {
-  return request<ApiRecipe>('/api/recipes', {
+export function createRecipe(data: unknown) {
+  return request<any>('/api/recipes', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateRecipe(id: string, data: Record<string, unknown>) {
-  return request<ApiRecipe>(`/api/recipes/${id}`, {
+export function updateRecipe(id: string, data: unknown) {
+  return request<any>(`/api/recipes/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
 export function deleteRecipe(id: string) {
-  return request<ApiRecipe>(`/api/recipes/${id}`, {
+  return request<any>(`/api/recipes/${id}`, {
     method: 'DELETE',
   });
 }
+
+export type KitchenOrderStatus =
+  | 'PENDING'
+  | 'PREPARING'
+  | 'READY'
+  | 'COMPLETED'
+  | 'VOIDED';
 
 export function getKitchenOrders(params?: { status?: KitchenOrderStatus }) {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiKitchenOrder>>(`/api/kitchen-orders${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/kitchen-orders${suffix}`).then((r) => r.data);
 }
 
-export function completeKitchenOrder(data: Record<string, unknown>) {
-  return request<ApiKitchenOrder>('/api/kitchen-orders', {
+export function completeKitchenOrder(data: unknown) {
+  return request<any>('/api/kitchen-orders', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
 export function voidKitchenOrder(id: string, voidReason: string) {
-  return request<ApiKitchenOrder>(`/api/kitchen-orders/${id}/void`, {
+  return request<any>(`/api/kitchen-orders/${id}/void`, {
     method: 'PATCH',
     body: JSON.stringify({ voidReason }),
   });
 }
 
 export function updateKitchenOrderStatus(id: string, status: KitchenOrderStatus) {
-  return request<ApiKitchenOrder>(`/api/kitchen-orders/${id}/status`, {
+  return request<any>(`/api/kitchen-orders/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),
   });
 }
 
 export function getLocations() {
-  return request<PagedResponse<ApiLocation>>('/api/locations').then((r) => r.data);
+  return request<PagedResponse<any>>('/api/locations').then((r) => r.data);
 }
 
-export function createLocation(data: Record<string, unknown>) {
-  return request<ApiLocation>('/api/locations', {
+export function createLocation(data: unknown) {
+  return request<any>('/api/locations', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateLocation(id: string, data: Record<string, unknown>) {
-  return request<ApiLocation>(`/api/locations/${id}`, {
+export function updateLocation(id: string, data: unknown) {
+  return request<any>(`/api/locations/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
 export function deleteLocation(id: string) {
-  return request<ApiLocation>(`/api/locations/${id}`, {
+  return request<any>(`/api/locations/${id}`, {
     method: 'DELETE',
   });
 }
 
 export function getUsers() {
-  return request<PagedResponse<ApiUser>>('/api/users').then((r) => r.data);
+  return request<PagedResponse<any>>('/api/users').then((r) => r.data);
 }
 
-export function createUser(data: Record<string, unknown>) {
-  return request<ApiUser>('/api/users', {
+export function createUser(data: unknown) {
+  return request<any>('/api/users', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
-export function updateUser(id: string, data: Record<string, unknown>) {
-  return request<ApiUser>(`/api/users/${id}`, {
+export function updateUser(id: string, data: unknown) {
+  return request<any>(`/api/users/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
   });
 }
 
 export function deleteUser(id: string) {
-  return request<ApiUser>(`/api/users/${id}`, {
+  return request<any>(`/api/users/${id}`, {
     method: 'DELETE',
   });
 }
@@ -246,22 +225,26 @@ export function getCategories(module?: string) {
   const query = new URLSearchParams();
   if (module) query.set('module', module);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<ApiCategory[]>(`/api/categories${suffix}`);
+  return request<any[]>(`/api/categories${suffix}`);
 }
 
-export function createCategory(data: Record<string, unknown>) {
-  return request<ApiCategory>('/api/categories', {
+export function createCategory(data: unknown) {
+  return request<any>('/api/categories', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 }
 
+export type RestaurantSettingKey =
+  | 'CATEGORY_HIERARCHY'
+  | 'STORAGE_TEMPERATURE_OPTIONS';
+
 export function getRestaurantSettings() {
-  return request<ApiRestaurantSetting[]>('/api/restaurant-settings');
+  return request<Array<{ key: RestaurantSettingKey; value: unknown }>>('/api/restaurant-settings');
 }
 
 export function upsertRestaurantSetting(key: RestaurantSettingKey, value: unknown) {
-  return request<ApiRestaurantSetting>(`/api/restaurant-settings/${key}`, {
+  return request<any>(`/api/restaurant-settings/${key}`, {
     method: 'PUT',
     body: JSON.stringify({ value }),
   });
@@ -269,67 +252,64 @@ export function upsertRestaurantSetting(key: RestaurantSettingKey, value: unknow
 
 // ─── Suppliers ───────────────────────────────────────────────────────────────
 
-export function getSuppliers(params?: { module?: BusinessModule; isActive?: boolean }) {
+export function getSuppliers(params?: { isActive?: boolean }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.isActive !== undefined) query.set('isActive', String(params.isActive));
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiSupplier>>(`/api/suppliers${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/suppliers${suffix}`).then((r) => r.data);
 }
 
-export function createSupplier(data: Record<string, unknown>) {
-  return request<ApiSupplier>('/api/suppliers', { method: 'POST', body: JSON.stringify(data) });
+export function createSupplier(data: unknown) {
+  return request<any>('/api/suppliers', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function updateSupplier(id: string, data: Record<string, unknown>, module: BusinessModule = 'RETAIL') {
-  return request<ApiSupplier>(`/api/suppliers/${id}?module=${module}`, { method: 'PATCH', body: JSON.stringify(data) });
+export function updateSupplier(id: string, data: unknown) {
+  return request<any>(`/api/suppliers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
-export function deleteSupplier(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiSupplier>(`/api/suppliers/${id}?module=${module}`, { method: 'DELETE' });
+export function deleteSupplier(id: string) {
+  return request<any>(`/api/suppliers/${id}`, { method: 'DELETE' });
 }
 
 // ─── Purchase Orders ─────────────────────────────────────────────────────────
 
-export function getPurchaseOrders(params?: { module?: BusinessModule; status?: string; supplierId?: string }) {
+export function getPurchaseOrders(params?: { status?: string; supplierId?: string }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.status) query.set('status', params.status);
   if (params?.supplierId) query.set('supplierId', params.supplierId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiPurchaseOrder>>(`/api/purchase-orders${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/purchase-orders${suffix}`).then((r) => r.data);
 }
 
-export function getPurchaseOrder(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}?module=${module}`);
+export function getPurchaseOrder(id: string) {
+  return request<any>(`/api/purchase-orders/${id}`);
 }
 
-export function getGoodsReceipts(params?: { module?: BusinessModule; purchaseOrderId?: string }) {
+export function getGoodsReceipts(params?: { purchaseOrderId?: string }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.purchaseOrderId) query.set('purchaseOrderId', params.purchaseOrderId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiGoodsReceipt>>(`/api/purchase-orders/goods-receipts${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/purchase-orders/goods-receipts${suffix}`).then((r) => r.data);
 }
 
-export function createPurchaseOrder(data: Record<string, unknown>) {
-  return request<ApiPurchaseOrder>('/api/purchase-orders', { method: 'POST', body: JSON.stringify(data) });
+export function createPurchaseOrder(data: unknown) {
+  return request<any>('/api/purchase-orders', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function updatePurchaseOrder(id: string, data: Record<string, unknown>, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}?module=${module}`, { method: 'PATCH', body: JSON.stringify(data) });
+export function updatePurchaseOrder(id: string, data: unknown) {
+  return request<any>(`/api/purchase-orders/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
-export function submitPurchaseOrder(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}/submit?module=${module}`, { method: 'PATCH' });
+export function submitPurchaseOrder(id: string) {
+  return request<any>(`/api/purchase-orders/${id}/submit`, { method: 'PATCH' });
 }
 
-export function approvePurchaseOrder(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}/approve?module=${module}`, { method: 'PATCH' });
+export function approvePurchaseOrder(id: string) {
+  return request<any>(`/api/purchase-orders/${id}/approve`, { method: 'PATCH' });
 }
 
-export function rejectPurchaseOrder(id: string, reason: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}/reject?module=${module}`, {
+export function rejectPurchaseOrder(id: string, reason: string) {
+  return request<any>(`/api/purchase-orders/${id}/reject`, {
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });
@@ -347,77 +327,70 @@ export function receivePurchaseOrder(
     storageTemperature?: string;
   }[],
   notes?: string,
-  module: BusinessModule = 'RETAIL',
 ) {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}/receive?module=${module}`, {
+  return request<any>(`/api/purchase-orders/${id}/receive`, {
     method: 'PATCH',
     body: JSON.stringify({ items, notes }),
   });
 }
 
-export function cancelPurchaseOrder(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiPurchaseOrder>(`/api/purchase-orders/${id}/cancel?module=${module}`, { method: 'PATCH' });
+export function cancelPurchaseOrder(id: string) {
+  return request<any>(`/api/purchase-orders/${id}/cancel`, { method: 'PATCH' });
 }
 
 // ─── Transfers ───────────────────────────────────────────────────────────────
 
-export function getTransfers(params?: { module?: BusinessModule; status?: string; fromLocationId?: string; toLocationId?: string }) {
+export function getTransfers(params?: { status?: string; fromLocationId?: string; toLocationId?: string }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.status) query.set('status', params.status);
   if (params?.fromLocationId) query.set('fromLocationId', params.fromLocationId);
   if (params?.toLocationId) query.set('toLocationId', params.toLocationId);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiTransfer>>(`/api/transfers${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/transfers${suffix}`).then((r) => r.data);
 }
 
-export function getTransfer(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiTransfer>(`/api/transfers/${id}?module=${module}`);
+export function getTransfer(id: string) {
+  return request<any>(`/api/transfers/${id}`);
 }
 
-export function createTransfer(data: Record<string, unknown>) {
-  return request<ApiTransfer>('/api/transfers', { method: 'POST', body: JSON.stringify(data) });
+export function createTransfer(data: unknown) {
+  return request<any>('/api/transfers', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function dispatchTransfer(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiTransfer>(`/api/transfers/${id}/dispatch?module=${module}`, { method: 'PATCH' });
+export function dispatchTransfer(id: string) {
+  return request<any>(`/api/transfers/${id}/dispatch`, { method: 'PATCH' });
 }
 
-export function completeTransfer(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiTransfer>(`/api/transfers/${id}/complete?module=${module}`, { method: 'PATCH' });
+export function completeTransfer(id: string) {
+  return request<any>(`/api/transfers/${id}/complete`, { method: 'PATCH' });
 }
 
-export function cancelTransfer(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiTransfer>(`/api/transfers/${id}/cancel?module=${module}`, { method: 'PATCH' });
+export function cancelTransfer(id: string) {
+  return request<any>(`/api/transfers/${id}/cancel`, { method: 'PATCH' });
 }
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
 
-export function getSales(params?: { module?: BusinessModule; locationId?: string; status?: string; dateFrom?: string; dateTo?: string }) {
+export function getSales(params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string }) {
   const query = new URLSearchParams();
-  if (params?.module) query.set('module', params.module);
   if (params?.locationId) query.set('locationId', params.locationId);
   if (params?.status) query.set('status', params.status);
   if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params?.dateTo) query.set('dateTo', params.dateTo);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiSale>>(`/api/sales${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/sales${suffix}`).then((r) => r.data);
 }
 
-export function getSale(id: string, module: BusinessModule = 'RETAIL') {
-  return request<ApiSale>(`/api/sales/${id}?module=${module}`);
+export function getSale(id: string) {
+  return request<any>(`/api/sales/${id}`);
 }
 
-export function createSale(data: Record<string, unknown>) {
-  return request<ApiSale>('/api/sales', { method: 'POST', body: JSON.stringify(data) });
+export function createSale(data: unknown) {
+  return request<any>('/api/sales', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function refundSale(
-  id: string,
-  refundReason: string,
-  module: BusinessModule = 'RETAIL',
-) {
-  return request<ApiSale>(`/api/sales/${id}/refund?module=${module}`, { method: 'PATCH', body: JSON.stringify({ refundReason }) });
+export function refundSale(id: string, refundReason: string) {
+  return request<any>(`/api/sales/${id}/refund`, { method: 'PATCH', body: JSON.stringify({ refundReason }) });
 }
 
 // ─── Bundles ─────────────────────────────────────────────────────────────────
@@ -426,37 +399,37 @@ export function getBundles(params?: { status?: string }) {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
   const suffix = query.toString() ? `?${query.toString()}` : '';
-  return request<PagedResponse<ApiBundle>>(`/api/bundles${suffix}`).then((r) => r.data);
+  return request<PagedResponse<any>>(`/api/bundles${suffix}`).then((r) => r.data);
 }
 
 export function getBundle(id: string) {
-  return request<ApiBundle>(`/api/bundles/${id}`);
+  return request<any>(`/api/bundles/${id}`);
 }
 
-export function createBundle(data: Record<string, unknown>) {
-  return request<ApiBundle>('/api/bundles', { method: 'POST', body: JSON.stringify(data) });
+export function createBundle(data: unknown) {
+  return request<any>('/api/bundles', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function updateBundle(id: string, data: Record<string, unknown>) {
-  return request<ApiBundle>(`/api/bundles/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+export function updateBundle(id: string, data: unknown) {
+  return request<any>(`/api/bundles/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
 }
 
 export function approveBundle(id: string) {
-  return request<ApiBundle>(`/api/bundles/${id}/approve`, { method: 'PATCH' });
+  return request<any>(`/api/bundles/${id}/approve`, { method: 'PATCH' });
 }
 
 export function rejectBundle(id: string, rejectionReason: string) {
-  return request<ApiBundle>(`/api/bundles/${id}/reject`, { method: 'PATCH', body: JSON.stringify({ rejectionReason }) });
+  return request<any>(`/api/bundles/${id}/reject`, { method: 'PATCH', body: JSON.stringify({ rejectionReason }) });
 }
 
 export function activateBundle(id: string) {
-  return request<ApiBundle>(`/api/bundles/${id}/activate`, { method: 'PATCH' });
+  return request<any>(`/api/bundles/${id}/activate`, { method: 'PATCH' });
 }
 
 export function deactivateBundle(id: string) {
-  return request<ApiBundle>(`/api/bundles/${id}/deactivate`, { method: 'PATCH' });
+  return request<any>(`/api/bundles/${id}/deactivate`, { method: 'PATCH' });
 }
 
 export function deleteBundle(id: string) {
-  return request<ApiBundle>(`/api/bundles/${id}`, { method: 'DELETE' });
+  return request<any>(`/api/bundles/${id}`, { method: 'DELETE' });
 }

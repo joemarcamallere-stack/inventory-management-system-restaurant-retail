@@ -1,13 +1,10 @@
 import { useState } from "react";
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Edit, Trash2, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
 import { toast } from "sonner";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import {
-  useDeleteRestaurantInventoryMutation,
-  useRestaurantInventoryQuery,
-  useRestaurantLocationsQuery,
-  useUpdateRestaurantInventoryMutation,
-} from "../lib/restaurantQueries";
+import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
 
 type Product = {
   id: number;
@@ -41,12 +38,17 @@ export function Inventory() {
   const categoryHierarchy = getCategoryHierarchy();
   const storageTemperatureOptions = getStorageTemperatureOptions();
 
-  const productsQuery = useRestaurantInventoryQuery<Product[]>();
-  const products = productsQuery.data ?? defaultInventoryProducts;
-  const locationQuery = useRestaurantLocationsQuery();
+  const [products] = useRestaurantState<Product[]>("inventory.products", defaultInventoryProducts);
+  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
   const locations = locationQuery.data ?? [];
-  const updateProduct = useUpdateRestaurantInventoryMutation();
-  const deleteProduct = useDeleteRestaurantInventoryMutation();
+  const updateProduct = useRestaurantMutation(
+    ({ id, data }: { id: string; data: unknown }) => updateInventoryItem(id, data),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
+  const deleteProduct = useRestaurantMutation(
+    (id: string) => deleteInventoryItem(id),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
 
   const mainCategories = Object.keys(categoryHierarchy);
 

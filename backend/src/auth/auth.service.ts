@@ -3,7 +3,6 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
-import type { AuthenticatedUser } from './current-user.decorator';
 
 @Injectable()
 export class AuthService {
@@ -28,7 +27,8 @@ export class AuthService {
 
     await this.usersService.touchLastLogin(user.id);
 
-    const safeUser = this.toAuthUser(user);
+    const currentUser = this.usersService.sanitizeUser(user);
+    const { business: _business, ...safeUser } = currentUser;
     const accessToken = await this.jwtService.signAsync({
       sub: user.id,
       email: user.email,
@@ -39,33 +39,10 @@ export class AuthService {
 
     return {
       accessToken,
-      user: safeUser,
-    };
-  }
-
-  async getSession(authenticatedUser: AuthenticatedUser) {
-    const user = await this.usersService.findAuthUserById(authenticatedUser.id);
-    if (
-      !user ||
-      user.status !== 'Active' ||
-      user.businessId !== authenticatedUser.businessId
-    ) {
-      throw new UnauthorizedException('Session is no longer valid');
-    }
-    return { user: this.toAuthUser(user) };
-  }
-
-  private toAuthUser<
-    T extends {
-      passwordHash?: string;
-      business: { modules: unknown[] };
-    },
-  >(user: T) {
-    const currentUser = this.usersService.sanitizeUser(user);
-    const { business, ...safeUser } = currentUser;
-    return {
-      ...safeUser,
-      modules: business.modules,
+      user: {
+        ...safeUser,
+        modules: user.business.modules,
+      },
     };
   }
 }

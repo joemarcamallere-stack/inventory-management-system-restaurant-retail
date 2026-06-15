@@ -14,8 +14,6 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
 import { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import { StockMovementsService } from './stock-movements.service';
-import { BusinessModule } from '@prisma/client';
-import { resolveModule } from '../auth/assert-module-allowed';
 
 @Controller('stock-movements')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,7 +29,6 @@ export class StockMovementsController {
     return this.stockMovementsService.create(
       createStockMovementDto,
       currentUser.businessId,
-      resolveModule(currentUser, createStockMovementDto.module),
       currentUser.id,
       currentUser.modules,
     );
@@ -40,7 +37,6 @@ export class StockMovementsController {
   @Get()
   findAll(
     @CurrentUser() currentUser: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
     @Query('itemId') itemId?: string,
     @Query('locationId') locationId?: string,
     @Query('type') type?: string,
@@ -51,14 +47,7 @@ export class StockMovementsController {
   ) {
     return this.stockMovementsService.findAll(
       currentUser.businessId,
-      {
-        module: resolveModule(currentUser, module),
-        itemId,
-        locationId,
-        type,
-        referenceType,
-        referenceId,
-      },
+      { itemId, locationId, type, referenceType, referenceId },
       currentUser.modules,
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 50,
@@ -69,12 +58,7 @@ export class StockMovementsController {
   findOne(
     @Param('id') id: string,
     @CurrentUser() currentUser: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
   ) {
-    return this.stockMovementsService.findOne(
-      id,
-      currentUser.businessId,
-      resolveModule(currentUser, module),
-    );
+    return this.stockMovementsService.findOne(id, currentUser.businessId);
   }
 }
