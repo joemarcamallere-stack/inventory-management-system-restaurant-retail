@@ -1,18 +1,12 @@
 ﻿import { useState, useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
-import { createLocation, deleteLocation, updateLocation } from '../../app/api/client';
-import { retailQueryKeys } from '../lib/retailData';
-
-const mapApiLocation = (location: any): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
+import {
+  useCreateRetailLocationMutation,
+  useDeleteRetailLocationMutation,
+  useUpdateRetailLocationMutation,
+} from '../lib/retailQueries';
 
 export default function MultilocationView({
   locations,
@@ -25,7 +19,9 @@ export default function MultilocationView({
   transfers: Transfer[];
   purchaseOrders: PurchaseOrder[];
 }) {
-  const queryClient = useQueryClient();
+  const addLocation = useCreateRetailLocationMutation();
+  const editLocation = useUpdateRetailLocationMutation();
+  const removeLocation = useDeleteRetailLocationMutation();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -48,35 +44,35 @@ export default function MultilocationView({
 
   const handleAddLocation = async () => {
     if (!locationForm.name || !locationForm.address || !locationForm.manager || !locationForm.phone) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      await createLocation(locationForm);
-      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
+      await addLocation.mutateAsync(locationForm);
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setShowAddModal(false);
+      toast.success('Location created successfully');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create location');
+      toast.error(error instanceof Error ? error.message : 'Failed to create location');
     }
   };
 
   const handleEditLocation = async () => {
     if (!selectedLocation || !locationForm.name || !locationForm.address || !locationForm.manager || !locationForm.phone) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      await updateLocation(selectedLocation.id, locationForm);
-      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
+      await editLocation.mutateAsync({ id: selectedLocation.id, data: locationForm });
 
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setSelectedLocation(null);
       setShowEditModal(false);
+      toast.success('Location updated successfully');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update location');
+      toast.error(error instanceof Error ? error.message : 'Failed to update location');
     }
   };
 
@@ -85,16 +81,16 @@ export default function MultilocationView({
     const locationItems = inventory.filter(item => item.location === location?.name);
 
     if (locationItems.length > 0) {
-      alert(`Cannot delete ${location?.name}. There are ${locationItems.length} items at this location. Please transfer or remove items first.`);
+      toast.error(`Cannot delete ${location?.name}. There are ${locationItems.length} items at this location. Please transfer or remove items first.`);
       return;
     }
 
     if (confirm(`Delete ${location?.name}?`)) {
       try {
-        await deleteLocation(locationId);
-        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations });
+        await removeLocation.mutateAsync(locationId);
+        toast.success('Location deleted successfully');
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete location');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete location');
       }
     }
   };

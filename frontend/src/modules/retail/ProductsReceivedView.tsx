@@ -1,8 +1,7 @@
-import React, { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
+import { toast } from 'sonner';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -15,51 +14,54 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
-import { retailQueryKeys } from '../lib/retailData';
-import { usePurchaseOrdersQuery } from '../lib/domainQueries';
+import {
+  getRetailErrorMessage,
+  type RetailPurchaseOrderRecord,
+  useReceiveRetailPurchaseOrderMutation,
+  useRetailPurchaseOrderDetailQuery,
+  useRetailPurchaseOrderRecordsQuery,
+} from '../lib/retailQueries';
 
 export function ProductsReceivedView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const queryClient = useQueryClient();
-  const approvedQuery = usePurchaseOrdersQuery({ status: 'APPROVED' });
-  const receivedQuery = usePurchaseOrdersQuery({ status: 'RECEIVED' });
+  const receiveOrder = useReceiveRetailPurchaseOrderMutation();
+  const approvedQuery = useRetailPurchaseOrderRecordsQuery({ status: 'APPROVED' });
+  const receivedQuery = useRetailPurchaseOrderRecordsQuery({ status: 'RECEIVED' });
   const approvedPOs = approvedQuery.data ?? [];
   const receivedPOs = receivedQuery.data ?? [];
   const loading = approvedQuery.isLoading || receivedQuery.isLoading;
-  const [saving, setSaving] = useState(false);
+  const saving = receiveOrder.isPending;
   const [actionError, setActionError] = useState<string | null>(null);
   const queryError = approvedQuery.error ?? receivedQuery.error;
   const error = actionError ?? (queryError instanceof Error ? queryError.message : null);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
   const [showInspectionModal, setShowInspectionModal] = useState(false);
-  const [selectedPO, setSelectedPO] = useState<any | null>(null);
-  const [inspectionForm, setInspectionForm] = useState<{
-    [itemId: string]: {
-      receivedQty: number;
-      acceptedQty: number;
-      rejectedQty: number;
-      condition: 'Excellent' | 'Good' | 'Fair' | 'Damaged';
-      inspectionNotes: string;
-    };
-  }>({});
+  const [selectedPO, setSelectedPO] = useState<RetailPurchaseOrderRecord | null>(null);
+  const [detailRequest, setDetailRequest] = useState<{ id: string; nonce: number } | null>(null);
+  const detailQuery = useRetailPurchaseOrderDetailQuery(
+    detailRequest?.id,
+    Boolean(detailRequest),
+  );
+  type InspectionEntry = {
+    receivedQty: number;
+    acceptedQty: number;
+    rejectedQty: number;
+    condition: 'Excellent' | 'Good' | 'Fair' | 'Damaged';
+    inspectionNotes: string;
+  };
+  const [inspectionForm, setInspectionForm] = useState<Record<string, InspectionEntry>>({});
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  const loadData = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.purchaseOrders }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.goodsReceipts }),
-  ]);
+  const poTotalAccepted = (po: RetailPurchaseOrderRecord) =>
+    po.items.reduce((sum, item) => sum + (item.receivedQty - item.rejectedQty), 0);
 
-  const poTotalAccepted = (po: any) =>
-    (po.items ?? []).reduce((sum: number, item: any) => sum + (item.receivedQty - item.rejectedQty), 0);
+  const poTotalRejected = (po: RetailPurchaseOrderRecord) =>
+    po.items.reduce((sum, item) => sum + item.rejectedQty, 0);
 
-  const poTotalRejected = (po: any) =>
-    (po.items ?? []).reduce((sum: number, item: any) => sum + item.rejectedQty, 0);
-
-  const poStatus = (po: any) =>
+  const poStatus = (po: RetailPurchaseOrderRecord) =>
     poTotalRejected(po) === 0 ? 'Fully Accepted' : 'Partially Accepted';
 
   const filteredReceipts = receivedPOs.filter(po => {
@@ -74,36 +76,56 @@ export function ProductsReceivedView({
     withRejections: receivedPOs.filter(po => poTotalRejected(po) > 0).length,
   };
 
-  const handleStartReceiving = async (po: any) => {
-    try {
-      setActionError(null);
-      const fullPO = await getPurchaseOrder(po.id);
-      setSelectedPO(fullPO);
-      const initialForm: typeof inspectionForm = {};
-      (fullPO.items ?? []).forEach((item: any) => {
-        initialForm[item.id] = {
-          receivedQty: item.quantity,
-          acceptedQty: item.quantity,
-          rejectedQty: 0,
-          condition: 'Good',
-          inspectionNotes: '',
-        };
-      });
-      setInspectionForm(initialForm);
-      setShowReceiveModal(false);
-      setShowInspectionModal(true);
-    } catch (e: any) {
-      setActionError(e.message);
+  useEffect(() => {
+    if (!detailQuery.data || !detailRequest) return;
+
+    setSelectedPO(detailQuery.data);
+    const initialForm: typeof inspectionForm = {};
+    detailQuery.data.items.forEach((item) => {
+      initialForm[item.id] = {
+        receivedQty: item.quantity,
+        acceptedQty: item.quantity,
+        rejectedQty: 0,
+        condition: 'Good',
+        inspectionNotes: '',
+      };
+    });
+    setInspectionForm(initialForm);
+    setShowReceiveModal(false);
+    setShowInspectionModal(true);
+  }, [detailQuery.data, detailRequest]);
+
+  useEffect(() => {
+    if (detailQuery.error instanceof Error) {
+      setActionError(detailQuery.error.message);
+      toast.error(detailQuery.error.message);
     }
+  }, [detailQuery.error]);
+
+  const handleStartReceiving = (po: RetailPurchaseOrderRecord) => {
+    setActionError(null);
+    setDetailRequest((current) => ({
+      id: po.id,
+      nonce: (current?.nonce ?? 0) + 1,
+    }));
   };
 
-  const handleInspectionChange = (itemId: string, field: string, value: any) => {
+  const handleInspectionChange = <TField extends keyof InspectionEntry>(
+    itemId: string,
+    field: TField,
+    value: InspectionEntry[TField],
+  ) => {
     setInspectionForm(prev => {
-      const entry = { ...prev[itemId], [field]: value };
+      const current = prev[itemId] ?? {
+        receivedQty: 0,
+        acceptedQty: 0,
+        rejectedQty: 0,
+        condition: 'Good',
+        inspectionNotes: '',
+      };
+      const entry: InspectionEntry = { ...current, [field]: value };
       if (field === 'receivedQty' || field === 'acceptedQty') {
-        const rq = field === 'receivedQty' ? value : entry.receivedQty;
-        const aq = field === 'acceptedQty' ? value : entry.acceptedQty;
-        entry.rejectedQty = Math.max(0, rq - aq);
+        entry.rejectedQty = Math.max(0, entry.receivedQty - entry.acceptedQty);
       }
       return { ...prev, [itemId]: entry };
     });
@@ -112,21 +134,21 @@ export function ProductsReceivedView({
   const handleCompleteInspection = async () => {
     if (!selectedPO || saving) return;
     try {
-      setSaving(true);
       setActionError(null);
-      const items = (selectedPO.items ?? []).map((item: any) => {
+      const items = selectedPO.items.map((item) => {
         const ins = inspectionForm[item.id] ?? { receivedQty: item.quantity, rejectedQty: 0 };
         return { id: item.id, receivedQty: ins.receivedQty, rejectedQty: ins.rejectedQty };
       });
-      await receivePurchaseOrder(selectedPO.id, items);
+      await receiveOrder.mutateAsync({ id: selectedPO.id, items });
       setShowInspectionModal(false);
       setSelectedPO(null);
+      setDetailRequest(null);
       setInspectionForm({});
-      await loadData();
-    } catch (e: any) {
-      setActionError(e.message);
-    } finally {
-      setSaving(false);
+      toast.success('Purchase order received successfully');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to receive purchase order');
+      setActionError(message);
+      toast.error(message);
     }
   };
 
@@ -225,7 +247,7 @@ export function ProductsReceivedView({
             </div>
 
             <div className="space-y-4">
-              {(selectedPO.items ?? []).map((item: any) => {
+              {selectedPO.items.map((item) => {
                 const inspection = inspectionForm[item.id] ?? {
                   receivedQty: item.quantity,
                   acceptedQty: item.quantity,
@@ -309,7 +331,13 @@ export function ProductsReceivedView({
                         </label>
                         <select
                           value={inspection.condition}
-                          onChange={(e) => handleInspectionChange(item.id, 'condition', e.target.value)}
+                          onChange={(e) =>
+                            handleInspectionChange(
+                              item.id,
+                              'condition',
+                              e.target.value as InspectionEntry['condition'],
+                            )
+                          }
                           className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                         >
                           <option value="Excellent">Excellent</option>
@@ -450,7 +478,7 @@ export function ProductsReceivedView({
                 <div className="border-t border-[rgba(0,0,0,0.1)] pt-4">
                   <p className="text-[14px] font-medium text-[#323B42] mb-3">Items Inspection Results:</p>
                   <div className="space-y-2">
-                    {(po.items ?? []).map((item: any) => {
+                    {po.items.map((item) => {
                       const accepted = item.receivedQty - item.rejectedQty;
                       return (
                         <div key={item.id} className="bg-[#F8FAFB] rounded-[8px] p-4">

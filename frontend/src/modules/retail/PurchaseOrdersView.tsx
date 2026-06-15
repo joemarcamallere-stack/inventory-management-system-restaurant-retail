@@ -1,24 +1,19 @@
 import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
-  getPurchaseOrders,
-  createPurchaseOrder,
-  submitPurchaseOrder,
-  approvePurchaseOrder,
-  rejectPurchaseOrder,
-  cancelPurchaseOrder,
-  getSuppliers,
-  createSupplier,
-  getInventory,
-} from '../../app/api/client';
+  getRetailErrorMessage,
+  useApproveRetailPurchaseOrderMutation,
+  useCancelRetailPurchaseOrderMutation,
+  useCreateRetailPurchaseOrderMutation,
+  useCreateRetailSupplierMutation,
+  useRejectRetailPurchaseOrderMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailPurchaseOrderRecordsQuery,
+  useRetailSuppliersQuery,
+  useSubmitRetailPurchaseOrderMutation,
+} from '../lib/retailQueries';
 import { categorySubcategories } from '../../app/utils/constants';
-import { retailQueryKeys } from '../lib/retailData';
-import {
-  useInventoryQuery,
-  usePurchaseOrdersQuery,
-  useSuppliersQuery,
-} from '../lib/domainQueries';
 
 const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
@@ -45,10 +40,15 @@ export default function PurchaseOrdersView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const queryClient = useQueryClient();
-  const ordersQuery = usePurchaseOrdersQuery();
-  const suppliersQuery = useSuppliersQuery();
-  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
+  const ordersQuery = useRetailPurchaseOrderRecordsQuery();
+  const suppliersQuery = useRetailSuppliersQuery();
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const createPO = useCreateRetailPurchaseOrderMutation();
+  const submitPO = useSubmitRetailPurchaseOrderMutation();
+  const approvePO = useApproveRetailPurchaseOrderMutation();
+  const rejectPO = useRejectRetailPurchaseOrderMutation();
+  const cancelPO = useCancelRetailPurchaseOrderMutation();
+  const addSupplier = useCreateRetailSupplierMutation();
   const orders = ordersQuery.data ?? [];
   const suppliers = suppliersQuery.data ?? [];
   const inventory = inventoryQuery.data ?? [];
@@ -62,8 +62,8 @@ export default function PurchaseOrdersView({
   const [showPendingApprovalsModal, setShowPendingApprovalsModal] = useState(false);
   const [selectedPOForAction, setSelectedPOForAction] = useState<string | null>(null);
   const [rejectionRemarks, setRejectionRemarks] = useState('');
-  const [saving, setSaving] = useState(false);
   const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
+  const saving = createPO.isPending || addSupplier.isPending;
 
   const [poForm, setPOForm] = useState({
     supplierId: '' as string | undefined,
@@ -115,19 +115,13 @@ export default function PurchaseOrdersView({
     t.toLowerCase().includes(newItemForm.baleType.toLowerCase())
   );
 
-  const loadData = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.purchaseOrders }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.suppliers }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
-  ]);
-
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(poForm.supplierName.toLowerCase())
   );
 
   const handleAddItemToPO = () => {
     if (!newItemForm.baleType || !newItemForm.quantity || !newItemForm.unitPrice) {
-      alert('Please fill in Item Name, Quantity, and Unit Cost');
+      toast.error('Please fill in Item Name, Quantity, and Unit Cost');
       return;
     }
     const finalCategory = newItemForm.newCategory || newItemForm.category || 'General';
@@ -150,12 +144,11 @@ export default function PurchaseOrdersView({
 
   const handleCreatePO = async () => {
     if (poForm.items.length === 0) {
-      alert('Add at least one item');
+      toast.error('Add at least one item');
       return;
     }
-    setSaving(true);
     try {
-      await createPurchaseOrder({
+      await createPO.mutateAsync({
         supplierId: poForm.supplierId || undefined,
         notes: poForm.notes || undefined,
         paymentMethod: poForm.paymentMethod,
@@ -169,32 +162,30 @@ export default function PurchaseOrdersView({
       });
       setPOForm({ supplierId: undefined, supplierName: '', paymentMethod: 'Bank Transfer', paymentTerms: '', notes: '', items: [] });
       setShowNewPOModal(false);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to create purchase order');
-    } finally {
-      setSaving(false);
+      toast.success('Purchase order created successfully');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to create purchase order'));
     }
   };
 
   const handleSubmitPO = async (id: string) => {
     try {
-      await submitPurchaseOrder(id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to submit purchase order');
+      await submitPO.mutateAsync(id);
+      toast.success('Purchase order submitted');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to submit purchase order'));
     }
   };
 
   const handleApprovePO = async (id: string) => {
     setProcessingApprovalId(id);
     try {
-      await approvePurchaseOrder(id);
+      await approvePO.mutateAsync(id);
       setSelectedPOForAction(null);
       setShowPendingApprovalsModal(false);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to approve purchase order');
+      toast.success('Purchase order approved');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to approve purchase order'));
     } finally {
       setProcessingApprovalId(null);
     }
@@ -202,17 +193,17 @@ export default function PurchaseOrdersView({
 
   const handleRejectPO = async (id: string) => {
     if (!rejectionRemarks.trim()) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
     setProcessingApprovalId(id);
     try {
-      await rejectPurchaseOrder(id, rejectionRemarks);
+      await rejectPO.mutateAsync({ id, reason: rejectionRemarks });
       setRejectionRemarks('');
       setSelectedPOForAction(null);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to reject purchase order');
+      toast.success('Purchase order rejected');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to reject purchase order'));
     } finally {
       setProcessingApprovalId(null);
     }
@@ -220,19 +211,25 @@ export default function PurchaseOrdersView({
 
   const handleCreateSupplier = async () => {
     if (!newSupplierForm.name.trim()) {
-      alert('Supplier name is required');
+      toast.error('Supplier name is required');
       return;
     }
-    setSaving(true);
     try {
-      await createSupplier(newSupplierForm);
+      await addSupplier.mutateAsync(newSupplierForm);
       setNewSupplierForm({ name: '', contactPerson: '', email: '', phone: '', address: '', category: '' });
       setShowNewSupplierModal(false);
-      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.suppliers });
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to create supplier');
-    } finally {
-      setSaving(false);
+      toast.success('Supplier created successfully');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to create supplier'));
+    }
+  };
+
+  const handleCancelPO = async (id: string) => {
+    try {
+      await cancelPO.mutateAsync(id);
+      toast.success('Purchase order cancelled');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to cancel purchase order'));
     }
   };
 
@@ -318,7 +315,7 @@ export default function PurchaseOrdersView({
                 />
                 {showSupplierDropdown && filteredSuppliers.length > 0 && (
                   <div className="absolute z-10 w-full mt-1 bg-white border border-[rgba(50,59,66,0.15)] rounded-[10px] shadow-lg max-h-[240px] overflow-y-auto">
-                    {filteredSuppliers.map((s: any) => (
+                    {filteredSuppliers.map((s) => (
                       <div
                         key={s.id}
                         onMouseDown={(e) => { e.preventDefault(); setPOForm({ ...poForm, supplierId: s.id, supplierName: s.name }); setShowSupplierDropdown(false); }}
@@ -466,7 +463,7 @@ export default function PurchaseOrdersView({
                   className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                 >
                   <option value="">— No link (new item) —</option>
-                  {inventory.map((item: any) => (
+                  {inventory.map((item) => (
                     <option key={item.id} value={item.id}>{item.name} (qty: {item.quantity})</option>
                   ))}
                 </select>
@@ -526,7 +523,7 @@ export default function PurchaseOrdersView({
               <p className="text-center text-[#6b7280] py-8">No suppliers yet. Add one above.</p>
             ) : (
               <div className="space-y-3">
-                {suppliers.map((s: any) => (
+                {suppliers.map((s) => (
                   <div key={s.id} className="bg-[#F8FAFB] border border-[rgba(0,0,0,0.1)] rounded-[12px] p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -560,17 +557,21 @@ export default function PurchaseOrdersView({
           <div className="bg-white rounded-[14px] p-6 max-w-md w-full">
             <h3 className="text-[20px] font-bold text-[#323B42] mb-4">Add New Supplier</h3>
             <div className="space-y-3">
-              {[
+              {([
                 { label: 'Name *', key: 'name', placeholder: 'Supplier name' },
                 { label: 'Contact Person', key: 'contactPerson', placeholder: 'Contact name' },
                 { label: 'Email', key: 'email', placeholder: 'email@example.com' },
                 { label: 'Phone', key: 'phone', placeholder: '+63 9XX XXX XXXX' },
                 { label: 'Address', key: 'address', placeholder: 'City, Province' },
                 { label: 'Category', key: 'category', placeholder: 'e.g. Clothing, Footwear' },
-              ].map(({ label, key, placeholder }) => (
+              ] satisfies {
+                label: string;
+                key: keyof typeof newSupplierForm;
+                placeholder: string;
+              }[]).map(({ label, key, placeholder }) => (
                 <div key={key}>
                   <label className="block text-[12px] font-medium text-[#323B42] mb-1">{label}</label>
-                  <input type="text" value={(newSupplierForm as any)[key]} onChange={(e) => setNewSupplierForm({ ...newSupplierForm, [key]: e.target.value })} placeholder={placeholder} className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
+                  <input type="text" value={newSupplierForm[key]} onChange={(e) => setNewSupplierForm({ ...newSupplierForm, [key]: e.target.value })} placeholder={placeholder} className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
                 </div>
               ))}
             </div>
@@ -610,7 +611,7 @@ export default function PurchaseOrdersView({
         {filteredOrders.length === 0 && (
           <div className="text-center py-12 text-[#6b7280]">No purchase orders found.</div>
         )}
-        {filteredOrders.map((order: any) => (
+        {filteredOrders.map((order) => (
           <div key={order.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -633,7 +634,7 @@ export default function PurchaseOrdersView({
             <div className="border-t border-[rgba(0,0,0,0.1)] pt-4 mb-4">
               <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
               <div className="space-y-2">
-                {order.items?.map((item: any) => (
+                {order.items.map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-[13px]">
                     <span className="text-[#323B42]">{item.name}</span>
                     <span className="text-[#323B42]">
@@ -662,7 +663,7 @@ export default function PurchaseOrdersView({
                 </>
               )}
               {['DRAFT', 'SUBMITTED', 'APPROVED'].includes(order.status) && (
-                <button onClick={() => cancelPurchaseOrder(order.id).then(loadData)} className="px-4 py-1.5 bg-[#f3f4f6] text-[#6b7280] rounded-[6px] text-[13px] font-medium hover:bg-[#e5e7eb]">
+                <button onClick={() => handleCancelPO(order.id)} className="px-4 py-1.5 bg-[#f3f4f6] text-[#6b7280] rounded-[6px] text-[13px] font-medium hover:bg-[#e5e7eb]">
                   Cancel
                 </button>
               )}
@@ -698,7 +699,7 @@ export default function PurchaseOrdersView({
               <div className="text-center py-12"><CheckCircle className="size-16 text-[#00A63E] mx-auto mb-4" /><p className="text-[#323B42] text-[16px] font-medium">No pending approvals</p></div>
             ) : (
               <div className="space-y-4">
-                {submittedPOs.map((po: any) => (
+                {submittedPOs.map((po) => (
                   <div key={po.id} className="border border-[rgba(0,0,0,0.1)] rounded-[12px] p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
@@ -714,7 +715,7 @@ export default function PurchaseOrdersView({
                     <div className="mb-3">
                       <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
                       <div className="space-y-1">
-                        {po.items?.map((item: any) => (
+                        {po.items.map((item) => (
                           <div key={item.id} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] px-3 py-2 rounded-[6px]">
                             <span className="text-[#323B42]">{item.name}</span>
                             <span className="text-[#323B42]">{item.quantity} × ₱{item.unitPrice} = <span className="font-medium">₱{item.totalPrice.toLocaleString()}</span></span>

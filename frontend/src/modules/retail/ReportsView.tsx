@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
+import { toast } from 'sonner';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,6 +14,8 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+
+type ReportDateRange = '7days' | '30days' | '3months' | 'year' | 'all';
 
 export function ReportsView({
   inventory,
@@ -35,7 +37,7 @@ export function ReportsView({
   currentUser: { email: string; role: string } | null;
 }) {
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'transfers' | 'financial' | 'operations' | 'confidential'>('overview');
-  const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | 'year' | 'all'>('30days');
+  const [dateRange, setDateRange] = useState<ReportDateRange>('30days');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
 
   const isAdmin = currentUser?.role === 'Admin';
@@ -308,7 +310,7 @@ export function ReportsView({
 
       case 'Confidential':
         if (!isAdmin || !confidentialReportData) {
-          alert('Access denied. This report is restricted to administrators only.');
+          toast.error('Access denied. This report is restricted to administrators only.');
           return;
         }
         csvContent = 'CONFIDENTIAL REPORT - ADMIN ONLY\n\n';
@@ -339,7 +341,7 @@ export function ReportsView({
         break;
 
       default:
-        alert('Unknown report type');
+        toast.error('Unknown report type');
         return;
     }
 
@@ -366,7 +368,7 @@ export function ReportsView({
         <div className="flex gap-3">
           <select
             value={dateRange}
-            onChange={(e) => setDateRange(e.target.value as any)}
+            onChange={(e) => setDateRange(e.target.value as ReportDateRange)}
             className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] px-4 py-2 text-[14px] text-[#323B42]"
           >
             <option value="7days">Last 7 Days</option>
@@ -531,7 +533,10 @@ export function ReportsView({
                   </PieChart>
                   <div className="flex-1 space-y-2">
                     {Object.entries(inventoryReportData.categoryStats).map(([name, data], index) => {
-                      const total = Object.values(inventoryReportData.categoryStats).reduce((sum: number, cat: any) => sum + cat.quantity, 0);
+                      const total = Object.values(inventoryReportData.categoryStats).reduce(
+                        (sum, category) => sum + category.quantity,
+                        0,
+                      );
                       const percentage = total > 0 ? ((data.quantity / total) * 100).toFixed(1) : '0';
                       return (
                         <div key={`legend-${name}-${index}`} className="flex items-center justify-between">

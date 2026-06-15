@@ -1,19 +1,27 @@
 import { useEffect, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw } from 'lucide-react';
-import { getInventory, getSales, createSale, refundSale, getLocations } from '../../app/api/client';
-import { retailQueryKeys } from '../lib/retailData';
-import { useInventoryQuery, useLocationsQuery, useSalesQuery } from '../lib/domainQueries';
+import { toast } from 'sonner';
+import {
+  getRetailErrorMessage,
+  type RetailInventoryItem,
+  type RetailSaleRecord,
+  useCreateRetailSaleMutation,
+  useRefundRetailSaleMutation,
+  useRetailInventoryQuery,
+  useRetailLocationsQuery,
+  useRetailSalesQuery,
+} from '../lib/retailQueries';
 
 export default function POSView({
   currentUser,
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const queryClient = useQueryClient();
-  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
-  const salesQuery = useSalesQuery();
-  const locationsQuery = useLocationsQuery();
+  const inventoryQuery = useRetailInventoryQuery();
+  const salesQuery = useRetailSalesQuery();
+  const locationsQuery = useRetailLocationsQuery();
+  const completeSale = useCreateRetailSaleMutation();
+  const processRefund = useRefundRetailSaleMutation();
   const inventory = inventoryQuery.data ?? [];
   const sales = salesQuery.data ?? [];
   const locations = locationsQuery.data ?? [];
@@ -37,10 +45,10 @@ export default function POSView({
   const [amountPaid, setAmountPaid] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
-  const [lastTransaction, setLastTransaction] = useState<any | null>(null);
+  const [lastTransaction, setLastTransaction] = useState<RetailSaleRecord | null>(null);
   const [selectedSaleForReturn, setSelectedSaleForReturn] = useState<string | null>(null);
   const [returnReason, setReturnReason] = useState('');
-  const [saving, setSaving] = useState(false);
+  const saving = completeSale.isPending || processRefund.isPending;
 
   useEffect(() => {
     if (!selectedLocationId && locations.length > 0) {
@@ -48,16 +56,10 @@ export default function POSView({
     }
   }, [locations, selectedLocationId]);
 
-  const loadData = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.sales }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.locations }),
-  ]);
+  const availableItems = inventory.filter((item) => item.quantity > 0);
+  const availableCategories = Array.from(new Set(availableItems.map((item) => item.category))).sort();
 
-  const availableItems = inventory.filter((item: any) => item.quantity > 0);
-  const availableCategories = Array.from(new Set(availableItems.map((item: any) => item.category))).sort() as string[];
-
-  const filteredInventory = availableItems.filter((item: any) => {
+  const filteredInventory = availableItems.filter((item) => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -70,10 +72,10 @@ export default function POSView({
   const total = subtotal - discount + tax;
   const change = amountPaid - total;
 
-  const handleAddToCart = (item: any) => {
+  const handleAddToCart = (item: RetailInventoryItem) => {
     const existing = cart.find(c => c.inventoryItemId === item.id);
     if (existing) {
-      if (existing.quantity >= item.quantity) { alert('Insufficient stock!'); return; }
+      if (existing.quantity >= item.quantity) { toast.error('Insufficient stock!'); return; }
       setCart(cart.map(c => c.inventoryItemId === item.id ? { ...c, quantity: c.quantity + 1, totalPrice: (c.quantity + 1) * c.unitPrice } : c));
     } else {
       setCart([...cart, { inventoryItemId: item.id, name: item.name, category: item.category, quantity: 1, unitPrice: item.price, totalPrice: item.price, availableStock: item.quantity }]);
@@ -84,19 +86,18 @@ export default function POSView({
     const cartItem = cart.find(c => c.inventoryItemId === id);
     if (!cartItem) return;
     if (qty <= 0) { setCart(cart.filter(c => c.inventoryItemId !== id)); return; }
-    if (qty > cartItem.availableStock) { alert('Cannot exceed available stock!'); return; }
+    if (qty > cartItem.availableStock) { toast.error('Cannot exceed available stock!'); return; }
     setCart(cart.map(c => c.inventoryItemId === id ? { ...c, quantity: qty, totalPrice: qty * c.unitPrice } : c));
   };
 
   const handleClearCart = () => { setCart([]); setDiscount(0); setCustomer(''); setAmountPaid(0); };
 
   const handleProcessPayment = async () => {
-    if (cart.length === 0) { alert('Cart is empty!'); return; }
-    if (!selectedLocationId) { alert('Please select a location first'); return; }
-    if (paymentMethod === 'Cash' && amountPaid < total) { alert('Insufficient payment amount!'); return; }
-    setSaving(true);
+    if (cart.length === 0) { toast.error('Cart is empty!'); return; }
+    if (!selectedLocationId) { toast.error('Please select a location first'); return; }
+    if (paymentMethod === 'Cash' && amountPaid < total) { toast.error('Insufficient payment amount!'); return; }
     try {
-      const sale = await createSale({
+      const sale = await completeSale.mutateAsync({
         locationId: selectedLocationId,
         items: cart.map(i => ({ inventoryItemId: i.inventoryItemId, quantity: i.quantity, unitPrice: i.unitPrice })),
         discount: discount > 0 ? discount : undefined,
@@ -108,34 +109,29 @@ export default function POSView({
       handleClearCart();
       setShowPaymentModal(false);
       setShowReceiptModal(true);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to process sale');
-    } finally {
-      setSaving(false);
+      toast.success('Sale completed successfully');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to process sale'));
     }
   };
 
   const handleProcessReturn = async (saleId: string) => {
-    if (!returnReason.trim()) { alert('Please provide a reason for return'); return; }
-    setSaving(true);
+    if (!returnReason.trim()) { toast.error('Please provide a reason for return'); return; }
     try {
-      await refundSale(saleId, returnReason);
+      await processRefund.mutateAsync({ id: saleId, reason: returnReason });
       setSelectedSaleForReturn(null);
       setReturnReason('');
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to process return');
-    } finally {
-      setSaving(false);
+      toast.success('Return processed successfully');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to process return'));
     }
   };
 
-  const todaySales = sales.filter((s: any) => {
+  const todaySales = sales.filter((s) => {
     const saleDate = new Date(s.createdAt).toDateString();
     return saleDate === new Date().toDateString() && s.status === 'COMPLETED';
   });
-  const todayRevenue = todaySales.reduce((sum: number, s: any) => sum + s.total, 0);
+  const todayRevenue = todaySales.reduce((sum, sale) => sum + sale.total, 0);
 
   if (loading) {
     return <div className="flex items-center justify-center h-64 text-[#6b7280]">Loading POS…</div>;
@@ -151,19 +147,19 @@ export default function POSView({
         <div className="flex items-center gap-2">
           <label className="text-[14px] font-medium text-[#323B42]">Location:</label>
           <select value={selectedLocationId} onChange={(e) => setSelectedLocationId(e.target.value)} className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]">
-            {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+            {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
           </select>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-[rgba(0,0,0,0.1)]">
-        {[
+        {([
           { id: 'sales', icon: <ShoppingCart className="inline-block size-4 mr-2" />, label: 'Sales' },
           { id: 'history', icon: <Receipt className="inline-block size-4 mr-2" />, label: 'Transaction History' },
           { id: 'returns', icon: <RotateCcw className="inline-block size-4 mr-2" />, label: 'Returns' },
-        ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-[#007A5E] text-[#007A5E]' : 'border-transparent text-[#6b7280] hover:text-[#323B42]'}`}>
+        ] as const).map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${activeTab === tab.id ? 'border-[#007A5E] text-[#007A5E]' : 'border-transparent text-[#6b7280] hover:text-[#323B42]'}`}>
             {tab.icon}{tab.label}
           </button>
         ))}
@@ -198,7 +194,7 @@ export default function POSView({
                 </button>
                 {availableCategories.map(cat => (
                   <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-[13px] font-medium transition-all ${selectedCategory === cat ? 'bg-[#007A5E] text-white shadow-md' : 'bg-[#F8FAFB] text-[#323B42] hover:bg-[#e9ecef]'}`}>
-                    {cat} ({availableItems.filter((i: any) => i.category === cat).length})
+                    {cat} ({availableItems.filter((item) => item.category === cat).length})
                   </button>
                 ))}
               </div>
@@ -217,7 +213,7 @@ export default function POSView({
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3">
-                  {filteredInventory.map((item: any) => (
+                  {filteredInventory.map((item) => (
                     <button key={item.id} onClick={() => handleAddToCart(item)} className="text-left border border-[rgba(0,0,0,0.1)] rounded-[8px] p-3 hover:border-[#007A5E] hover:bg-[#F8FAFB] transition-colors">
                       <div className="flex items-start justify-between mb-2">
                         <p className="text-[14px] font-medium text-[#323B42] line-clamp-2">{item.name}</p>
@@ -308,7 +304,7 @@ export default function POSView({
             <p className="text-center text-[#6b7280] py-8">No sales recorded yet.</p>
           ) : (
             <div className="space-y-3">
-              {sales.slice(0, 50).map((sale: any) => (
+              {sales.slice(0, 50).map((sale) => (
                 <div key={sale.id} className="border border-[rgba(0,0,0,0.1)] rounded-[8px] p-4 hover:bg-[#F8FAFB]">
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -339,17 +335,17 @@ export default function POSView({
       {activeTab === 'returns' && (
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
           <p className="text-[14px] text-[#6b7280] mb-4">Process returns for completed sales (Admin/Manager only)</p>
-          {sales.filter((s: any) => s.status === 'COMPLETED').length === 0 ? (
+          {sales.filter((sale) => sale.status === 'COMPLETED').length === 0 ? (
             <p className="text-center text-[#6b7280] py-8">No completed sales available for returns.</p>
           ) : (
             <div className="space-y-3">
-              {sales.filter((s: any) => s.status === 'COMPLETED').slice(0, 20).map((sale: any) => (
+              {sales.filter((sale) => sale.status === 'COMPLETED').slice(0, 20).map((sale) => (
                 <div key={sale.id} className="border border-[rgba(0,0,0,0.1)] rounded-[8px] p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <p className="text-[16px] font-bold text-[#323B42]">{sale.transactionNumber}</p>
                       <p className="text-[13px] text-[#6b7280]">{new Date(sale.createdAt).toLocaleString()}</p>
-                      <p className="text-[13px] text-[#6b7280]">Items: {sale.items?.map((i: any) => i.name).join(', ')}</p>
+                      <p className="text-[13px] text-[#6b7280]">Items: {sale.items.map((item) => item.name).join(', ')}</p>
                     </div>
                     <p className="text-[18px] font-bold text-[#007A5E]">₱{sale.total.toLocaleString()}</p>
                   </div>
@@ -426,7 +422,7 @@ export default function POSView({
             <div className="border border-[rgba(0,0,0,0.1)] rounded-[8px] p-4 mb-4">
               <p className="text-[12px] text-[#6b7280] mb-2">{new Date(lastTransaction.createdAt).toLocaleString()}</p>
               <div className="space-y-1 mb-3">
-                {lastTransaction.items?.map((item: any, idx: number) => (
+                {lastTransaction.items.map((item, idx) => (
                   <div key={idx} className="flex justify-between text-[13px]">
                     <span className="text-[#323B42]">{item.name} x{item.quantity}</span>
                     <span className="font-medium text-[#323B42]">₱{item.totalPrice}</span>

@@ -72,7 +72,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'Admin' | 'Manager' | 'Staff';
+  role: 'Admin' | 'Manager' | 'Staff' | 'Cashier' | 'KitchenStaff' | 'RetailStaff';
   status: 'Active' | 'Inactive';
   lastLogin: string;
 }

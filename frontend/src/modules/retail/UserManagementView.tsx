@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getUsers, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
+import { toast } from 'sonner';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -15,20 +14,15 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
-import { retailQueryKeys } from '../lib/retailData';
-import { useUsersQuery } from '../lib/domainQueries';
+import {
+  useCreateRetailUserMutation,
+  useDeleteRetailUserMutation,
+  useRetailUsersQuery,
+  useUpdateRetailUserMutation,
+} from '../lib/retailQueries';
 
+type UserRole = User['role'];
 
-const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
-
-const mapApiUser = (user: any): User => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  status: user.status,
-  lastLogin: formatDate(user.lastLogin)
-});
 // Dashboard View
 export function UserManagementView({
   currentUser
@@ -36,9 +30,11 @@ export function UserManagementView({
   currentUser: { id?: string; name?: string; email: string; role: string } | null;
 }) {
   const isAdmin = currentUser?.role === 'Admin';
-  const queryClient = useQueryClient();
-  const usersQuery = useUsersQuery({ enabled: isAdmin });
-  const users = (usersQuery.data ?? []).map(mapApiUser);
+  const usersQuery = useRetailUsersQuery(isAdmin);
+  const users = usersQuery.data ?? [];
+  const addUser = useCreateRetailUserMutation();
+  const editUser = useUpdateRetailUserMutation();
+  const removeUser = useDeleteRetailUserMutation();
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,7 +45,7 @@ export function UserManagementView({
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
-    role: 'Staff' as 'Admin' | 'Manager' | 'Staff' | 'Cashier' | 'KitchenStaff' | 'RetailStaff',
+    role: 'Staff' as UserRole,
     password: '',
     confirmPassword: ''
   });
@@ -86,28 +82,28 @@ export function UserManagementView({
 
     // Validation
     if (!userForm.name || !userForm.email || !userForm.password) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     if (userForm.password !== userForm.confirmPassword) {
-      alert('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     if (userForm.password.length < 6) {
-      alert('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
     // Check if email already exists
     if (users.some(u => u.email.toLowerCase() === userForm.email.toLowerCase())) {
-      alert('A user with this email already exists');
+      toast.error('A user with this email already exists');
       return;
     }
 
     try {
-      const newUser = await createUser({
+      const newUser = await addUser.mutateAsync({
         name: userForm.name,
         email: userForm.email,
         password: userForm.password,
@@ -115,12 +111,11 @@ export function UserManagementView({
         status: 'Active'
       });
 
-      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
       setShowAddModal(false);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      alert(`User ${newUser.name} has been created successfully!`);
+      toast.success(`User ${newUser.name} has been created successfully!`);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create user');
+      toast.error(error instanceof Error ? error.message : 'Failed to create user');
     }
   };
 
@@ -130,32 +125,30 @@ export function UserManagementView({
     if (!selectedUser) return;
 
     if (!userForm.name || !userForm.email) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     // Check if email already exists for another user
     if (users.some(u => u.id !== selectedUser.id && u.email.toLowerCase() === userForm.email.toLowerCase())) {
-      alert('A user with this email already exists');
+      toast.error('A user with this email already exists');
       return;
     }
 
     try {
-      await updateUser(selectedUser.id, {
+      await editUser.mutateAsync({ id: selectedUser.id, data: {
         name: userForm.name,
         email: userForm.email,
         role: userForm.role,
         status: selectedUser.status
-      });
-
-      await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
+      } });
 
       setShowEditModal(false);
       setSelectedUser(null);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      alert('User updated successfully!');
+      toast.success('User updated successfully!');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update user');
+      toast.error(error instanceof Error ? error.message : 'Failed to update user');
     }
   };
 
@@ -165,28 +158,31 @@ export function UserManagementView({
     if (!selectedUser) return;
 
     if (!userForm.password || !userForm.confirmPassword) {
-      alert('Please fill in all password fields');
+      toast.error('Please fill in all password fields');
       return;
     }
 
     if (userForm.password !== userForm.confirmPassword) {
-      alert('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     if (userForm.password.length < 6) {
-      alert('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
     try {
-      await updateUser(selectedUser.id, { password: userForm.password });
+      await editUser.mutateAsync({
+        id: selectedUser.id,
+        data: { password: userForm.password },
+      });
       setShowPasswordModal(false);
       setSelectedUser(null);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      alert(`Password for ${selectedUser.name} has been reset successfully!`);
+      toast.success(`Password for ${selectedUser.name} has been reset successfully!`);
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to reset password');
+      toast.error(error instanceof Error ? error.message : 'Failed to reset password');
     }
   };
 
@@ -194,33 +190,32 @@ export function UserManagementView({
     const newStatus = user.status === 'Active' ? 'Inactive' : 'Active';
 
     if (user.email === currentUser?.email && newStatus === 'Inactive') {
-      alert('You cannot deactivate your own account');
+      toast.error('You cannot deactivate your own account');
       return;
     }
 
     if (confirm(`Are you sure you want to ${newStatus === 'Active' ? 'activate' : 'deactivate'} ${user.name}?`)) {
       try {
-        await updateUser(user.id, { status: newStatus });
-        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
+        await editUser.mutateAsync({ id: user.id, data: { status: newStatus } });
+        toast.success(`User ${newStatus === 'Active' ? 'activated' : 'deactivated'}`);
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to update user status');
+        toast.error(error instanceof Error ? error.message : 'Failed to update user status');
       }
     }
   };
 
   const handleDeleteUser = async (user: User) => {
     if (user.email === currentUser?.email) {
-      alert('You cannot delete your own account');
+      toast.error('You cannot delete your own account');
       return;
     }
 
     if (confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
       try {
-        await deleteUser(user.id);
-        await queryClient.invalidateQueries({ queryKey: retailQueryKeys.users });
-        alert(`User ${user.name} has been deleted`);
+        await removeUser.mutateAsync(user.id);
+        toast.success(`User ${user.name} has been deleted`);
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete user');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete user');
       }
     }
   };
@@ -507,7 +502,9 @@ export function UserManagementView({
                   </label>
                   <select
                     value={userForm.role}
-                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
+                    onChange={(e) =>
+                      setUserForm({ ...userForm, role: e.target.value as UserRole })
+                    }
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                     required
                   >
@@ -626,7 +623,9 @@ export function UserManagementView({
                   </label>
                   <select
                     value={userForm.role}
-                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
+                    onChange={(e) =>
+                      setUserForm({ ...userForm, role: e.target.value as UserRole })
+                    }
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                     required
                     disabled={selectedUser.email === currentUser?.email}

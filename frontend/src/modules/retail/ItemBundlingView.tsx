@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
+import { toast } from 'sonner';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -15,21 +14,45 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
-import { retailQueryKeys } from '../lib/retailData';
-import { useBundlesQuery, useInventoryQuery } from '../lib/domainQueries';
+import {
+  getRetailErrorMessage,
+  type RetailBundleRecord,
+  useActivateRetailBundleMutation,
+  useApproveRetailBundleMutation,
+  useCreateRetailBundleMutation,
+  useDeactivateRetailBundleMutation,
+  useDeleteRetailBundleMutation,
+  useRejectRetailBundleMutation,
+  useRetailBundlesQuery,
+  useRetailInventoryQuery,
+  useUpdateRetailBundleMutation,
+} from '../lib/retailQueries';
 
 export function ItemBundlingView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const queryClient = useQueryClient();
-  const bundlesQuery = useBundlesQuery();
-  const inventoryQuery = useInventoryQuery({ itemType: 'RETAIL_ITEM' });
+  const bundlesQuery = useRetailBundlesQuery();
+  const inventoryQuery = useRetailInventoryQuery();
+  const addBundle = useCreateRetailBundleMutation();
+  const editBundle = useUpdateRetailBundleMutation();
+  const approve = useApproveRetailBundleMutation();
+  const reject = useRejectRetailBundleMutation();
+  const activate = useActivateRetailBundleMutation();
+  const deactivate = useDeactivateRetailBundleMutation();
+  const remove = useDeleteRetailBundleMutation();
   const bundles = bundlesQuery.data ?? [];
   const inventory = inventoryQuery.data ?? [];
   const loading = bundlesQuery.isLoading || inventoryQuery.isLoading;
-  const [saving, setSaving] = useState(false);
+  const saving =
+    addBundle.isPending ||
+    editBundle.isPending ||
+    approve.isPending ||
+    reject.isPending ||
+    activate.isPending ||
+    deactivate.isPending ||
+    remove.isPending;
   const [actionError, setActionError] = useState<string | null>(null);
   const queryError = bundlesQuery.error ?? inventoryQuery.error;
   const error = actionError ?? (queryError instanceof Error ? queryError.message : null);
@@ -39,7 +62,7 @@ export function ItemBundlingView({
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [showItemSelector, setShowItemSelector] = useState(false);
 
-  const [selectedBundle, setSelectedBundle] = useState<any | null>(null);
+  const [selectedBundle, setSelectedBundle] = useState<RetailBundleRecord | null>(null);
   const [bundleForm, setBundleForm] = useState({
     name: '',
     items: [] as { inventoryItemId: string; quantity: number }[],
@@ -54,23 +77,18 @@ export function ItemBundlingView({
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
 
   const setError = setActionError;
-  const loadData = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.bundles }),
-    queryClient.invalidateQueries({ queryKey: retailQueryKeys.inventory }),
-  ]);
-
   // ─── Derived state ───────────────────────────────────────────────────────────
 
-  const availableItems = inventory.filter((item: any) => item.quantity > 0 && item.condition !== 'Damaged');
-  const availableCategories = Array.from(new Set(availableItems.map((item: any) => item.category as string))).sort();
-  const filteredAvailableItems = availableItems.filter((item: any) => {
+  const availableItems = inventory.filter((item) => item.quantity > 0 && item.condition !== 'Damaged');
+  const availableCategories = Array.from(new Set(availableItems.map((item) => item.category))).sort();
+  const filteredAvailableItems = availableItems.filter((item) => {
     const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     const matchesSearch = item.name.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(itemSearchTerm.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
-  const filteredBundles = bundles.filter((bundle: any) => {
+  const filteredBundles = bundles.filter((bundle) => {
     const matchesSearch = bundle.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = filterStatus === 'all' || bundle.status === filterStatus;
     return matchesSearch && matchesStatus;
@@ -78,16 +96,18 @@ export function ItemBundlingView({
 
   const stats = {
     total: bundles.length,
-    pending: bundles.filter((b: any) => b.status === 'PENDING').length,
-    active: bundles.filter((b: any) => b.status === 'ACTIVE').length,
-    totalValue: bundles.filter((b: any) => b.status === 'ACTIVE').reduce((sum: number, b: any) => sum + b.price, 0),
+    pending: bundles.filter((bundle) => bundle.status === 'PENDING').length,
+    active: bundles.filter((bundle) => bundle.status === 'ACTIVE').length,
+    totalValue: bundles
+      .filter((bundle) => bundle.status === 'ACTIVE')
+      .reduce((sum, bundle) => sum + bundle.price, 0),
   };
 
   // ─── Bundle price calculation (uses local form state + fetched inventory) ────
 
   const calculateFormPrice = (items: { inventoryItemId: string; quantity: number }[], discount: number) => {
     const total = items.reduce((sum, fi) => {
-      const inv = inventory.find((i: any) => i.id === fi.inventoryItemId);
+      const inv = inventory.find((item) => item.id === fi.inventoryItemId);
       return sum + (inv ? inv.price * fi.quantity : 0);
     }, 0);
     return total * (1 - discount / 100);
@@ -128,95 +148,117 @@ export function ItemBundlingView({
   const handleCreateBundle = async () => {
     if (!bundleForm.name || bundleForm.items.length === 0) {
       setError('Please provide a bundle name and add at least one item');
+      toast.error('Please provide a bundle name and add at least one item');
       return;
     }
     try {
-      setSaving(true);
       setError(null);
-      await createBundle({ name: bundleForm.name, discount: bundleForm.discount, items: bundleForm.items });
+      await addBundle.mutateAsync({ name: bundleForm.name, discount: bundleForm.discount, items: bundleForm.items });
       resetForm();
       setShowCreateModal(false);
-      await loadData();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+      toast.success('Bundle created successfully');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to create bundle');
+      setError(message);
+      toast.error(message);
     }
   };
 
   const handleEditBundle = async () => {
     if (!selectedBundle || !bundleForm.name) return;
     try {
-      setSaving(true);
       setError(null);
-      await updateBundle(selectedBundle.id, { name: bundleForm.name, discount: bundleForm.discount });
+      await editBundle.mutateAsync({
+        id: selectedBundle.id,
+        data: { name: bundleForm.name, discount: bundleForm.discount },
+      });
       resetForm();
       setShowEditModal(false);
-      await loadData();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+      toast.success('Bundle updated successfully');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to update bundle');
+      setError(message);
+      toast.error(message);
     }
   };
 
   const handleApproveBundle = async (id: string) => {
     try {
-      setSaving(true);
       setError(null);
-      await approveBundle(id);
+      await approve.mutateAsync(id);
       setShowApprovalModal(false);
       setSelectedBundle(null);
-      await loadData();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+      toast.success('Bundle approved');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to approve bundle');
+      setError(message);
+      toast.error(message);
     }
   };
 
   const handleRejectBundle = async (id: string) => {
-    if (!rejectionReason.trim()) { setError('Please provide a rejection reason'); return; }
+    if (!rejectionReason.trim()) {
+      setError('Please provide a rejection reason');
+      toast.error('Please provide a rejection reason');
+      return;
+    }
     try {
-      setSaving(true);
       setError(null);
-      await rejectBundle(id, rejectionReason);
+      await reject.mutateAsync({ id, reason: rejectionReason });
       setShowApprovalModal(false);
       setSelectedBundle(null);
       setRejectionReason('');
-      await loadData();
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
+      toast.success('Bundle rejected');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to reject bundle');
+      setError(message);
+      toast.error(message);
     }
   };
 
   const handleActivateBundle = async (id: string) => {
-    try { setSaving(true); await activateBundle(id); await loadData(); }
-    catch (e: any) { setError(e.message); }
-    finally { setSaving(false); }
+    try {
+      await activate.mutateAsync(id);
+      toast.success('Bundle activated');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to activate bundle');
+      setError(message);
+      toast.error(message);
+    }
   };
 
   const handleDeactivateBundle = async (id: string) => {
-    try { setSaving(true); await deactivateBundle(id); await loadData(); }
-    catch (e: any) { setError(e.message); }
-    finally { setSaving(false); }
+    try {
+      await deactivate.mutateAsync(id);
+      toast.success('Bundle deactivated');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to deactivate bundle');
+      setError(message);
+      toast.error(message);
+    }
   };
 
   const handleDeleteBundle = async (id: string) => {
     if (!confirm('Delete this bundle? This cannot be undone.')) return;
-    try { setSaving(true); await deleteBundle(id); await loadData(); }
-    catch (e: any) { setError(e.message); }
-    finally { setSaving(false); }
+    try {
+      await remove.mutateAsync(id);
+      toast.success('Bundle deleted');
+    } catch (e: unknown) {
+      const message = getRetailErrorMessage(e, 'Failed to delete bundle');
+      setError(message);
+      toast.error(message);
+    }
   };
 
-  const openEditModal = (bundle: any) => {
+  const openEditModal = (bundle: RetailBundleRecord) => {
     setSelectedBundle(bundle);
     setBundleForm({
       name: bundle.name,
       discount: bundle.discount,
-      items: (bundle.items ?? []).map((bi: any) => ({ inventoryItemId: bi.inventoryItemId, quantity: bi.quantity })),
+      items: bundle.items.map((item) => ({
+        inventoryItemId: item.inventoryItemId,
+        quantity: item.quantity,
+      })),
     });
     setShowEditModal(true);
   };
@@ -318,7 +360,7 @@ export function ItemBundlingView({
               ) : (
                 <div className="space-y-2">
                   {bundleForm.items.map((fi) => {
-                    const inv = inventory.find((i: any) => i.id === fi.inventoryItemId);
+                    const inv = inventory.find((item) => item.id === fi.inventoryItemId);
                     return inv ? (
                       <div key={fi.inventoryItemId} className="flex items-center justify-between bg-[#F8FAFB] rounded-[8px] px-4 py-3">
                         <div className="flex-1">
@@ -432,9 +474,9 @@ export function ItemBundlingView({
                 <button onClick={() => setSelectedCategory('all')} className={`px-4 py-2 rounded-full text-[13px] font-medium transition-all ${selectedCategory === 'all' ? 'bg-[#007A5E] text-white shadow-md' : 'bg-[#F8FAFB] text-[#323B42] hover:bg-[#e9ecef]'}`}>
                   All Items ({availableItems.length})
                 </button>
-                {availableCategories.map((category: any) => (
+                {availableCategories.map((category) => (
                   <button key={category} onClick={() => setSelectedCategory(category)} className={`px-4 py-2 rounded-full text-[13px] font-medium transition-all ${selectedCategory === category ? 'bg-[#007A5E] text-white shadow-md' : 'bg-[#F8FAFB] text-[#323B42] hover:bg-[#e9ecef]'}`}>
-                    {category} ({availableItems.filter((i: any) => i.category === category).length})
+                    {category} ({availableItems.filter((item) => item.category === category).length})
                   </button>
                 ))}
               </div>
@@ -449,7 +491,7 @@ export function ItemBundlingView({
               {filteredAvailableItems.length === 0 ? (
                 <p className="text-center py-8 text-[#6b7280]">No items found</p>
               ) : (
-                filteredAvailableItems.map((item: any) => {
+                filteredAvailableItems.map((item) => {
                   const isAdded = bundleForm.items.some(i => i.inventoryItemId === item.id);
                   return (
                     <div key={item.id} className="flex items-center justify-between p-3 border border-[rgba(0,0,0,0.1)] rounded-[8px] hover:bg-[#F8FAFB] transition-colors">
@@ -530,8 +572,11 @@ export function ItemBundlingView({
         </div>
       ) : (
         <div className="grid grid-cols-3 gap-4">
-          {filteredBundles.map((bundle: any) => {
-            const originalPrice = (bundle.items ?? []).reduce((sum: number, bi: any) => sum + (bi.inventoryItem?.price ?? 0) * bi.quantity, 0);
+          {filteredBundles.map((bundle) => {
+            const originalPrice = bundle.items.reduce(
+              (sum, item) => sum + (item.inventoryItem?.price ?? 0) * item.quantity,
+              0,
+            );
             const savings = originalPrice - bundle.price;
             const canEdit = isAdmin || bundle.status === 'PENDING' || bundle.status === 'REJECTED';
             const canApprove = isAdmin && bundle.status === 'PENDING';
@@ -557,7 +602,7 @@ export function ItemBundlingView({
 
                 <div className="border-t border-[rgba(0,0,0,0.1)] pt-3 mb-3 flex-1">
                   <div className="space-y-1.5 max-h-[120px] overflow-y-auto pr-1">
-                    {(bundle.items ?? []).map((bi: any) => (
+                    {bundle.items.map((bi) => (
                       <div key={bi.id} className="flex justify-between text-[12px] gap-2">
                         <span className="text-[#323B42] line-clamp-1 flex-1">{bi.inventoryItem?.name ?? 'Unknown'} × {bi.quantity}</span>
                         <span className="text-[#6b7280] shrink-0">₱{((bi.inventoryItem?.price ?? 0) * bi.quantity).toLocaleString()}</span>

@@ -21,6 +21,18 @@ import {
   getUsers,
   type KitchenOrderStatus,
 } from '../../app/api/client';
+import type {
+  RetailApiBundle,
+  RetailApiGoodsReceipt,
+  RetailApiInventoryItem,
+  RetailApiLocation,
+  RetailApiPurchaseOrder,
+  RetailApiSale,
+  RetailApiStockMovement,
+  RetailApiSupplier,
+  RetailApiTransfer,
+  RetailApiUser,
+} from '../../app/api/retailTypes';
 
 export const domainQueryKeys = {
   inventory: ['inventory'] as const,
@@ -43,9 +55,9 @@ type SelectOptions<TQueryFnData, TData> = Pick<
   'enabled' | 'select'
 >;
 
-export function useInventoryQuery<TData = any[]>(
+export function useInventoryQuery<TData = RetailApiInventoryItem[]>(
   params?: { search?: string; itemType?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiInventoryItem[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.inventory, params ?? {}],
@@ -54,8 +66,8 @@ export function useInventoryQuery<TData = any[]>(
   });
 }
 
-export function useLocationsQuery<TData = any[]>(
-  options?: SelectOptions<any[], TData>,
+export function useLocationsQuery<TData = RetailApiLocation[]>(
+  options?: SelectOptions<RetailApiLocation[], TData>,
 ) {
   return useQuery({
     queryKey: domainQueryKeys.locations,
@@ -64,8 +76,8 @@ export function useLocationsQuery<TData = any[]>(
   });
 }
 
-export function useUsersQuery<TData = any[]>(
-  options?: SelectOptions<any[], TData>,
+export function useUsersQuery<TData = RetailApiUser[]>(
+  options?: SelectOptions<RetailApiUser[], TData>,
 ) {
   return useQuery({
     queryKey: domainQueryKeys.users,
@@ -74,9 +86,9 @@ export function useUsersQuery<TData = any[]>(
   });
 }
 
-export function usePurchaseOrdersQuery<TData = any[]>(
+export function usePurchaseOrdersQuery<TData = RetailApiPurchaseOrder[]>(
   params?: { status?: string; supplierId?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiPurchaseOrder[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.purchaseOrders, params ?? {}],
@@ -85,9 +97,9 @@ export function usePurchaseOrdersQuery<TData = any[]>(
   });
 }
 
-export function useGoodsReceiptsQuery<TData = any[]>(
+export function useGoodsReceiptsQuery<TData = RetailApiGoodsReceipt[]>(
   params?: { purchaseOrderId?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiGoodsReceipt[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.goodsReceipts, params ?? {}],
@@ -96,9 +108,9 @@ export function useGoodsReceiptsQuery<TData = any[]>(
   });
 }
 
-export function useSuppliersQuery<TData = any[]>(
+export function useSuppliersQuery<TData = RetailApiSupplier[]>(
   params?: { isActive?: boolean },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiSupplier[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.suppliers, params ?? {}],
@@ -107,9 +119,9 @@ export function useSuppliersQuery<TData = any[]>(
   });
 }
 
-export function useTransfersQuery<TData = any[]>(
+export function useTransfersQuery<TData = RetailApiTransfer[]>(
   params?: { status?: string; fromLocationId?: string; toLocationId?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiTransfer[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.transfers, params ?? {}],
@@ -118,7 +130,7 @@ export function useTransfersQuery<TData = any[]>(
   });
 }
 
-export function useStockMovementsQuery<TData = any[]>(
+export function useStockMovementsQuery<TData = RetailApiStockMovement[]>(
   params?: {
     itemId?: string;
     locationId?: string;
@@ -126,7 +138,7 @@ export function useStockMovementsQuery<TData = any[]>(
     referenceType?: string;
     referenceId?: string;
   },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiStockMovement[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.stockMovements, params ?? {}],
@@ -135,9 +147,9 @@ export function useStockMovementsQuery<TData = any[]>(
   });
 }
 
-export function useSalesQuery<TData = any[]>(
+export function useSalesQuery<TData = RetailApiSale[]>(
   params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiSale[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.sales, params ?? {}],
@@ -146,9 +158,9 @@ export function useSalesQuery<TData = any[]>(
   });
 }
 
-export function useBundlesQuery<TData = any[]>(
+export function useBundlesQuery<TData = RetailApiBundle[]>(
   params?: { status?: string },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<RetailApiBundle[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.bundles, params ?? {}],

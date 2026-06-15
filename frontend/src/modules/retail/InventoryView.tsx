@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,6 +13,38 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+
+type InventoryFormData = Pick<
+  InventoryItem,
+  | 'name'
+  | 'category'
+  | 'targetCustomer'
+  | 'subcategory'
+  | 'size'
+  | 'condition'
+  | 'quantity'
+  | 'price'
+  | 'location'
+>;
+
+interface InventoryViewProps {
+  inventory: InventoryItem[];
+  searchTerm: string;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
+  onEdit: (item: InventoryItem) => void;
+  onDelete: (id: string) => void;
+  expandedCategories: Set<string>;
+  expandedSubcategories: Set<string>;
+  toggleCategory: (category: string) => void;
+  toggleSubcategory: (key: string) => void;
+  showEditModal: boolean;
+  editingId: string | null;
+  formData: InventoryFormData;
+  setFormData: React.Dispatch<React.SetStateAction<InventoryFormData>>;
+  onSaveEdit: () => void;
+  onCancelEdit: () => void;
+  locations: Location[];
+}
 
 export function InventoryView({
   inventory,
@@ -32,7 +63,7 @@ export function InventoryView({
   onSaveEdit,
   onCancelEdit,
   locations
-}: any) {
+}: InventoryViewProps) {
   const [expandedTargetCustomers, setExpandedTargetCustomers] = useState<Set<string>>(new Set());
   const [expandedConditions, setExpandedConditions] = useState<Set<string>>(new Set());
 
@@ -379,7 +410,12 @@ export function InventoryView({
                 </label>
                 <select
                   value={formData.targetCustomer}
-                  onChange={(e) => setFormData({ ...formData, targetCustomer: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      targetCustomer: e.target.value as InventoryItem['targetCustomer'],
+                    })
+                  }
                   className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                 >
                   <option value="Male">Male</option>
@@ -407,7 +443,12 @@ export function InventoryView({
                   </label>
                   <select
                     value={formData.condition}
-                    onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        condition: e.target.value as InventoryItem['condition'],
+                      })
+                    }
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                   >
                     <option value="Excellent">Excellent</option>
@@ -455,7 +496,7 @@ export function InventoryView({
                   onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                   className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                 >
-                  {locations.map((loc: any) => (
+                  {locations.map((loc) => (
                     <option key={loc.id} value={loc.name}>{loc.name}</option>
                   ))}
                 </select>
@@ -484,7 +525,19 @@ export function InventoryView({
 }
 
 // Add Items View
-function AddItemsView({ formData, setFormData, onSubmit, editingId, onCancel }: any) {
+function AddItemsView({
+  formData,
+  setFormData,
+  onSubmit,
+  editingId,
+  onCancel,
+}: {
+  formData: InventoryFormData;
+  setFormData: React.Dispatch<React.SetStateAction<InventoryFormData>>;
+  onSubmit: React.FormEventHandler<HTMLFormElement>;
+  editingId: string | null;
+  onCancel: () => void;
+}) {
   return (
     <div>
       <h2 className="text-[30px] font-bold text-[#323B42] mb-6">
@@ -545,7 +598,12 @@ function AddItemsView({ formData, setFormData, onSubmit, editingId, onCancel }: 
             <label className="block text-[14px] font-medium text-[#323B42] mb-2">Target Customer</label>
             <select
               value={formData.targetCustomer}
-              onChange={(e) => setFormData({ ...formData, targetCustomer: e.target.value as any })}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  targetCustomer: e.target.value as InventoryItem['targetCustomer'],
+                })
+              }
               className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
               required
             >
@@ -572,7 +630,12 @@ function AddItemsView({ formData, setFormData, onSubmit, editingId, onCancel }: 
               <label className="block text-[14px] font-medium text-[#323B42] mb-2">Condition</label>
               <select
                 value={formData.condition}
-                onChange={(e) => setFormData({ ...formData, condition: e.target.value as any })}
+                onChange={(e) =>
+                  setFormData({
+                    ...formData,
+                    condition: e.target.value as InventoryItem['condition'],
+                  })
+                }
                 className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
               >
                 <option value="Excellent">Excellent</option>

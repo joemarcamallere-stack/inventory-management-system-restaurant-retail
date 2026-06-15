@@ -2,6 +2,7 @@ import { readRestaurantData } from './restaurantData';
 
 export type InventoryProduct = {
   id: number;
+  backendId?: string;
   name: string;
   sku: string;
   itemType?: string;

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import TransfersView from '../modules/retail/TransfersView';
@@ -23,191 +24,23 @@ import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
 import { UserManagement as RestaurantUserManagement } from '../modules/restaurant/UserManagement';
 import {
   clearStoredToken,
-  createInventoryItem,
-  deleteInventoryItem,
   loginUser,
   logoutUser,
   storeToken,
-  updateInventoryItem,
 } from './api/client';
-import { retailQueryKeys, useRetailMutation } from '../modules/lib/retailData';
 import {
-  useGoodsReceiptsQuery,
-  useInventoryQuery,
-  useLocationsQuery,
-  usePurchaseOrdersQuery,
-  useStockMovementsQuery,
-  useTransfersQuery,
-  useUsersQuery,
-} from '../modules/lib/domainQueries';
-
-// Import types and sample data generation
-import type {
-  InventoryItem,
-  PurchaseOrder,
-  ProductReceived,
-  Transfer,
-  Adjustment,
-  Location,
-  User,
-} from './utils/generateSampleData';
-
-// Types
-interface StockAlert {
-  id: string;
-  itemName: string;
-  currentStock: number;
-  threshold: number;
-  severity: 'low' | 'critical';
-}
-
-type ApiLocation = Location & { _count?: { items: number } };
-type ApiInventoryItem = Omit<InventoryItem, 'dateAdded' | 'location' | 'targetCustomer' | 'subcategory' | 'size' | 'condition'> & {
-  dateAdded: string;
-  locationId: string;
-  location?: ApiLocation;
-  itemType?: string;
-  sku?: string | null;
-  targetCustomer?: InventoryItem['targetCustomer'] | null;
-  subcategory?: string | null;
-  size?: string | null;
-  condition?: InventoryItem['condition'] | null;
-  unit?: string | null;
-  minStock?: number | null;
-  maxStock?: number | null;
-  reorderPoint?: number | null;
-  expiryDate?: string | null;
-  storageTemperature?: string | null;
-};
-
-const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
-
-const mapApiLocation = (location: ApiLocation): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
-
-const mapApiInventoryItem = (item: ApiInventoryItem): InventoryItem & { locationId?: string } => ({
-  id: item.id,
-  name: item.name,
-  category: item.category,
-  targetCustomer: item.targetCustomer ?? 'Unisex',
-  subcategory: item.subcategory ?? 'General',
-  size: item.size ?? 'N/A',
-  condition: item.condition ?? 'Good',
-  quantity: item.quantity,
-  price: item.price,
-  dateAdded: formatDate(item.dateAdded),
-  location: item.location?.name ?? 'Unknown Location',
-  locationId: item.locationId
-});
-
-const mapApiUser = (user: any): User => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  status: user.status,
-  lastLogin: formatDate(user.lastLogin)
-});
-
-const mapApiPurchaseOrder = (order: any): PurchaseOrder => ({
-  id: order.id,
-  orderNumber: order.orderNumber,
-  supplier: order.supplier?.name ?? 'Unassigned supplier',
-  date: formatDate(order.createdAt),
-  status: ({
-    DRAFT: 'Pending',
-    SUBMITTED: 'Pending',
-    APPROVED: 'Approved',
-    PARTIALLY_RECEIVED: 'Approved',
-    RECEIVED: 'Received',
-    REJECTED: 'Rejected',
-    CANCELLED: 'Cancelled',
-  } as Record<string, PurchaseOrder['status']>)[order.status] ?? 'Pending',
-  items: (order.items ?? []).map((item: any) => ({
-    name: item.name,
-    quantity: item.quantity,
-    price: item.unitPrice,
-  })),
-  totalAmount: order.totalAmount ?? 0,
-  paymentMethod: order.paymentMethod,
-  paymentTerms: order.paymentTerms,
-  createdBy: order.createdBy?.name ?? order.createdBy?.email ?? '',
-});
-
-const mapApiTransfer = (transfer: any): Transfer => ({
-  id: transfer.id,
-  transferNumber: transfer.transferNumber,
-  fromLocation: transfer.fromLocation?.name ?? '',
-  toLocation: transfer.toLocation?.name ?? '',
-  date: formatDate(transfer.createdAt),
-  status: ({
-    PENDING: 'Pending',
-    IN_TRANSIT: 'In Transit',
-    COMPLETED: 'Completed',
-    CANCELLED: 'Cancelled',
-  } as Record<string, Transfer['status']>)[transfer.status] ?? 'Pending',
-  items: (transfer.items ?? []).map((item: any) => ({
-    itemId: item.inventoryItemId,
-    name: item.inventoryItem?.name ?? 'Item',
-    quantity: item.quantity,
-  })),
-  createdBy: transfer.createdBy?.name ?? transfer.createdBy?.email ?? '',
-  notes: transfer.notes,
-});
-
-const mapApiAdjustment = (movement: any): Adjustment => ({
-  id: movement.id,
-  adjustmentNumber: movement.referenceId ?? movement.id,
-  date: formatDate(movement.createdAt),
-  type: movement.newQuantity >= movement.previousQuantity ? 'Add' : 'Remove',
-  reason: movement.reason ?? movement.notes ?? 'Inventory adjustment',
-  items: [{
-    itemId: movement.itemId,
-    name: movement.item?.name ?? 'Item',
-    quantityChange: (movement.newQuantity ?? 0) - (movement.previousQuantity ?? 0),
-    location: movement.location?.name ?? '',
-  }],
-  createdBy: movement.createdBy?.name ?? movement.createdBy?.email ?? '',
-  status: 'Approved',
-});
-
-const mapApiGoodsReceipt = (receipt: any): ProductReceived => {
-  const items = (receipt.items ?? []).map((item: any) => ({
-    name: item.purchaseOrderItem?.name ?? item.inventoryItem?.name ?? 'Item',
-    orderedQty: item.purchaseOrderItem?.quantity ?? item.receivedQty + item.rejectedQty,
-    receivedQty: item.receivedQty + item.rejectedQty,
-    acceptedQty: item.receivedQty,
-    rejectedQty: item.rejectedQty,
-    category: item.inventoryItem?.category ?? 'Uncategorized',
-    condition: item.condition ?? 'Good',
-    inspectionNotes: item.notes,
-    price: item.purchaseOrderItem?.unitPrice ?? 0,
-  }));
-  const totalAccepted = items.reduce((sum: number, item: any) => sum + item.acceptedQty, 0);
-  const totalRejected = items.reduce((sum: number, item: any) => sum + item.rejectedQty, 0);
-  return {
-    id: receipt.id,
-    receiptNumber: receipt.receiptNumber,
-    poNumber: receipt.purchaseOrder?.orderNumber ?? '',
-    poId: receipt.purchaseOrderId,
-    supplier: receipt.purchaseOrder?.supplier?.name ?? '',
-    dateReceived: formatDate(receipt.createdAt),
-    receivedDate: formatDate(receipt.createdAt),
-    items,
-    receivedBy: receipt.receivedBy?.name ?? receipt.receivedBy?.email ?? '',
-    status: totalRejected > 0 ? 'Partially Accepted' : 'Fully Accepted',
-    totalOrdered: totalAccepted + totalRejected,
-    totalAccepted,
-    totalRejected,
-  };
-};
-
+  useDeleteRetailInventoryMutation,
+  useRetailAdjustmentsQuery,
+  useRetailGoodsReceiptsQuery,
+  useRetailInventoryQuery,
+  useRetailLocationsQuery,
+  useRetailPurchaseOrdersQuery,
+  useRetailTransfersQuery,
+  useRetailUsersQuery,
+  useSaveRetailInventoryMutation,
+  type RetailStockAlert,
+} from '../modules/lib/retailQueries';
+import type { InventoryItem } from './utils/generateSampleData';
 
 type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-add-food-item' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation';
 
@@ -221,37 +54,13 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
   const queryClient = useQueryClient();
   const retailEnabled = isLoggedIn && hasRetailModule;
-  const inventoryQuery = useInventoryQuery(
-    { itemType: 'RETAIL_ITEM' },
-    {
-    enabled: retailEnabled,
-    select: (items) => items.map(mapApiInventoryItem),
-    },
-  );
-  const locationsQuery = useLocationsQuery({
-    enabled: isLoggedIn,
-    select: (items) => items.map(mapApiLocation),
-  });
-  const usersQuery = useUsersQuery({
-    enabled: isLoggedIn && currentUser?.role === 'Admin',
-    select: (items) => items.map(mapApiUser),
-  });
-  const purchaseOrdersQuery = usePurchaseOrdersQuery(undefined, {
-    enabled: retailEnabled,
-    select: (items) => items.map(mapApiPurchaseOrder),
-  });
-  const goodsReceiptsQuery = useGoodsReceiptsQuery(undefined, {
-    enabled: retailEnabled,
-    select: (items) => items.map(mapApiGoodsReceipt),
-  });
-  const transfersQuery = useTransfersQuery(undefined, {
-    enabled: retailEnabled,
-    select: (items) => items.map(mapApiTransfer),
-  });
-  const adjustmentsQuery = useStockMovementsQuery({ type: 'ADJUSTMENT' }, {
-    enabled: retailEnabled,
-    select: (items) => items.map(mapApiAdjustment),
-  });
+  const inventoryQuery = useRetailInventoryQuery(retailEnabled);
+  const locationsQuery = useRetailLocationsQuery(isLoggedIn);
+  const usersQuery = useRetailUsersQuery(isLoggedIn && currentUser?.role === 'Admin');
+  const purchaseOrdersQuery = useRetailPurchaseOrdersQuery(undefined, retailEnabled);
+  const goodsReceiptsQuery = useRetailGoodsReceiptsQuery(undefined, retailEnabled);
+  const transfersQuery = useRetailTransfersQuery(retailEnabled);
+  const adjustmentsQuery = useRetailAdjustmentsQuery(retailEnabled);
   const inventory = inventoryQuery.data ?? [];
   const locations = locationsQuery.data ?? [];
   const users = usersQuery.data ?? [];
@@ -259,15 +68,8 @@ export default function App() {
   const productsReceived = goodsReceiptsQuery.data ?? [];
   const transfers = transfersQuery.data ?? [];
   const adjustments = adjustmentsQuery.data ?? [];
-  const saveInventoryMutation = useRetailMutation(
-    ({ id, data }: { id?: string; data: unknown }) =>
-      id ? updateInventoryItem(id, data) : createInventoryItem(data),
-    [retailQueryKeys.inventory],
-  );
-  const deleteInventoryMutation = useRetailMutation(
-    (id: string) => deleteInventoryItem(id),
-    [retailQueryKeys.inventory],
-  );
+  const saveInventoryMutation = useSaveRetailInventoryMutation();
+  const deleteInventoryMutation = useDeleteRetailInventoryMutation();
   const navigateToView = (view: ViewType, replace = false) => {
     setCurrentView(view);
     const url = new URL(window.location.href);
@@ -375,7 +177,7 @@ export default function App() {
     };
   }, [inventory]);
 
-  const stockAlerts = useMemo(() => {
+  const stockAlerts = useMemo<RetailStockAlert[]>(() => {
     return inventory
       .filter(item => item.quantity <= 3 && item.condition !== 'Damaged')
       .map(item => ({
@@ -412,8 +214,12 @@ export default function App() {
 
   const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.category || !formData.size) return;
+    if (!formData.name || !formData.category || !formData.size) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
 
+    const wasEditing = Boolean(editingId);
     try {
       if (editingId) {
         await saveInventoryMutation.mutateAsync({ id: editingId, data: toInventoryPayload() });
@@ -433,8 +239,9 @@ export default function App() {
         price: 0,
         location: 'Main Store'
       });
+      toast.success(wasEditing ? 'Inventory item updated' : 'Inventory item created');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to save inventory item');
+      toast.error(error instanceof Error ? error.message : 'Failed to save inventory item');
     }
   };
 
@@ -458,7 +265,7 @@ export default function App() {
     if (!editingId) return;
 
     if (!formData.name || !formData.category || !formData.size) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
@@ -478,8 +285,9 @@ export default function App() {
         price: 0,
         location: 'Main Store'
       });
+      toast.success('Inventory item updated');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update inventory item');
+      toast.error(error instanceof Error ? error.message : 'Failed to update inventory item');
     }
   };
 
@@ -503,8 +311,9 @@ export default function App() {
     if (confirm('Are you sure you want to delete this item?')) {
       try {
         await deleteInventoryMutation.mutateAsync(id);
+        toast.success('Inventory item deleted');
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete inventory item');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete inventory item');
       }
     }
   };
@@ -550,8 +359,9 @@ export default function App() {
       localStorage.setItem('userRole', response.user.role.toLowerCase());
       localStorage.setItem('userEmail', response.user.email);
       setIsLoggedIn(true);
+      toast.success('Signed in successfully');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Invalid credentials');
+      toast.error(error instanceof Error ? error.message : 'Invalid credentials');
     }
   };
 
