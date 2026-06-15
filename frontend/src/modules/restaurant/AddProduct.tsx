@@ -47,6 +47,8 @@ export function AddProduct() {
     sku: "",
     price: "",
     stock: "",
+    minStock: "",
+    maxStock: "",
     reorderPoint: "",
     supplier: "",
     expiryDate: "",
@@ -81,9 +83,9 @@ export function AddProduct() {
         quantity: product.stock,
         price: product.price,
         unit: product.unit,
-        minStock: product.minStock ?? 0,
+        minStock: product.minStock,
         maxStock: product.maxStock,
-        reorderPoint: product.reorderPoint ?? 0,
+        reorderPoint: product.reorderPoint,
         expiryDate: product.expiry ? new Date(`${product.expiry}T00:00:00`).toISOString() : undefined,
         storageTemperature: product.storageTemperature || undefined,
         locationId: locations[0].id,
@@ -102,7 +104,9 @@ export function AddProduct() {
 
     const nextId = products.length > 0 ? Math.max(...products.map(product => product.id)) + 1 : 1;
     const stock = Number(formData.stock) || 0;
-    const reorderPoint = Number(formData.reorderPoint) || 0;
+    const minStock = formData.minStock ? Number(formData.minStock) : undefined;
+    const maxStock = formData.maxStock ? Number(formData.maxStock) : Math.max(stock * 2, 1);
+    const reorderPoint = formData.reorderPoint ? Number(formData.reorderPoint) : undefined;
 
     const productToAdd: StoredProduct = {
       id: nextId,
@@ -111,8 +115,8 @@ export function AddProduct() {
       sku: formData.sku,
       category: `${selectedCategory} > ${selectedSubCategory}`,
       stock,
-      maxStock: Math.max(stock, reorderPoint, 1),
-      minStock: reorderPoint,
+      maxStock,
+      minStock,
       reorderPoint,
       price: Number(formData.price) || 0,
       expiry: formData.expiryDate,
@@ -446,6 +450,36 @@ export function AddProduct() {
                 </div>
 
                 <div>
+                  <label htmlFor="minStock" className="block text-sm mb-2 text-foreground">
+                    Min Stock
+                  </label>
+                  <input
+                    id="minStock"
+                    name="minStock"
+                    type="number"
+                    value={formData.minStock}
+                    onChange={handleChange}
+                    placeholder="Critical threshold"
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="maxStock" className="block text-sm mb-2 text-foreground">
+                    Max Stock
+                  </label>
+                  <input
+                    id="maxStock"
+                    name="maxStock"
+                    type="number"
+                    value={formData.maxStock}
+                    onChange={handleChange}
+                    placeholder="Maximum capacity"
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
                   <label htmlFor="reorderPoint" className="block text-sm mb-2 text-foreground">
                     Reorder Point
                   </label>
@@ -455,7 +489,7 @@ export function AddProduct() {
                     type="number"
                     value={formData.reorderPoint}
                     onChange={handleChange}
-                    placeholder="10"
+                    placeholder="Low stock threshold"
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
                   />
                 </div>

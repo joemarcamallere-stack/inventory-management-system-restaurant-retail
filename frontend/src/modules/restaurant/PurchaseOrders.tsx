@@ -186,6 +186,13 @@ export function PurchaseOrders() {
     setUserRole(role);
   }, []);
 
+  useEffect(() => {
+    if (sessionStorage.getItem('po-open-approval') === 'true') {
+      sessionStorage.removeItem('po-open-approval');
+      setShowApprovalModal(true);
+    }
+  }, []);
+
   const [newOrder, setNewOrder] = useState({
     supplier: "",
     expectedDelivery: "",
