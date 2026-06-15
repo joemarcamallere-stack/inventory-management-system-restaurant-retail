@@ -41,7 +41,8 @@ export function Reports() {
 
   const productsQuery = useRestaurantInventoryQuery();
   const products = productsQuery.data ?? getInventoryProducts();
-  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<{ total: number; status?: string; date?: string }[]>();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<any[]>();
   const purchaseOrders = purchaseOrdersQuery.data ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transfers: any[] = [];

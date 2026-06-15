@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
+import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, ArrowRight, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
 import {
@@ -46,6 +46,8 @@ export function Dashboard() {
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
   const [userRole, setUserRole] = useState<string>("staff");
 
   useEffect(() => {
