@@ -56,12 +56,19 @@ export class InventoryController {
 
   @Get('stats')
   getStats(@CurrentUser() currentUser: AuthenticatedUser) {
-    return this.inventoryService.getStats(currentUser.businessId);
+    return this.inventoryService.getStats(
+      currentUser.businessId,
+      currentUser.modules,
+    );
   }
 
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
-    return this.inventoryService.findOne(id, currentUser.businessId);
+    return this.inventoryService.findOne(
+      id,
+      currentUser.businessId,
+      currentUser.modules,
+    );
   }
 
   @Patch(':id')
@@ -80,6 +87,10 @@ export class InventoryController {
 
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() currentUser: AuthenticatedUser) {
-    return this.inventoryService.remove(id, currentUser.businessId);
+    return this.inventoryService.remove(
+      id,
+      currentUser.businessId,
+      currentUser.modules,
+    );
   }
 }

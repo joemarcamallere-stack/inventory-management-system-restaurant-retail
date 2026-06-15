@@ -1,5 +1,5 @@
 export { DashboardView } from './DashboardView';
-export type { StockAlert } from './DashboardView';
+export type { RetailStockAlert } from '../lib/retailQueries';
 export { StockAlertsView } from './StockAlertsView';
 export { InventoryView } from './InventoryView';
 export { ReportsView } from './ReportsView';

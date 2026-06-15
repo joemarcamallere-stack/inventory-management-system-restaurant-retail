@@ -1,8 +1,15 @@
 import { useState, useEffect } from "react";
-import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, Clock, ArrowRight } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { useRestaurantState } from "../lib/restaurantData";
+import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, ArrowRight, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
+import {
+  useApproveRestaurantPurchaseOrderMutation,
+  useRejectRestaurantPurchaseOrderMutation,
+  useRestaurantGoodsReceiptsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantPurchaseOrdersQuery,
+} from "../lib/restaurantQueries";
+import { useSession } from "../../app/hooks/useSession";
 
 type PendingOrder = {
   id: string;
@@ -37,21 +44,20 @@ const goToPurchaseOrders = () => {
 };
 
 export function Dashboard() {
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role.toLowerCase() ?? "staff";
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
-  const [userRole, setUserRole] = useState<string>("staff");
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
 
   useEffect(() => {
     setChartKey(prev => prev + 1);
   }, [selectedMainCategory, selectedSubCategory]);
 
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
-
-  const [products] = useRestaurantState<InventoryProduct[]>("inventory.products", getInventoryProducts());
+  const productsQuery = useRestaurantInventoryQuery<InventoryProduct[]>();
+  const products = productsQuery.data ?? getInventoryProducts();
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);
     if (!acc[main]) acc[main] = [];
@@ -70,7 +76,29 @@ export function Dashboard() {
     setSelectedSubCategory("all");
   };
 
-  const [pendingOrders] = useRestaurantState<PendingOrder[]>("dashboard.pendingOrders", []);
+  const pendingOrdersQuery = useRestaurantPurchaseOrdersQuery<PendingOrder[]>(
+    (orders) => orders.filter((order) => order.backendStatus === "SUBMITTED"),
+  );
+  const pendingOrders = pendingOrdersQuery.data ?? [];
+  const approveOrder = useApproveRestaurantPurchaseOrderMutation();
+  const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
+
+  const handleApproveOrder = async (orderId: string) => {
+    await approveOrder.mutateAsync(orderId);
+    setShowApprovalModal(false);
+    setSelectedOrder(null);
+  };
+
+  const handleRejectOrder = async (orderId: string) => {
+    await rejectOrder.mutateAsync({ id: orderId, reason: 'Rejected from restaurant dashboard' });
+    setShowApprovalModal(false);
+    setSelectedOrder(null);
+  };
+
+  const handleViewOrder = (order: PendingOrder) => {
+    setSelectedOrder(order);
+    setShowApprovalModal(true);
+  };
 
   const stats = [
     {
@@ -107,8 +135,17 @@ export function Dashboard() {
     },
   ];
 
-  const [purchaseOrders] = useRestaurantState<PurchaseOrderSummary[]>("purchaseOrders.orders", []);
-  const [goodsRecords] = useRestaurantState<GoodsRecordSummary[]>("goodsReceived.records", []);
+  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<PurchaseOrderSummary[]>();
+  const purchaseOrders = purchaseOrdersQuery.data ?? [];
+  const goodsRecordsQuery = useRestaurantGoodsReceiptsQuery<GoodsRecordSummary[]>((receipts) =>
+    receipts.map((receipt: any) => ({
+      id: receipt.receiptNumber ?? receipt.id,
+      poId: receipt.purchaseOrderId,
+      receivedDate: receipt.createdAt,
+      status: (receipt.items ?? []).some((item: any) => item.rejectedQty > 0) ? "partial" : "verified",
+    })),
+  );
+  const goodsRecords = goodsRecordsQuery.data ?? [];
   const receivedPurchaseOrders = purchaseOrders.filter(order => order.status === "received");
   const receiptTrendData = receivedPurchaseOrders.map((order) => ({
     month: order.date || order.id,

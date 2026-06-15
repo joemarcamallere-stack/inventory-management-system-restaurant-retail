@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { Package, Search, TrendingDown, TrendingUp, AlertCircle, RefreshCw, Download, BarChart3, Calendar, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantState } from "../lib/restaurantData";
+import {
+  useRestaurantAdjustmentsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantStockMovementsQuery,
+  useRestaurantWasteQuery,
+} from "../lib/restaurantQueries";
 import { formatQuantity, getDaysUntilExpiry, getInventoryProducts, getStockStatus, splitCategory, StockStatus } from "../lib/inventoryLogic";
 
 type StockItem = {
@@ -63,10 +68,26 @@ export function StockControl() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [wasteLogs] = useRestaurantState<WasteLogSummary[]>("transfers.wasteLogs", []);
-  const [adjustments] = useRestaurantState<AdjustmentSummary[]>("transfers.adjustments", []);
-  const [inventoryMovements] = useRestaurantState<InventoryMovementSummary[]>("inventory.movements", []);
+  const productsQuery = useRestaurantInventoryQuery();
+  const products = productsQuery.data ?? getInventoryProducts();
+  const wasteQuery = useRestaurantWasteQuery();
+  const wasteLogs = (wasteQuery.data ?? []) as WasteLogSummary[];
+  const adjustmentsQuery = useRestaurantAdjustmentsQuery();
+  const adjustments = (adjustmentsQuery.data ?? []) as AdjustmentSummary[];
+  const movementsQuery = useRestaurantStockMovementsQuery(
+    (movements) => movements.map((movement: any) => ({
+      id: movement.id,
+      type: movement.type,
+      source: movement.referenceType ?? "shared-backend",
+      sourceId: movement.referenceId ?? movement.id,
+      item: movement.item?.name ?? "Item",
+      quantity: movement.quantity,
+      unit: movement.unit ?? movement.item?.unit ?? "",
+      date: movement.createdAt,
+      notes: movement.notes ?? movement.reason ?? "",
+    })),
+  );
+  const inventoryMovements = (movementsQuery.data ?? []) as InventoryMovementSummary[];
 
   const getRecordedOutflowQuantity = (productName: string) => {
     const targetName = normalizeName(productName);

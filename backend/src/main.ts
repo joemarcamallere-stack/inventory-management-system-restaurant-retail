@@ -5,8 +5,7 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
-  // Set a global prefix for all API routes
+
   app.setGlobalPrefix('api');
   app.use(cookieParser());
 
@@ -18,9 +17,15 @@ async function bootstrap() {
     }),
   );
 
-  // Enable CORS
+  const allowedOrigins = (
+    process.env.CORS_ORIGINS ?? 'http://localhost:5173'
+  )
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: 'http://localhost:5173', // Vite default port
+    origin: allowedOrigins,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });

@@ -1,30 +1,27 @@
 ﻿import { useState, useMemo } from 'react';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
-import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
-import { createLocation, deleteLocation, updateLocation } from '../../app/api/client';
-
-const mapApiLocation = (location: any): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
+import { toast } from 'sonner';
+import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../models/retail';
+import {
+  useCreateRetailLocationMutation,
+  useDeleteRetailLocationMutation,
+  useUpdateRetailLocationMutation,
+} from '../lib/retailQueries';
 
 export default function MultilocationView({
   locations,
-  setLocations,
   inventory,
   transfers,
   purchaseOrders
 }: {
   locations: Location[];
-  setLocations: React.Dispatch<React.SetStateAction<Location[]>>;
   inventory: InventoryItem[];
   transfers: Transfer[];
   purchaseOrders: PurchaseOrder[];
 }) {
+  const addLocation = useCreateRetailLocationMutation();
+  const editLocation = useUpdateRetailLocationMutation();
+  const removeLocation = useDeleteRetailLocationMutation();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -47,37 +44,35 @@ export default function MultilocationView({
 
   const handleAddLocation = async () => {
     if (!locationForm.name || !locationForm.address || !locationForm.manager || !locationForm.phone) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      const newLocation = await createLocation(locationForm);
-      setLocations([...locations, mapApiLocation(newLocation)]);
+      await addLocation.mutateAsync(locationForm);
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setShowAddModal(false);
+      toast.success('Location created successfully');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to create location');
+      toast.error(error instanceof Error ? error.message : 'Failed to create location');
     }
   };
 
   const handleEditLocation = async () => {
     if (!selectedLocation || !locationForm.name || !locationForm.address || !locationForm.manager || !locationForm.phone) {
-      alert('Please fill in all required fields');
+      toast.error('Please fill in all required fields');
       return;
     }
 
     try {
-      const updatedLocation = await updateLocation(selectedLocation.id, locationForm);
-      setLocations(locations.map(loc =>
-        loc.id === selectedLocation.id ? mapApiLocation(updatedLocation) : loc
-      ));
+      await editLocation.mutateAsync({ id: selectedLocation.id, data: locationForm });
 
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setSelectedLocation(null);
       setShowEditModal(false);
+      toast.success('Location updated successfully');
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update location');
+      toast.error(error instanceof Error ? error.message : 'Failed to update location');
     }
   };
 
@@ -86,16 +81,16 @@ export default function MultilocationView({
     const locationItems = inventory.filter(item => item.location === location?.name);
 
     if (locationItems.length > 0) {
-      alert(`Cannot delete ${location?.name}. There are ${locationItems.length} items at this location. Please transfer or remove items first.`);
+      toast.error(`Cannot delete ${location?.name}. There are ${locationItems.length} items at this location. Please transfer or remove items first.`);
       return;
     }
 
     if (confirm(`Delete ${location?.name}?`)) {
       try {
-        await deleteLocation(locationId);
-        setLocations(locations.filter(loc => loc.id !== locationId));
+        await removeLocation.mutateAsync(locationId);
+        toast.success('Location deleted successfully');
       } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete location');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete location');
       }
     }
   };
