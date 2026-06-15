@@ -62,7 +62,7 @@ export class InventoryService {
           }
         : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.inventoryItem.findMany({
         where,
         include: { location: true, categoryRef: true },

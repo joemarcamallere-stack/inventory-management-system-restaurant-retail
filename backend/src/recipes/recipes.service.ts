@@ -65,7 +65,7 @@ export class RecipesService {
       ...(active === 'true' ? { isActive: true } : {}),
       ...(active === 'false' ? { isActive: false } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.recipe.findMany({
         where,
         include: this.recipeInclude,

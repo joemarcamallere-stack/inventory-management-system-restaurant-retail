@@ -159,7 +159,7 @@ export class SalesService {
           }
         : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.sale.findMany({
         where,
         include: this.saleInclude,

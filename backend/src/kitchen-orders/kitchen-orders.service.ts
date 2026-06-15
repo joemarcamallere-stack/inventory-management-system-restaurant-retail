@@ -176,7 +176,7 @@ export class KitchenOrdersService {
       ...(validStatus ? { status: validStatus } : {}),
       ...(locationId ? { locationId } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.kitchenOrder.findMany({
         where,
         include: this.kitchenOrderInclude,
