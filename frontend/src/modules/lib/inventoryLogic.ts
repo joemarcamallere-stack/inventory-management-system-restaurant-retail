@@ -69,15 +69,22 @@ export function splitCategory(category: string) {
 
 export type StockStatus = 'healthy' | 'medium' | 'low' | 'critical' | 'out-of-stock' | 'overstock';
 
-export function getStockStatus(stock: number, maxStock: number): StockStatus {
+export function getStockStatus(stock: number, maxStock: number, minStock?: number, reorderPoint?: number): StockStatus {
   if (stock <= 0) return 'out-of-stock';
-  const percentage = maxStock > 0 ? (stock / maxStock) * 100 : 0;
-  if (percentage <= 10) return 'critical';
-  if (percentage <= 30) return 'low';
+
+  // Use explicit minStock threshold for critical, falling back to 10% of maxStock
+  const criticalThreshold = (minStock !== undefined && minStock > 0) ? minStock : (maxStock * 0.1);
+  if (stock <= criticalThreshold) return 'critical';
+
+  // Use explicit reorderPoint threshold for low, falling back to 30% of maxStock
+  const lowThreshold = (reorderPoint !== undefined && reorderPoint > 0) ? reorderPoint : (maxStock * 0.3);
+  if (stock <= lowThreshold) return 'low';
+
+  if (maxStock <= 0) return 'healthy';
+  const percentage = (stock / maxStock) * 100;
   if (percentage <= 70) return 'medium';
   if (percentage <= 100) return 'healthy';
-  if (percentage > 100) return 'overstock';
-  return 'healthy';
+  return 'overstock';
 }
 
 export function getDaysUntilExpiry(expiry: string) {

@@ -91,7 +91,9 @@ export function StockControl() {
 
   const stockItems: StockItem[] = products.map((product) => {
     const totalValue = product.stock * product.price;
-    const status = getStockStatus(product.stock, product.maxStock);
+    const effectiveMinStock = product.minStock ?? Math.ceil(product.maxStock * 0.25);
+    const effectiveReorderPoint = product.reorderPoint ?? Math.ceil(product.maxStock * 0.3);
+    const status = getStockStatus(product.stock, product.maxStock, effectiveMinStock, effectiveReorderPoint);
     const classification = totalValue >= 500 ? "A" : totalValue >= 150 ? "B" : "C";
     const { main } = splitCategory(product.category);
     const movementQuantity = getRecordedOutflowQuantity(product.name);
@@ -105,9 +107,9 @@ export function StockControl() {
       category: main,
       currentStock: product.stock,
       unit: product.unit || "pcs",
-      minStock: product.minStock ?? Math.ceil(product.maxStock * 0.25),
+      minStock: effectiveMinStock,
       maxStock: product.maxStock,
-      reorderPoint: product.reorderPoint ?? Math.ceil(product.maxStock * 0.3),
+      reorderPoint: effectiveReorderPoint,
       unitCost: product.price,
       totalValue,
       status,
