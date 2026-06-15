@@ -769,21 +769,21 @@ async function main() {
 
   // ─── Restaurant-Only: Suppliers ───────────────────────────────────────────
   const freshMarket = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Fresh Market Suppliers' } },
-    update: { contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true },
-    create: { name: 'Fresh Market Suppliers', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true, businessId: restaurantBusiness.id },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Fresh Market Suppliers', module: 'RESTAURANT' } },
+    update: { module: 'RESTAURANT', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true },
+    create: { name: 'Fresh Market Suppliers', module: 'RESTAURANT', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true, businessId: restaurantBusiness.id },
   });
 
   const primeMeats = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Prime Meats & Poultry' } },
-    update: { contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true },
-    create: { name: 'Prime Meats & Poultry', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true, businessId: restaurantBusiness.id },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Prime Meats & Poultry', module: 'RESTAURANT' } },
+    update: { module: 'RESTAURANT', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true },
+    create: { name: 'Prime Meats & Poultry', module: 'RESTAURANT', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true, businessId: restaurantBusiness.id },
   });
 
   const dryGoodsDepot = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dry Goods Depot' } },
-    update: { contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true },
-    create: { name: 'Dry Goods Depot', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true, businessId: restaurantBusiness.id },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Dry Goods Depot', module: 'RESTAURANT' } },
+    update: { module: 'RESTAURANT', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true },
+    create: { name: 'Dry Goods Depot', module: 'RESTAURANT', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true, businessId: restaurantBusiness.id },
   });
 
   // ─── Restaurant-Only: Purchase Orders ────────────────────────────────────
@@ -791,8 +791,8 @@ async function main() {
 
   const po1 = await prisma.purchaseOrder.upsert({
     where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-001' } },
-    update: { status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z') },
-    create: { orderNumber: 'PO-REST-001', status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+    update: { module: 'RESTAURANT', status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-001', module: 'RESTAURANT', status: 'RECEIVED', supplierId: primeMeats.id, totalAmount: 6750, notes: 'Weekly meat restock', paymentMethod: 'Cash', paymentTerms: 'Net 7', expectedDelivery: new Date('2026-06-11T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
   });
   if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po1.id } })) === 0) {
     await prisma.purchaseOrderItem.createMany({
@@ -805,8 +805,8 @@ async function main() {
 
   const po2 = await prisma.purchaseOrder.upsert({
     where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-002' } },
-    update: { status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z') },
-    create: { orderNumber: 'PO-REST-002', status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+    update: { module: 'RESTAURANT', status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-002', module: 'RESTAURANT', status: 'APPROVED', supplierId: freshMarket.id, totalAmount: 2500, notes: 'Fresh produce and seafood', paymentMethod: 'Bank Transfer', paymentTerms: 'COD', expectedDelivery: new Date('2026-06-14T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
   });
   if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po2.id } })) === 0) {
     await prisma.purchaseOrderItem.createMany({
@@ -819,8 +819,8 @@ async function main() {
 
   const po3 = await prisma.purchaseOrder.upsert({
     where: { businessId_orderNumber: { businessId: restaurantBusiness.id, orderNumber: 'PO-REST-003' } },
-    update: { status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z') },
-    create: { orderNumber: 'PO-REST-003', status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
+    update: { module: 'RESTAURANT', status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z') },
+    create: { orderNumber: 'PO-REST-003', module: 'RESTAURANT', status: 'DRAFT', supplierId: dryGoodsDepot.id, totalAmount: 2080, notes: 'Dry goods restock', paymentMethod: 'Cash', paymentTerms: 'Net 30', expectedDelivery: new Date('2026-06-20T00:00:00.000Z'), businessId: restaurantBusiness.id, createdById: restAdmin?.id },
   });
   if ((await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: po3.id } })) === 0) {
     await prisma.purchaseOrderItem.createMany({

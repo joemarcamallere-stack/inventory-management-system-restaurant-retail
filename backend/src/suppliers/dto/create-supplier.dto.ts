@@ -1,6 +1,12 @@
 import { IsBoolean, IsEmail, IsOptional, IsString, IsUUID, MinLength } from 'class-validator';
+import { BusinessModule } from '@prisma/client';
+import { IsEnum } from 'class-validator';
 
 export class CreateSupplierDto {
+  @IsOptional()
+  @IsEnum(BusinessModule)
+  module?: BusinessModule;
+
   @IsString()
   @MinLength(1)
   name: string;

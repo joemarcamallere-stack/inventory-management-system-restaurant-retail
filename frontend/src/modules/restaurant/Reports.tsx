@@ -1,8 +1,8 @@
-import { useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import { Download, TrendingUp, PhilippinePeso, ShoppingCart } from "lucide-react";
-import { useRestaurantState } from "../lib/restaurantData";
+import { useState, useEffect } from "react";
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import { Download, Calendar, TrendingUp, Package, PhilippinePeso, ShoppingCart, Filter } from "lucide-react";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
+import { useRestaurantInventoryQuery, useRestaurantPurchaseOrdersQuery } from "../lib/restaurantQueries";
 
 type TabType = 'overview' | 'inventory' | 'orders';
 
@@ -14,8 +14,10 @@ export function Reports() {
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [purchaseOrders] = useRestaurantState<{ total: number; status?: string; date?: string }[]>("purchaseOrders.orders", []);
+  const productsQuery = useRestaurantInventoryQuery();
+  const products = productsQuery.data ?? getInventoryProducts();
+  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<{ total: number; status?: string; date?: string }[]>();
+  const purchaseOrders = purchaseOrdersQuery.data ?? [];
   const inventoryValue = getInventoryValue(products);
 
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {

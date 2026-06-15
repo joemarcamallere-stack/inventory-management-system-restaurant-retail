@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { BusinessModule } from '@prisma/client';
 import { TransfersService } from './transfers.service';
 
 describe('TransfersService validation', () => {
@@ -22,6 +23,7 @@ describe('TransfersService validation', () => {
           ],
         },
         'business-1',
+        BusinessModule.RETAIL,
         'user-1',
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -49,6 +51,7 @@ describe('TransfersService validation', () => {
           ],
         },
         'business-1',
+        BusinessModule.RETAIL,
         'user-1',
       ),
     ).rejects.toThrow('unavailable at the source location');
