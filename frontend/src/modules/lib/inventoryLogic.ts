@@ -24,8 +24,11 @@ export const defaultCategoryHierarchy: { [key: string]: string[] } = {
   Seafood: ['Fish', 'Shellfish', 'Crustaceans', 'Mollusks', 'Canned Seafood'],
   Dairy: ['Milk Products', 'Cheese', 'Yogurt', 'Butter & Cream', 'Eggs'],
   Bakery: ['Bread', 'Pastries', 'Cakes', 'Cookies', 'Muffins'],
+  Grains: ['Rice', 'Pasta', 'Flour', 'Cereals', 'Bread Products'],
   'Oils & Condiments': ['Cooking Oils', 'Vinegars', 'Sauces', 'Spices', 'Seasonings'],
+  Beverages: ['Mixes', 'Juices', 'Soft Drinks', 'Coffee & Tea', 'Water'],
   'Frozen Foods': ['Frozen Vegetables', 'Frozen Fruits', 'Frozen Meals', 'Ice Cream', 'Frozen Seafood'],
+  'Menu Items': ['Main Course', 'Soups', 'Appetizers', 'Desserts', 'Beverages', 'Sides'],
 };
 
 export const defaultStorageTemperatureOptions = [

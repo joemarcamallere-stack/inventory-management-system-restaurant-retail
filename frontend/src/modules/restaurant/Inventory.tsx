@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
+import { Search, Edit, Trash2, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
+import { toast } from "sonner";
 import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
 import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
@@ -28,6 +29,7 @@ export function Inventory() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [transferProduct, setTransferProduct] = useState<Product | null>(null);
   const [editMainCategory, setEditMainCategory] = useState("");
   const [editSubCategory, setEditSubCategory] = useState("");
@@ -93,7 +95,11 @@ export function Inventory() {
   };
 
   const getProductCountInMainCategory = (mainCategory: string) => {
-    return products.filter(p => p.category.startsWith(mainCategory + " > ")).length;
+    if (searchQuery === "") {
+      return products.filter(p => p.category.startsWith(mainCategory + " > ")).length;
+    }
+    return categoryHierarchy[mainCategory]?.reduce((count, sub) =>
+      count + getProductsInCategory(mainCategory, sub).length, 0) ?? 0;
   };
 
   const handleEdit = (product: Product) => {
@@ -138,7 +144,7 @@ export function Inventory() {
         setEditMainCategory("");
         setEditSubCategory("");
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to update inventory item");
+        toast.error(error instanceof Error ? error.message : "Failed to update inventory item");
       }
     }
   };
@@ -159,7 +165,7 @@ export function Inventory() {
       };
       const location = locations.find((item: any) => item.name === updatedProduct.location);
       if (!location) {
-        alert("Select a valid backend location");
+        toast.error("Select a valid backend location");
         return;
       }
       try {
@@ -172,20 +178,25 @@ export function Inventory() {
         setEditMainCategory("");
         setEditSubCategory("");
       } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to move inventory item");
+        toast.error(error instanceof Error ? error.message : "Failed to move inventory item");
       }
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (confirm("Are you sure you want to delete this item?")) {
-      const product = products.find((item) => item.id === id);
-      if (!product) return;
-      try {
-        await deleteProduct.mutateAsync(product.backendId ?? String(product.id));
-      } catch (error) {
-        alert(error instanceof Error ? error.message : "Failed to delete inventory item");
-      }
+  const handleDelete = (id: number) => {
+    setPendingDeleteId(id);
+  };
+
+  const confirmDelete = async () => {
+    if (pendingDeleteId === null) return;
+    const product = products.find((item) => item.id === pendingDeleteId);
+    setPendingDeleteId(null);
+    if (!product) return;
+    try {
+      await deleteProduct.mutateAsync(product.backendId ?? String(product.id));
+      toast.success("Item deleted successfully");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete inventory item");
     }
   };
 
@@ -235,54 +246,54 @@ export function Inventory() {
       </div>
 
       {/* Search Bar */}
-      <div className="bg-card rounded-2xl p-2 shadow-sm border border-border mb-8">
+      <div className="bg-card rounded-2xl p-6 shadow-sm border border-border mb-8">
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="flex-1 relative">
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search products..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-7 pr-2 py-1 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
+              className="w-full pl-12 pr-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all"
             />
           </div>
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-6 gap-1.5 mt-2 pt-2 border-t border-border">
+        <div className="grid grid-cols-6 gap-4 mt-4 pt-4 border-t border-border">
           <div className="text-center">
-            <p className="text-sm font-bold text-foreground">{products.length}</p>
+            <p className="text-xl font-bold text-foreground">{products.length}</p>
             <p className="text-muted-foreground text-sm">Total</p>
           </div>
           <div className="text-center">
-            <p className="text-sm font-bold text-black">{products.filter(p => p.stock === 0).length}</p>
+            <p className="text-xl font-bold text-black">{products.filter(p => p.stock === 0).length}</p>
             <p className="text-muted-foreground text-sm">Out</p>
           </div>
           <div className="text-center">
-            <p className="text-sm font-bold text-red-600">{products.filter(p => {
+            <p className="text-xl font-bold text-red-600">{products.filter(p => {
               const pct = (p.stock / p.maxStock) * 100;
               return p.stock > 0 && pct <= 10;
             }).length}</p>
             <p className="text-muted-foreground text-sm">Critical</p>
           </div>
           <div className="text-center">
-            <p className="text-sm font-bold text-orange-600">{products.filter(p => {
+            <p className="text-xl font-bold text-orange-600">{products.filter(p => {
               const pct = (p.stock / p.maxStock) * 100;
               return pct > 10 && pct <= 30;
             }).length}</p>
             <p className="text-muted-foreground text-sm">Low</p>
           </div>
           <div className="text-center">
-            <p className="text-sm font-bold text-yellow-700">{products.filter(p => {
+            <p className="text-xl font-bold text-yellow-700">{products.filter(p => {
               const pct = (p.stock / p.maxStock) * 100;
               return pct > 30 && pct <= 70;
             }).length}</p>
             <p className="text-muted-foreground text-sm">Medium</p>
           </div>
           <div className="text-center">
-            <p className="text-sm font-bold text-green-600">{products.filter(p => {
+            <p className="text-xl font-bold text-green-600">{products.filter(p => {
               const pct = (p.stock / p.maxStock) * 100;
               return pct > 70 && pct <= 100;
             }).length}</p>
@@ -292,31 +303,33 @@ export function Inventory() {
       </div>
 
       {/* Folder Tree View */}
-      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden p-2">
+      <div className="bg-card rounded-2xl shadow-sm border border-border overflow-hidden p-4">
         <div className="space-y-4">
           {mainCategories.map((mainCategory) => {
-            const isMainExpanded = expandedMainCategories.has(mainCategory);
+            const hasMatchingProducts = searchQuery !== "" &&
+              (categoryHierarchy[mainCategory]?.some(sub => getProductsInCategory(mainCategory, sub).length > 0) ?? false);
+            const isMainExpanded = expandedMainCategories.has(mainCategory) || hasMatchingProducts;
             const mainCategoryCount = getProductCountInMainCategory(mainCategory);
 
             return (
               <div key={mainCategory} className="border border-border rounded-2xl overflow-hidden">
                 {/* Main Category Folder */}
                 <div
-                  className="flex items-center gap-1.5 p-1.5 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
+                  className="flex items-center gap-3 p-4 bg-muted/30 hover:bg-muted/50 cursor-pointer transition-colors"
                   onClick={() => toggleMainCategory(mainCategory)}
                 >
                   {isMainExpanded ? (
-                    <ChevronDown className="w-5 h-5 text-primary flex-shrink-0" />
+                    <ChevronDown className="w-6 h-6 text-primary flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                    <ChevronRight className="w-6 h-6 text-muted-foreground flex-shrink-0" />
                   )}
                   {isMainExpanded ? (
-                    <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
+                    <FolderOpen className="w-7 h-7 text-primary flex-shrink-0" />
                   ) : (
-                    <Folder className="w-5 h-5 text-orange-500 flex-shrink-0" />
+                    <Folder className="w-7 h-7 text-orange-500 flex-shrink-0" />
                   )}
-                  <span className="font-semibold text-foreground flex-1 text-sm">{mainCategory}</span>
-                  <span className="text-sm text-muted-foreground bg-background px-1.5 py-2 rounded-full">
+                  <span className="font-semibold text-foreground flex-1 text-base">{mainCategory}</span>
+                  <span className="text-sm text-muted-foreground bg-background px-3 py-1 rounded-full">
                     {mainCategoryCount}
                   </span>
                 </div>
@@ -326,9 +339,9 @@ export function Inventory() {
                   <div className="bg-background">
                     {categoryHierarchy[mainCategory].map((subCategory) => {
                       const subKey = `${mainCategory} > ${subCategory}`;
-                      const isSubExpanded = expandedSubCategories.has(subKey);
                       const subCategoryProducts = getProductsInCategory(mainCategory, subCategory);
                       const subCount = subCategoryProducts.length;
+                      const isSubExpanded = expandedSubCategories.has(subKey) || (searchQuery !== "" && subCount > 0);
 
                       if (searchQuery && subCount === 0) return null;
 
@@ -336,7 +349,7 @@ export function Inventory() {
                         <div key={subKey} className="border-l border-primary/20 ml-4">
                           {/* Subcategory Folder */}
                           <div
-                            className="flex items-center gap-1.5 p-1 hover:bg-muted/30 cursor-pointer transition-colors"
+                            className="flex items-center gap-3 p-3 hover:bg-muted/30 cursor-pointer transition-colors"
                             onClick={() => toggleSubCategory(mainCategory, subCategory)}
                           >
                             {isSubExpanded ? (
@@ -345,12 +358,12 @@ export function Inventory() {
                               <ChevronRight className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                             )}
                             {isSubExpanded ? (
-                              <FolderOpen className="w-5 h-5 text-primary flex-shrink-0" />
+                              <FolderOpen className="w-6 h-6 text-primary flex-shrink-0" />
                             ) : (
-                              <Folder className="w-5 h-5 text-yellow-500 flex-shrink-0" />
+                              <Folder className="w-6 h-6 text-yellow-500 flex-shrink-0" />
                             )}
-                            <span className="font-medium text-foreground flex-1 text-sm">{subCategory}</span>
-                            <span className="text-[8px] text-muted-foreground bg-muted px-1 py-2 rounded-full">
+                            <span className="font-medium text-foreground flex-1">{subCategory}</span>
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                               {subCount}
                             </span>
                           </div>
@@ -361,18 +374,18 @@ export function Inventory() {
                               {subCategoryProducts.map((product) => (
                                 <div
                                   key={product.id}
-                                  className="flex items-center gap-1.5 p-1.5 bg-card border border-border rounded hover:shadow-md transition-all"
+                                  className="flex items-center gap-2 p-2 bg-card border border-border rounded-lg hover:shadow-md transition-all"
                                 >
                                   <Package className="w-5 h-5 text-primary flex-shrink-0" />
 
-                                  <div className="flex-1 grid grid-cols-6 gap-1.5 items-center">
+                                  <div className="flex-1 grid grid-cols-6 gap-2 items-center">
                                     <div className="col-span-2">
                                       <p className="font-medium text-foreground text-sm truncate">{product.name}</p>
-                                      <p className="text-[8px] text-muted-foreground truncate">{product.sku}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{product.sku}</p>
                                     </div>
 
                                     <div>
-                                      <p className="text-[8px] text-muted-foreground truncate">{product.location}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{product.location}</p>
                                     </div>
 
                                     <div>
@@ -386,34 +399,34 @@ export function Inventory() {
                                     </div>
 
                                     <div>
-                                      <p className="text-[8px] text-foreground truncate">{product.expiry}</p>
+                                      <p className="text-xs text-foreground truncate">{product.expiry}</p>
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
-                                    <span className={`px-1 py-2 rounded text-[8px] font-medium border ${getStockStatus(product.stock, product.maxStock).color}`}>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStockStatus(product.stock, product.maxStock).color}`}>
                                       {getStockStatus(product.stock, product.maxStock).label}
                                     </span>
                                   </div>
 
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">
+                                  <div className="flex items-center gap-1 flex-shrink-0">
                                     <button
                                       onClick={() => handleTransfer(product)}
-                                      className="p-0.5 hover:bg-blue-50 text-blue-600 rounded transition-colors"
+                                      className="p-1.5 hover:bg-blue-50 text-blue-600 rounded-lg transition-colors"
                                       title="Transfer"
                                     >
                                       <ArrowRight className="w-5 h-5" />
                                     </button>
                                     <button
                                       onClick={() => handleEdit(product)}
-                                      className="p-0.5 hover:bg-green-50 text-green-600 rounded transition-colors"
+                                      className="p-1.5 hover:bg-green-50 text-green-600 rounded-lg transition-colors"
                                       title="Edit"
                                     >
                                       <Edit className="w-5 h-5" />
                                     </button>
                                     <button
                                       onClick={() => handleDelete(product.id)}
-                                      className="p-0.5 hover:bg-red-50 text-red-600 rounded transition-colors"
+                                      className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg transition-colors"
                                       title="Delete"
                                     >
                                       <Trash2 className="w-5 h-5" />
@@ -446,13 +459,13 @@ export function Inventory() {
 
       {/* Edit Modal */}
       {showEditModal && editingProduct && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-2">
           <div className="bg-card rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-card">
-              <h2 className="text-sm font-bold text-foreground">Edit Food Item</h2>
+              <h2 className="text-lg font-bold text-foreground">Edit Food Item</h2>
               <button
                 onClick={() => setShowEditModal(false)}
-                className="p-6 hover:bg-muted rounded-2xl transition-colors"
+                className="p-2 hover:bg-muted rounded-xl transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -460,7 +473,7 @@ export function Inventory() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm mb-2 text-foreground">Food Item Name</label>
+                <label className="block text-sm mb-2 text-foreground">Name</label>
                 <input
                   type="text"
                   value={editingProduct.name}
@@ -604,7 +617,7 @@ export function Inventory() {
 
       {/* Transfer Modal */}
       {showTransferModal && transferProduct && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-2xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b border-border flex items-center justify-between">
               <h2 className="text-2xl font-bold text-foreground">Transfer Item</h2>
@@ -681,6 +694,37 @@ export function Inventory() {
                 <ArrowRight className="w-5 h-5" />
                 Transfer Item
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {pendingDeleteId !== null && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-sm">
+            <div className="p-6 border-b border-border flex items-center gap-3">
+              <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
+              <h2 className="text-lg font-bold text-foreground">Delete Item</h2>
+            </div>
+            <div className="p-6">
+              <p className="text-foreground mb-1">Are you sure you want to delete this item?</p>
+              <p className="text-sm text-muted-foreground mb-6">This action cannot be undone.</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Delete
+                </button>
+                <button
+                  onClick={() => setPendingDeleteId(null)}
+                  className="px-4 py-2 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         </div>

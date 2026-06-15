@@ -269,17 +269,17 @@ export function POSKitchenOrders() {
 
   return (
     <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">POS / Kitchen Orders</h1>
-        <p className="text-sm text-muted-foreground">Record POS kitchen receipts as stock OUT using Recipe & BOM ingredient deductions.</p>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-foreground mb-1">POS / Kitchen Orders</h1>
+        <p className="text-muted-foreground">Record kitchen receipts and deduct ingredients from inventory via Recipe &amp; BOM.</p>
       </div>
 
-      <div className="mb-6 rounded-xl p-4" style={{ border: "1px solid #00A7A5", backgroundColor: "#E0F7F7", color: "#005656" }}>
-        <div className="flex items-center gap-2 font-semibold">
+      <div className="mb-6 rounded-xl border border-accent/50 bg-accent/10 p-4 text-primary">
+        <div className="flex items-center gap-2 font-semibold mb-1">
           <ReceiptText className="h-5 w-5" />
-          POS orders are separate from supplier Goods Received
+          Separate from Goods Received
         </div>
-        <p className="mt-2 text-sm">Use this when a kitchen receipt is completed. The system deducts ingredients from inventory and logs movement for turnover. Supplier deliveries still belong in Goods Received.</p>
+        <p className="text-sm opacity-80">Use this for completed kitchen receipts. Ingredients are auto-deducted based on Recipe &amp; BOM. Supplier deliveries belong in Goods Received.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
@@ -357,7 +357,7 @@ export function POSKitchenOrders() {
           </div>
 
           <button type="submit" disabled={!canCompleteOrder || isCompleting} className="mt-5 w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50">
-            {isCompleting ? "Completing..." : "Complete Receipt & Deduct Stock"}
+            {isCompleting ? "Completing..." : "Complete Receipt"}
           </button>
         </form>
 
@@ -426,7 +426,7 @@ export function POSKitchenOrders() {
       </div>
 
       {voidingOrderId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
             <h2 className="text-lg font-bold text-foreground">Void Kitchen Receipt</h2>
             <p className="mt-2 text-sm text-muted-foreground">Voiding will restore the deducted ingredients and record a reversal movement.</p>

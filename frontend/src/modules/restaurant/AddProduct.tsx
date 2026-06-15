@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Apple, PhilippinePeso, Hash, Tag, Folder, FileText, Save, X, Calendar, Plus, FolderPlus } from "lucide-react";
+import { toast } from "sonner";
 import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
 import { createInventoryItem, getLocations, upsertRestaurantSetting } from "../../app/api/client";
@@ -124,7 +125,7 @@ export function AddProduct() {
       await createProduct.mutateAsync(productToAdd);
       goToInventory();
     } catch (error) {
-      alert(error instanceof Error ? error.message : "Failed to create inventory item");
+      toast.error(error instanceof Error ? error.message : "Failed to create inventory item");
     }
   };
 
@@ -206,7 +207,7 @@ export function AddProduct() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="md:col-span-2">
                   <label htmlFor="name" className="block text-sm mb-2 text-foreground">
-                    Food Item Name *
+                    Name *
                   </label>
                   <input
                     id="name"
@@ -538,7 +539,7 @@ export function AddProduct() {
 
       {/* Add Category Modal */}
       {showCategoryModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-card rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-border flex items-center justify-between sticky top-0 bg-card">
               <h2 className="text-lg font-bold text-foreground flex items-center gap-2">
