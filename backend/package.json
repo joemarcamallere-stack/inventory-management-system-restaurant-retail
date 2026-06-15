@@ -9,6 +9,7 @@
     "build": "nest build",
     "predev": "prisma migrate deploy && prisma generate",
     "dev": "nest start --watch",
+    "predev:cloud": "node scripts/prisma-with-env.mjs .env.cloud migrate deploy && node scripts/prisma-with-env.mjs .env.cloud generate",
     "dev:cloud": "node --env-file=.env.cloud ../node_modules/@nestjs/cli/bin/nest.js start --watch",
     "db:migrate:cloud": "node scripts/prisma-with-env.mjs .env.cloud migrate deploy && node scripts/prisma-with-env.mjs .env.cloud generate",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
