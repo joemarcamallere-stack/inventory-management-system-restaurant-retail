@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { toast } from 'sonner';
+import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -11,30 +11,31 @@ import type {
   Adjustment,
   Location,
   User,
-} from '../../models/retail';
+} from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
-import {
-  useCreateRetailUserMutation,
-  useDeleteRetailUserMutation,
-  useRetailUsersQuery,
-  useUpdateRetailUserMutation,
-} from '../lib/retailQueries';
 
-type UserRole = User['role'];
 
+const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
+
+const mapApiUser = (user: any): User => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  status: user.status,
+  lastLogin: formatDate(user.lastLogin)
+});
 // Dashboard View
 export function UserManagementView({
+  users,
+  setUsers,
   currentUser
 }: {
+  users: User[];
+  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   currentUser: { id?: string; name?: string; email: string; role: string } | null;
 }) {
-  const isAdmin = currentUser?.role === 'Admin';
-  const usersQuery = useRetailUsersQuery(isAdmin);
-  const users = usersQuery.data ?? [];
-  const addUser = useCreateRetailUserMutation();
-  const editUser = useUpdateRetailUserMutation();
-  const removeUser = useDeleteRetailUserMutation();
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -45,10 +46,13 @@ export function UserManagementView({
   const [userForm, setUserForm] = useState({
     name: '',
     email: '',
-    role: 'Staff' as UserRole,
+    role: 'Staff' as 'Admin' | 'Manager' | 'Staff' | 'Cashier' | 'KitchenStaff' | 'RetailStaff',
     password: '',
     confirmPassword: ''
   });
+
+  // Check if current user is admin
+  const isAdmin = currentUser?.role === 'Admin';
 
   // If not admin, show access denied
   if (!isAdmin) {
@@ -82,28 +86,28 @@ export function UserManagementView({
 
     // Validation
     if (!userForm.name || !userForm.email || !userForm.password) {
-      toast.error('Please fill in all required fields');
+      alert('Please fill in all required fields');
       return;
     }
 
     if (userForm.password !== userForm.confirmPassword) {
-      toast.error('Passwords do not match');
+      alert('Passwords do not match');
       return;
     }
 
     if (userForm.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      alert('Password must be at least 6 characters');
       return;
     }
 
     // Check if email already exists
     if (users.some(u => u.email.toLowerCase() === userForm.email.toLowerCase())) {
-      toast.error('A user with this email already exists');
+      alert('A user with this email already exists');
       return;
     }
 
     try {
-      const newUser = await addUser.mutateAsync({
+      const newUser = await createUser({
         name: userForm.name,
         email: userForm.email,
         password: userForm.password,
@@ -111,11 +115,12 @@ export function UserManagementView({
         status: 'Active'
       });
 
+      setUsers([...users, mapApiUser(newUser)]);
       setShowAddModal(false);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      toast.success(`User ${newUser.name} has been created successfully!`);
+      alert(`User ${newUser.name} has been created successfully!`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to create user');
+      alert(error instanceof Error ? error.message : 'Failed to create user');
     }
   };
 
@@ -125,30 +130,34 @@ export function UserManagementView({
     if (!selectedUser) return;
 
     if (!userForm.name || !userForm.email) {
-      toast.error('Please fill in all required fields');
+      alert('Please fill in all required fields');
       return;
     }
 
     // Check if email already exists for another user
     if (users.some(u => u.id !== selectedUser.id && u.email.toLowerCase() === userForm.email.toLowerCase())) {
-      toast.error('A user with this email already exists');
+      alert('A user with this email already exists');
       return;
     }
 
     try {
-      await editUser.mutateAsync({ id: selectedUser.id, data: {
+      const updatedUser = await updateUser(selectedUser.id, {
         name: userForm.name,
         email: userForm.email,
         role: userForm.role,
         status: selectedUser.status
-      } });
+      });
+
+      setUsers(users.map(user =>
+        user.id === selectedUser.id ? mapApiUser(updatedUser) : user
+      ));
 
       setShowEditModal(false);
       setSelectedUser(null);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      toast.success('User updated successfully!');
+      alert('User updated successfully!');
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to update user');
+      alert(error instanceof Error ? error.message : 'Failed to update user');
     }
   };
 
@@ -158,31 +167,28 @@ export function UserManagementView({
     if (!selectedUser) return;
 
     if (!userForm.password || !userForm.confirmPassword) {
-      toast.error('Please fill in all password fields');
+      alert('Please fill in all password fields');
       return;
     }
 
     if (userForm.password !== userForm.confirmPassword) {
-      toast.error('Passwords do not match');
+      alert('Passwords do not match');
       return;
     }
 
     if (userForm.password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+      alert('Password must be at least 6 characters');
       return;
     }
 
     try {
-      await editUser.mutateAsync({
-        id: selectedUser.id,
-        data: { password: userForm.password },
-      });
+      await updateUser(selectedUser.id, { password: userForm.password });
       setShowPasswordModal(false);
       setSelectedUser(null);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
-      toast.success(`Password for ${selectedUser.name} has been reset successfully!`);
+      alert(`Password for ${selectedUser.name} has been reset successfully!`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to reset password');
+      alert(error instanceof Error ? error.message : 'Failed to reset password');
     }
   };
 
@@ -190,32 +196,35 @@ export function UserManagementView({
     const newStatus = user.status === 'Active' ? 'Inactive' : 'Active';
 
     if (user.email === currentUser?.email && newStatus === 'Inactive') {
-      toast.error('You cannot deactivate your own account');
+      alert('You cannot deactivate your own account');
       return;
     }
 
     if (confirm(`Are you sure you want to ${newStatus === 'Active' ? 'activate' : 'deactivate'} ${user.name}?`)) {
       try {
-        await editUser.mutateAsync({ id: user.id, data: { status: newStatus } });
-        toast.success(`User ${newStatus === 'Active' ? 'activated' : 'deactivated'}`);
+        const updatedUser = await updateUser(user.id, { status: newStatus });
+        setUsers(users.map(u =>
+          u.id === user.id ? mapApiUser(updatedUser) : u
+        ));
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to update user status');
+        alert(error instanceof Error ? error.message : 'Failed to update user status');
       }
     }
   };
 
   const handleDeleteUser = async (user: User) => {
     if (user.email === currentUser?.email) {
-      toast.error('You cannot delete your own account');
+      alert('You cannot delete your own account');
       return;
     }
 
     if (confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
       try {
-        await removeUser.mutateAsync(user.id);
-        toast.success(`User ${user.name} has been deleted`);
+        await deleteUser(user.id);
+        setUsers(users.filter(u => u.id !== user.id));
+        alert(`User ${user.name} has been deleted`);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : 'Failed to delete user');
+        alert(error instanceof Error ? error.message : 'Failed to delete user');
       }
     }
   };
@@ -502,9 +511,7 @@ export function UserManagementView({
                   </label>
                   <select
                     value={userForm.role}
-                    onChange={(e) =>
-                      setUserForm({ ...userForm, role: e.target.value as UserRole })
-                    }
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                     required
                   >
@@ -623,9 +630,7 @@ export function UserManagementView({
                   </label>
                   <select
                     value={userForm.role}
-                    onChange={(e) =>
-                      setUserForm({ ...userForm, role: e.target.value as UserRole })
-                    }
+                    onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                     required
                     disabled={selectedUser.email === currentUser?.email}

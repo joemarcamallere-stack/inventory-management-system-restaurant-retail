@@ -1,0 +1,25 @@
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{0}: reset: moving to HEAD~1
+[33m6859bd60e[m[33m ([m[1;31morigin/feature-login-update[m[33m)[m HEAD@{1}: checkout: moving from main to feature-login-update
+[33m0b11353e8[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m, [m[1;32mmain[m[33m)[m HEAD@{2}: commit: Login Functionality
+[33m03929290e[m HEAD@{3}: checkout: moving from main to main
+[33m03929290e[m HEAD@{4}: reset: moving to HEAD
+[33m03929290e[m HEAD@{5}: checkout: moving from main to main
+[33m03929290e[m HEAD@{6}: checkout: moving from feature-login-update to main
+[33m6859bd60e[m[33m ([m[1;31morigin/feature-login-update[m[33m)[m HEAD@{7}: checkout: moving from main to feature-login-update
+[33m03929290e[m HEAD@{8}: merge feature-login-update: updating HEAD
+[33m03929290e[m HEAD@{9}: checkout: moving from main to main
+[33m03929290e[m HEAD@{10}: checkout: moving from feature-login-update to main
+[33m6859bd60e[m[33m ([m[1;31morigin/feature-login-update[m[33m)[m HEAD@{11}: commit: Updated Login Page
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{12}: checkout: moving from main to feature-login-update
+[33m03929290e[m HEAD@{13}: pull origin main: Fast-forward
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{14}: checkout: moving from feature-login-update to main
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{15}: checkout: moving from main to feature-login-update
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{16}: checkout: moving from main to main
+[33m36847f9e8[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mfeature-login-update[m[33m)[m HEAD@{17}: pull origin main: Fast-forward
+[33m607eb99a5[m[33m ([m[1;31morigin/feature-inventory[m[33m, [m[1;32mfeature-inventory[m[33m)[m HEAD@{18}: checkout: moving from main to main
+[33m607eb99a5[m[33m ([m[1;31morigin/feature-inventory[m[33m, [m[1;32mfeature-inventory[m[33m)[m HEAD@{19}: merge feature-inventory: Fast-forward
+[33m3c7f773e2[m[33m ([m[1;31morigin/zenvic-feature[m[33m, [m[1;31morigin/gips[m[33m, [m[1;32mzenvic-feature[m[33m)[m HEAD@{20}: checkout: moving from feature-inventory to main
+[33m607eb99a5[m[33m ([m[1;31morigin/feature-inventory[m[33m, [m[1;32mfeature-inventory[m[33m)[m HEAD@{21}: commit: Branding
+[33m3c7f773e2[m[33m ([m[1;31morigin/zenvic-feature[m[33m, [m[1;31morigin/gips[m[33m, [m[1;32mzenvic-feature[m[33m)[m HEAD@{22}: checkout: moving from zenvic-feature to feature-inventory
+[33m3c7f773e2[m[33m ([m[1;31morigin/zenvic-feature[m[33m, [m[1;31morigin/gips[m[33m, [m[1;32mzenvic-feature[m[33m)[m HEAD@{23}: checkout: moving from main to zenvic-feature
+[33m3c7f773e2[m[33m ([m[1;31morigin/zenvic-feature[m[33m, [m[1;31morigin/gips[m[33m, [m[1;32mzenvic-feature[m[33m)[m HEAD@{24}: clone: from https://github.com/joemarcamallere-stack/inventory-management-system-restaurant-retail.git

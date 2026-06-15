@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
@@ -9,7 +8,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { BusinessModule } from '@prisma/client';
 
 export class TransferItemDto {
   @IsUUID()
@@ -21,10 +19,6 @@ export class TransferItemDto {
 }
 
 export class CreateTransferDto {
-  @IsOptional()
-  @IsEnum(BusinessModule)
-  module?: BusinessModule;
-
   @IsUUID()
   fromLocationId: string;
 

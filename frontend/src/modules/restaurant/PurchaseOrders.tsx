@@ -1,19 +1,20 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
 import { toast } from "sonner";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
 import {
-  useApproveRestaurantPurchaseOrderMutation,
-  useCancelRestaurantPurchaseOrderMutation,
-  useCreateRestaurantSupplierMutation,
-  useRejectRestaurantPurchaseOrderMutation,
-  useRestaurantInventoryQuery,
-  useRestaurantPurchaseOrdersQuery,
-  useRestaurantSuppliersQuery,
-  useRestaurantUsersQuery,
-  useSaveRestaurantPurchaseOrderMutation,
-} from "../lib/restaurantQueries";
+  approvePurchaseOrder,
+  cancelPurchaseOrder,
+  createInventoryItem,
+  createPurchaseOrder,
+  createSupplier,
+  getLocations,
+  rejectPurchaseOrder,
+  submitPurchaseOrder,
+  updatePurchaseOrder,
+} from "../../app/api/client";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
@@ -74,7 +75,6 @@ type Order = {
   rejectionNote?: string;
   rejectedBy?: string;
   rejectedAt?: string;
-  backendStatus?: string;
 };
 
 type OrderItemInput = PurchaseOrderItemInputValue;
@@ -200,32 +200,14 @@ export function PurchaseOrders() {
     address: "",
   });
 
-  const inventoryQuery = useRestaurantInventoryQuery<GlobalProduct[]>((products) =>
-    products.map((product) => {
-      const { main, sub } = splitCategory(product.category);
-      return {
-        id: product.backendId ?? String(product.id),
-        backendId: product.backendId,
-        inventoryId: product.id,
-        name: product.name,
-        sku: product.sku,
-        category: main,
-        subCategory: sub,
-        unit: product.unit,
-      };
-    }),
+  // Global products storage
+  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>(
+    "purchaseOrders.globalProducts",
+    []
   );
-  const [draftProducts, setDraftProducts] = useState<GlobalProduct[]>([]);
-  const globalProducts = [...(inventoryQuery.data ?? []), ...draftProducts];
-  const ordersQuery = useRestaurantPurchaseOrdersQuery<Order[]>();
-  const orders = ordersQuery.data ?? [];
-  const usersQuery = useRestaurantUsersQuery(userRole === "admin");
-  const users = (usersQuery.data ?? []) as UserSummary[];
-  const canApprovePurchaseOrders = ["admin", "manager"].includes(userRole);
-  const pendingApprovalOrders = orders.filter(
-    (order) => order.backendStatus === "SUBMITTED" ||
-      (!order.backendStatus && order.status === "pending"),
-  );
+
+  const [orders] = useRestaurantState<Order[]>("purchaseOrders.orders", []);
+  const [users] = useRestaurantState<UserSummary[]>("users.records", []);
 
   const statuses = ["all", "pending", "approved", "received", "partial", "rejected", "cancelled"];
 
@@ -269,14 +251,14 @@ export function PurchaseOrders() {
     return (
       <span className="px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1" style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}>
         <Icon className="w-5 h-5" />
-        {status === "pending" ? "Pending Approval" : status.charAt(0).toUpperCase() + status.slice(1)}
+        {status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
   };
 
   const stats = [
     { label: "Total Orders", value: orders.length, color: "#009BA5" },
-    { label: "Pending Approval", value: pendingApprovalOrders.length, color: "#F59E0B" },
+    { label: "Pending", value: orders.filter(o => o.status === "pending").length, color: "#F59E0B" },
     { label: "Approved", value: orders.filter(o => o.status === "approved").length, color: "#007A5E" },
     { label: "Partial", value: orders.filter(o => o.status === "partial").length, color: "#F59E0B" },
     { label: "Rejected", value: orders.filter(o => o.status === "rejected").length, color: "#DC2626" },
@@ -286,8 +268,8 @@ export function PurchaseOrders() {
     {
       label: "For Review",
       status: "pending",
-      value: pendingApprovalOrders.length,
-      description: "Needs admin or manager approval",
+      value: orders.filter(o => o.status === "pending").length,
+      description: "Needs admin approval or rejection",
       icon: Clock,
       color: "#92400E",
       bg: "#FEF3C7",
@@ -335,16 +317,84 @@ export function PurchaseOrders() {
     },
   ];
 
-  const suppliersQuery = useRestaurantSuppliersQuery();
-  const [supplierOverrides, setSupplierOverrides] = useState<Supplier[]>([]);
-  const suppliers = (suppliersQuery.data ?? []).map((supplier) =>
-    supplierOverrides.find((override) => override.id === supplier.id) ?? supplier,
-  ) as Supplier[];
-  const saveOrder = useSaveRestaurantPurchaseOrderMutation();
-  const approveOrder = useApproveRestaurantPurchaseOrderMutation();
-  const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
-  const cancelOrder = useCancelRestaurantPurchaseOrderMutation();
-  const addSupplier = useCreateRestaurantSupplierMutation();
+  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
+  const saveOrder = useRestaurantMutation(
+    async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
+      const supplier = suppliers.find((item) => item.name === order.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) throw new Error("Select a supplier saved in the database");
+
+      const locations = await getLocations();
+      if (!locations[0]) throw new Error("Create a location before ordering a new product");
+
+      const apiItems = [];
+      for (const line of order.items) {
+        const product = globalProducts.find((item) =>
+          item.id === line.productId || item.inventoryId === line.inventoryId
+        );
+        let inventoryItemId = product?.backendId
+          ?? (product?.id && !product.id.startsWith("gp-") && !product.id.startsWith("inv-") ? product.id : undefined);
+
+        if (!inventoryItemId) {
+          const created = await createInventoryItem({
+            name: line.productName,
+            itemType: "INGREDIENT",
+            sku: line.sku || undefined,
+            category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
+            quantity: 0,
+            price: line.unitPrice,
+            unit: line.unit || "pcs",
+            minStock: 0,
+            maxStock: 0,
+            reorderPoint: 0,
+            locationId: locations[0].id,
+          });
+          inventoryItemId = created.id;
+        }
+
+        apiItems.push({
+          inventoryItemId,
+          name: line.productName,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+        });
+      }
+
+      const payload = {
+        supplierId,
+        expectedDelivery: order.expectedDelivery
+          ? new Date(`${order.expectedDelivery}T00:00:00`).toISOString()
+          : undefined,
+        items: apiItems,
+      };
+      if (editingId) return updatePurchaseOrder(editingId, payload);
+      const created = await createPurchaseOrder(payload);
+      return submitPurchaseOrder(created.id);
+    },
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "purchaseOrders.globalProducts"],
+  );
+  const approveOrder = useRestaurantMutation(
+    (id: string) => approvePurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "goodsReceived.records"],
+  );
+  const rejectOrder = useRestaurantMutation(
+    ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const cancelOrder = useRestaurantMutation(
+    (id: string) => cancelPurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const addSupplier = useRestaurantMutation(
+    (supplier: Supplier) => createSupplier({
+      name: supplier.name,
+      contactPerson: supplier.contact,
+      email: supplier.email,
+      phone: supplier.phone,
+      address: supplier.address,
+    }),
+    ["purchaseOrders.suppliers"],
+  );
 
   // Get available products from selected supplier
   const availableProducts = newOrder.supplier
@@ -400,7 +450,7 @@ export function PurchaseOrders() {
       unit: payload.unit || "pcs",
     };
 
-    setDraftProducts([...draftProducts, newProduct]);
+    setGlobalProducts([...globalProducts, newProduct]);
 
     if (newOrder.supplier) {
       const supplier = suppliers.find(s => s.name === newOrder.supplier);
@@ -412,10 +462,7 @@ export function PurchaseOrders() {
             { name: normalized, price: parseFloat(currentItem.unitPrice) || 0 },
           ],
         };
-        setSupplierOverrides([
-          ...supplierOverrides.filter((item) => item.id !== updatedSupplier.id),
-          updatedSupplier,
-        ]);
+        setSuppliers(suppliers.map(s => (s.name === newOrder.supplier ? updatedSupplier : s)));
       }
     }
 
@@ -481,16 +528,8 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     }
 
     try {
-      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
-      const supplierId = supplier?.backendId ?? supplier?.id;
-      if (!supplierId) {
-        throw new Error("Select a supplier saved in the database");
-      }
       await saveOrder.mutateAsync({
-        supplierId,
-        expectedDelivery: newOrder.expectedDelivery,
-        items: orderItems,
-        products: globalProducts,
+        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
       });
       setShowCreateModal(false);
       setNewOrder({ supplier: "", expectedDelivery: "" });
@@ -627,17 +666,9 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     if (!editingOrder) return;
 
     try {
-      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
-      const supplierId = supplier?.backendId ?? supplier?.id;
-      if (!supplierId) {
-        throw new Error("Select a supplier saved in the database");
-      }
       await saveOrder.mutateAsync({
         editingId: editingOrder.backendId ?? editingOrder.id,
-        supplierId,
-        expectedDelivery: newOrder.expectedDelivery,
-        items: orderItems,
-        products: globalProducts,
+        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
       });
       setShowEditModal(false);
       setEditingOrder(null);
@@ -675,13 +706,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     };
 
     try {
-      await addSupplier.mutateAsync({
-        name: supplierToAdd.name,
-        contactPerson: supplierToAdd.contact,
-        email: supplierToAdd.email,
-        phone: supplierToAdd.phone,
-        address: supplierToAdd.address,
-      });
+      await addSupplier.mutateAsync(supplierToAdd);
       setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
       setNewSupplier({
         name: "",
@@ -719,16 +744,16 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
             <Users className="w-5 h-5" />
             View Suppliers
           </button>
-          {canApprovePurchaseOrders && (
+          {userRole === "admin" && (
             <button
               onClick={() => setShowApprovalModal(true)}
-              className="bg-[#FFA500] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#FF8C00] transition-colors relative"
+              className="px-6 py-3 bg-muted text-foreground rounded-2xl hover:bg-muted/80 transition-all duration-200 flex items-center gap-2 border border-border relative"
             >
-              <Clock className="size-4" />
-              Pending Approvals
-              {pendingApprovalOrders.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-[#E7000B] text-white size-6 rounded-full flex items-center justify-center text-[12px] font-bold">
-                  {pendingApprovalOrders.length}
+              <Clock className="w-5 h-5" />
+              Pending Approval
+              {orders.filter(o => o.status === "pending").length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-primary text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                  {orders.filter(o => o.status === "pending").length}
                 </span>
               )}
             </button>
@@ -753,11 +778,11 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
         ))}
       </div>
 
-      {canApprovePurchaseOrders && (
+      {userRole === "admin" && (
         <div className="bg-card rounded-2xl p-4 shadow-sm border border-border mb-8">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
-              <h2 className="text-lg font-bold text-foreground">Purchase Order Approval</h2>
+              <h2 className="text-lg font-bold text-foreground">Admin Approval Level</h2>
               <p className="text-sm text-muted-foreground">Monitor purchase orders by approval decision before goods receiving.</p>
             </div>
           </div>
@@ -811,11 +836,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
-                  {status === "all"
-                    ? "All Status"
-                    : status === "pending"
-                      ? "Pending Approval"
-                      : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {status === "all" ? "All Status" : status.charAt(0).toUpperCase() + status.slice(1)}
                 </option>
               ))}
             </select>
@@ -887,11 +908,10 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      {pendingApprovalOrders.some((pendingOrder) => pendingOrder.id === order.id) && canApprovePurchaseOrders && (
+                      {order.status === "pending" && userRole === "admin" && (
                         <>
                           <button
                             onClick={() => handleApproveOrder(order)}
-                            disabled={approveOrder.isPending || rejectOrder.isPending}
                             className="px-4 py-2 hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-colors text-sm font-semibold"
                             title="Approve and create GRN"
                           >
@@ -899,7 +919,6 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                           </button>
                           <button
                             onClick={() => openRejectOrderModal(order)}
-                            disabled={approveOrder.isPending || rejectOrder.isPending}
                             className="px-4 py-2 hover:bg-red-50 text-red-700 border border-red-200 rounded-xl transition-colors text-sm font-semibold"
                             title="Reject Order"
                           >
@@ -907,7 +926,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                           </button>
                         </>
                       )}
-                      {order.status === "pending" && !canApprovePurchaseOrders && (
+                      {order.status === "pending" && userRole !== "admin" && (
                         <button
                           onClick={() => handleCancelOrder(order.id)}
                           className="p-2 hover:bg-red-50 text-red-600 rounded-xl transition-colors"
@@ -1218,7 +1237,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
 
             <div className="rounded-xl p-4 mb-4" style={{ border: "1px solid #FCA5A5", backgroundColor: "#FEE2E2" }}>
               <p className="text-sm" style={{ color: "#991B1B" }}>
-                Add the reason why this PO is rejected. This note will be saved with the order for the approval audit trail.
+                Add the reason why this PO is rejected. This note will be saved with the order for admin review and audit trail.
               </p>
             </div>
 
@@ -1237,13 +1256,12 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
               <button
                 type="button"
                 onClick={handleRejectOrder}
-                disabled={rejectOrder.isPending}
-                className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 font-semibold disabled:opacity-60 disabled:cursor-not-allowed"
+                className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 font-semibold"
                 style={{ backgroundColor: "#DC2626" }}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#B91C1C")}
                 onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#DC2626")}
               >
-                {rejectOrder.isPending ? "Rejecting..." : "Reject Order"}
+                Reject Order
               </button>
               <button
                 type="button"
@@ -1253,8 +1271,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                   setApprovingOrder(null);
                   setRejectionNote("");
                 }}
-                disabled={rejectOrder.isPending}
-                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="px-6 py-3 bg-muted text-foreground rounded-xl hover:bg-muted/80 transition-all duration-200"
               >
                 Cancel
               </button>
@@ -1621,8 +1638,8 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
             <div className="p-6 border-b border-border bg-gradient-to-r from-primary to-secondary">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Pending Purchase Order Approvals</h2>
-                  <p className="text-white/80 text-sm mt-1">Review submitted orders before goods receiving</p>
+                  <h2 className="text-2xl font-bold text-white">Pending Purchase Orders</h2>
+                  <p className="text-white/80 text-sm mt-1">Review and approve or reject purchase orders from staff</p>
                 </div>
                 <button
                   onClick={() => {
@@ -1637,7 +1654,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
             </div>
 
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-              {pendingApprovalOrders.length === 0 ? (
+              {orders.filter(o => o.status === "pending").length === 0 ? (
                 <div className="text-center py-12">
                   <CheckCircle className="w-16 h-16 text-success mx-auto mb-4 opacity-50" />
                   <h3 className="text-xl font-semibold text-foreground mb-2">All Caught Up!</h3>
@@ -1645,7 +1662,9 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {pendingApprovalOrders.map((order) => (
+                  {orders
+                    .filter(o => o.status === "pending")
+                    .map((order) => (
                       <div
                         key={order.id}
                         className="bg-background rounded-2xl p-6 border-2 border-primary/20 hover:border-primary/40 transition-all"
@@ -1708,11 +1727,10 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                         <div className="flex gap-3 mt-4">
                           <button
                             onClick={() => void handleApproveOrder(order)}
-                            disabled={approveOrder.isPending || rejectOrder.isPending}
-                            className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="flex-1 px-6 py-3 bg-gradient-to-r from-primary to-secondary text-white rounded-xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 flex items-center justify-center gap-2"
                           >
                             <CheckCircle className="w-5 h-5" />
-                            {approveOrder.isPending ? "Approving..." : "Approve Order"}
+                            Approve Order
                           </button>
                           <button
                             onClick={() => {
@@ -1720,8 +1738,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                               setShowApprovalModal(false);
                               setShowRejectModal(true);
                             }}
-                            disabled={approveOrder.isPending || rejectOrder.isPending}
-                            className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+                            className="flex-1 px-6 py-3 text-white rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
                             style={{ backgroundColor: "#DC2626" }}
                             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#B91C1C")}
                             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#DC2626")}

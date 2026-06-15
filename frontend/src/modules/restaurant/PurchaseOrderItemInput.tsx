@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { getCategoryHierarchy } from "../lib/inventoryLogic";
-import {
-  useRestaurantSettings,
-  useUpsertRestaurantSettingMutation,
-} from "../lib/restaurantQueries";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
+import { upsertRestaurantSetting } from "../../app/api/client";
 
 type SupplierProduct = {
   name: string;
@@ -60,14 +58,16 @@ export function PurchaseOrderItemInput({
 }: PurchaseOrderItemInputProps) {
   const [query, setQuery] = useState(value.productName);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const settingsQuery = useRestaurantSettings();
-  const savedHierarchy = settingsQuery.data
-    ?.find((setting) => setting.key === "CATEGORY_HIERARCHY")?.value as Record<string, string[]> | undefined;
-  const [categoryOverride, setCategoryOverride] = useState<Record<string, string[]>>();
-  const categoryHierarchy = categoryOverride ?? savedHierarchy ?? getCategoryHierarchy();
+  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
+    "inventory.categoryHierarchy",
+    getCategoryHierarchy()
+  );
   const [newCategory, setNewCategory] = useState("");
   const [newSubCategory, setNewSubCategory] = useState("");
-  const saveHierarchyMutation = useUpsertRestaurantSettingMutation();
+  const saveHierarchy = useRestaurantMutation(
+    (value: Record<string, string[]>) => upsertRestaurantSetting("CATEGORY_HIERARCHY", value),
+    ["inventory.categoryHierarchy"],
+  );
 
   useEffect(() => {
     setQuery(value.productName);
@@ -183,8 +183,8 @@ export function PurchaseOrderItemInput({
       ...categoryHierarchy,
       [trimmed]: [],
     };
-    await saveHierarchyMutation.mutateAsync({ key: 'CATEGORY_HIERARCHY', value: nextHierarchy });
-    setCategoryOverride(nextHierarchy);
+    await saveHierarchy.mutateAsync(nextHierarchy);
+    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       category: trimmed,
@@ -200,8 +200,8 @@ export function PurchaseOrderItemInput({
       ...categoryHierarchy,
       [value.category]: [...subCategoryOptions, trimmed],
     };
-    await saveHierarchyMutation.mutateAsync({ key: 'CATEGORY_HIERARCHY', value: nextHierarchy });
-    setCategoryOverride(nextHierarchy);
+    await saveHierarchy.mutateAsync(nextHierarchy);
+    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       subCategory: trimmed,

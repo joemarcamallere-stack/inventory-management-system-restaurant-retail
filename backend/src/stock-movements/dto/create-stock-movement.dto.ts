@@ -7,7 +7,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { BusinessModule } from '@prisma/client';
 
 export enum StockMovementType {
   StockIn = 'STOCK_IN',
@@ -23,10 +22,6 @@ export enum StockMovementType {
 }
 
 export class CreateStockMovementDto {
-  @IsOptional()
-  @IsEnum(BusinessModule)
-  module?: BusinessModule;
-
   @IsUUID()
   itemId!: string;
 

@@ -1,13 +1,8 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
+import { completeKitchenOrder, voidKitchenOrder } from "../../app/api/client";
+import { readRestaurantData, useInvalidateRestaurantData, useRestaurantState, writeRestaurantDataOnly } from "../lib/restaurantData";
 import { InventoryProduct } from "../lib/inventoryLogic";
-import {
-  useCompleteRestaurantKitchenOrderMutation,
-  useRestaurantInventoryQuery,
-  useRestaurantKitchenOrdersQuery,
-  useRestaurantRecipesQuery,
-  useVoidRestaurantKitchenOrderMutation,
-} from "../lib/restaurantQueries";
 
 type Ingredient = {
   id: string;
@@ -37,12 +32,25 @@ type POSOrder = {
   recipeId: string;
   recipeName: string;
   quantity: number;
-  status: "pending" | "preparing" | "ready" | "completed" | "voided";
+  status: "completed" | "voided";
   orderedAt: string;
   completedBy: string;
   notes: string;
   voidReason?: string;
   voidedAt?: string;
+};
+
+type InventoryMovement = {
+  id: string;
+  type: "pos-consumption" | "pos-void";
+  source: "pos-kitchen";
+  sourceId: string;
+  productId: number;
+  item: string;
+  quantity: number;
+  unit: string;
+  date: string;
+  notes: string;
 };
 
 const normalizeName = (value: string | undefined) => (value || '').trim().toLowerCase();
@@ -68,22 +76,13 @@ export function POSKitchenOrders() {
   const [voidingOrderId, setVoidingOrderId] = useState("");
   const [isCompleting, setIsCompleting] = useState(false);
   const [isVoiding, setIsVoiding] = useState(false);
+  const [excludedIngredientIds, setExcludedIngredientIds] = useState<Set<string>>(new Set());
 
-  const ordersQuery = useRestaurantKitchenOrdersQuery();
-  const orders = (ordersQuery.data ?? []) as POSOrder[];
-  const inventoryQuery = useRestaurantInventoryQuery<(InventoryProduct & { backendId?: string })[]>();
-  const inventory = inventoryQuery.data ?? [];
-  const recipesQuery = useRestaurantRecipesQuery();
-  const recipes = (recipesQuery.data ?? []).map((recipe: any) => ({
-    ...recipe,
-    ingredients: (recipe.ingredients ?? []).map((ingredient: any) => ({
-      ...ingredient,
-      productId: inventory.find((item) => item.backendId === ingredient.backendItemId)?.id,
-    })),
-  })) as Recipe[];
+  const [orders, setOrders] = useRestaurantState<POSOrder[]>("pos.orders", []);
+  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
   const activeRecipes = recipes.filter((recipe) => recipe.isActive ?? true);
-  const completeOrderMutation = useCompleteRestaurantKitchenOrderMutation();
-  const voidOrderMutation = useVoidRestaurantKitchenOrderMutation();
+  const [inventory] = useRestaurantState<InventoryProduct[]>("inventory.products", []);
+  const invalidateRestaurantData = useInvalidateRestaurantData();
 
   const selectedRecipe = activeRecipes.find((recipe) => recipe.id === recipeId);
 
@@ -120,36 +119,95 @@ export function POSKitchenOrders() {
     );
   });
 
+  const selectedIngredientPreview = ingredientPreview.filter((item) => !excludedIngredientIds.has(item.id));
+
   const canCompleteOrder = Boolean(
     receiptNo.trim() &&
       selectedRecipe &&
       Number(quantity) > 0 &&
-      ingredientPreview.length > 0 &&
-      ingredientPreview.every((item) => item.product && item.unitMatches && item.hasEnoughStock)
+      selectedIngredientPreview.length > 0 &&
+      selectedIngredientPreview.every((item) => item.product && item.unitMatches && item.hasEnoughStock)
   );
 
   const handleRecipeChange = (nextRecipeId: string) => {
     setRecipeId(nextRecipeId);
+    setExcludedIngredientIds(new Set());
+  };
+
+  const toggleIngredientIncluded = (ingredientId: string) => {
+    const nextExcluded = new Set(excludedIngredientIds);
+    if (nextExcluded.has(ingredientId)) {
+      nextExcluded.delete(ingredientId);
+    } else {
+      nextExcluded.add(ingredientId);
+    }
+    setExcludedIngredientIds(nextExcluded);
   };
 
   const completeOrder = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!selectedRecipe || !canCompleteOrder || isCompleting) return;
 
+    const now = new Date().toISOString();
+    const orderId = `POS-${Date.now()}`;
     const orderQty = Number(quantity) || 1;
+    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
+    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
+
+    const nextProducts = products.map((product) => {
+      const consumed = selectedIngredientPreview.find((item) => item.product?.id === product.id);
+      return consumed ? { ...product, stock: product.stock - consumed.required } : product;
+    });
+
+    const nextMovements: InventoryMovement[] = selectedIngredientPreview.map((item, index) => ({
+      id: `MOV-${Date.now()}-${index}`,
+      type: "pos-consumption",
+      source: "pos-kitchen",
+      sourceId: orderId,
+      productId: item.product!.id,
+      item: item.product!.name,
+      quantity: item.required,
+      unit: item.deductionUnit,
+      date: now,
+      notes: `POS receipt ${receiptNo.trim()} consumed by ${selectedRecipe.name} x${orderQty}`,
+    }));
+
+    const order: POSOrder = {
+      id: orderId,
+      receiptNo: receiptNo.trim(),
+      recipeId: selectedRecipe.id,
+      recipeName: selectedRecipe.name,
+      quantity: orderQty,
+      status: "completed",
+      orderedAt: now,
+      completedBy: localStorage.getItem("userEmail") || "local-user",
+      notes,
+    };
 
     setIsCompleting(true);
     try {
-      await completeOrderMutation.mutateAsync({
-        receiptNo: receiptNo.trim(),
-        recipeId: selectedRecipe.id,
-        quantity: orderQty,
-        notes,
+      const recipeIdMap = readRestaurantData<Record<string, string>>("recipes.backendIdByLocalId", {});
+      const saved = await completeKitchenOrder({
+        receiptNo: order.receiptNo,
+        recipeId: recipeIdMap[String(order.recipeId)] ?? order.recipeId,
+        quantity: order.quantity,
+        notes: order.notes,
       });
+      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
+      orderIdMap[orderId] = saved.id;
+      writeRestaurantDataOnly("pos.backendIdByLocalId", orderIdMap);
+
+      // The backend has already deducted cloud stock. These writes only mirror
+      // the successful result in the legacy UI.
+      writeRestaurantDataOnly("inventory.products", nextProducts);
+      writeRestaurantDataOnly("inventory.movements", [...nextMovements, ...movements]);
+      setOrders([order, ...orders]);
       setReceiptNo("");
       setRecipeId("");
+      setExcludedIngredientIds(new Set());
       setQuantity("1");
       setNotes("");
+      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {
@@ -160,11 +218,48 @@ export function POSKitchenOrders() {
   const voidOrder = async (order: POSOrder) => {
     if (!voidReason.trim() || isVoiding) return;
 
+    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
+    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
+    const sourceMovements = movements.filter((movement) => movement.sourceId === order.id && movement.type === "pos-consumption");
+    const now = new Date().toISOString();
+
+    const nextProducts = products.map((product) => {
+      const restoreQty = sourceMovements
+        .filter((movement) => movement.productId === product.id)
+        .reduce((sum, movement) => sum + movement.quantity, 0);
+      return restoreQty > 0 ? { ...product, stock: product.stock + restoreQty } : product;
+    });
+
+    const reversalMovements: InventoryMovement[] = sourceMovements.map((movement, index) => ({
+      ...movement,
+      id: `MOV-VOID-${Date.now()}-${index}`,
+      type: "pos-void",
+      date: now,
+      notes: `Void reversal for ${order.receiptNo}: ${voidReason.trim()}`,
+    }));
+
     setIsVoiding(true);
     try {
-      await voidOrderMutation.mutateAsync({ id: order.id, reason: voidReason.trim() });
+      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
+      const backendId = orderIdMap[String(order.id)] ?? order.id;
+      await voidKitchenOrder(backendId, voidReason.trim());
+
+      const voidedSynced = readRestaurantData<Record<string, boolean>>("pos.voidedSynced", {});
+      voidedSynced[String(order.id)] = true;
+      writeRestaurantDataOnly("pos.voidedSynced", voidedSynced);
+
+      // The backend has already restored cloud stock. These writes only mirror
+      // the successful result in the legacy UI.
+      writeRestaurantDataOnly("inventory.products", nextProducts);
+      writeRestaurantDataOnly("inventory.movements", [...reversalMovements, ...movements]);
+      setOrders(orders.map((current) =>
+        current.id === order.id
+          ? { ...current, status: "voided", voidReason: voidReason.trim(), voidedAt: now }
+          : current
+      ));
       setVoidingOrderId("");
       setVoidReason("");
+      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {
@@ -228,15 +323,28 @@ export function POSKitchenOrders() {
             ) : (
               <div className="space-y-2">
                 {ingredientPreview.map((item) => {
+                  const isIncluded = !excludedIngredientIds.has(item.id);
+
                   return (
-                  <div key={item.id} className="flex items-center justify-between gap-3 rounded bg-muted/40 p-2 text-sm">
-                    <div>
+                  <div key={item.id} className={`flex items-center justify-between gap-3 rounded p-2 text-sm ${isIncluded ? "bg-muted/40" : "bg-muted/20 opacity-70"}`}>
+                    <div className="flex items-start gap-2">
+                      <input
+                        type="checkbox"
+                        checked={isIncluded}
+                        onChange={() => toggleIngredientIncluded(item.id)}
+                        className="mt-1 h-4 w-4 rounded border-muted-foreground text-primary focus:ring-primary"
+                        aria-label={`Include ${item.name} in stock deduction`}
+                      />
+                      <div>
                       <p className="font-medium text-foreground">{item.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Deduct {item.required} {item.deductionUnit} | Stock {item.product?.stock ?? "missing"} {item.product?.unit || ""}
+                        {isIncluded ? "Deduct" : "Skipped"} {item.required} {item.deductionUnit} | Stock {item.product?.stock ?? "missing"} {item.product?.unit || ""}
                       </p>
+                      </div>
                     </div>
-                    {item.hasEnoughStock ? (
+                    {!isIncluded ? (
+                      <span className="rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">Skipped</span>
+                    ) : item.hasEnoughStock ? (
                       <CheckCircle className="h-5 w-5" style={{ color: "#008967" }} />
                     ) : (
                       <AlertTriangle className="h-5 w-5" style={{ color: "#DC2626" }} />

@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BusinessModule, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
@@ -16,15 +16,10 @@ import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
 export class PurchaseOrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(
-    dto: CreatePurchaseOrderDto,
-    businessId: string,
-    module: BusinessModule,
-    createdById?: string,
-  ) {
+  async create(dto: CreatePurchaseOrderDto, businessId: string, createdById?: string) {
     const orderNumber = `PO-${Date.now()}`;
     const totalAmount = dto.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0);
-    await this.assertReferencesBelongToBusiness(dto, businessId, module);
+    await this.assertReferencesBelongToBusiness(dto, businessId);
     try {
       return await this.prisma.purchaseOrder.create({
         data: {
@@ -38,7 +33,6 @@ export class PurchaseOrdersService {
             : undefined,
           totalAmount,
           businessId,
-          module,
           createdById,
           items: {
             create: dto.items.map((item) => ({
@@ -62,7 +56,6 @@ export class PurchaseOrdersService {
 
   async findAll(
     businessId: string,
-    module: BusinessModule,
     status?: string,
     supplierId?: string,
     page = 1,
@@ -70,7 +63,6 @@ export class PurchaseOrdersService {
   ): Promise<PaginatedResult<any>> {
     const where: Prisma.PurchaseOrderWhereInput = {
       businessId,
-      module,
       ...(status ? { status: status as any } : {}),
       ...(supplierId ? { supplierId } : {}),
     };
@@ -86,103 +78,63 @@ export class PurchaseOrdersService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(
-    id: string,
-    businessId: string,
-    module: BusinessModule,
-  ) {
+  async findOne(id: string, businessId: string) {
     const po = await this.prisma.purchaseOrder.findFirst({
-      where: { id, businessId, module },
+      where: { id, businessId },
       include: this.poInclude,
     });
     if (!po) throw new NotFoundException(`Purchase order #${id} not found`);
     return po;
   }
 
-  async update(
-    id: string,
-    dto: UpdatePurchaseOrderDto,
-    businessId: string,
-    module: BusinessModule,
-  ) {
-    const po = await this.findOne(id, businessId, module);
+  async update(id: string, dto: UpdatePurchaseOrderDto, businessId: string) {
+    const po = await this.findOne(id, businessId);
     if (!['DRAFT', 'SUBMITTED'].includes(po.status)) {
       throw new BadRequestException('Only DRAFT or SUBMITTED orders can be edited');
     }
-    const result = await this.prisma.purchaseOrder.updateMany({
-      where: {
-        id,
-        businessId,
-        module,
-        status: { in: ['DRAFT', 'SUBMITTED'] },
-      },
-      data: (({ module: _ignoredModule, ...data }) => data)(dto),
+    return this.prisma.purchaseOrder.update({
+      where: { id },
+      data: dto,
+      include: this.poInclude,
     });
-    if (result.count === 0) {
-      await this.findOne(id, businessId, module);
-      throw new BadRequestException(
-        'Only DRAFT or SUBMITTED orders can be edited',
-      );
-    }
-    return this.findOne(id, businessId, module);
   }
 
-  async submit(
-    id: string,
-    businessId: string,
-    module: BusinessModule,
-  ) {
-    const po = await this.findOne(id, businessId, module);
+  async submit(id: string, businessId: string) {
+    const po = await this.findOne(id, businessId);
     if (po.status !== 'DRAFT') {
       throw new BadRequestException('Only DRAFT orders can be submitted');
     }
-    const result = await this.prisma.purchaseOrder.updateMany({
-      where: { id, businessId, module, status: 'DRAFT' },
+    return this.prisma.purchaseOrder.update({
+      where: { id },
       data: { status: 'SUBMITTED' },
+      include: this.poInclude,
     });
-    if (result.count === 0) {
-      await this.findOne(id, businessId, module);
-      throw new BadRequestException('Only DRAFT orders can be submitted');
-    }
-    return this.findOne(id, businessId, module);
   }
 
-  async approve(
-    id: string,
-    businessId: string,
-    role: string,
-    module: BusinessModule,
-  ) {
+  async approve(id: string, businessId: string, role: string) {
     if (!['Admin', 'Manager'].includes(role)) {
       throw new ForbiddenException('Only Admin or Manager can approve purchase orders');
     }
-    const po = await this.findOne(id, businessId, module);
+    const po = await this.findOne(id, businessId);
     if (po.status !== 'SUBMITTED') {
       throw new BadRequestException('Only SUBMITTED orders can be approved');
     }
-    const result = await this.prisma.purchaseOrder.updateMany({
-      where: { id, businessId, module, status: 'SUBMITTED' },
+    return this.prisma.purchaseOrder.update({
+      where: { id },
       data: { status: 'APPROVED' },
+      include: this.poInclude,
     });
-    if (result.count === 0) {
-      await this.findOne(id, businessId, module);
-      throw new BadRequestException(
-        'Only SUBMITTED orders can be approved',
-      );
-    }
-    return this.findOne(id, businessId, module);
   }
 
   async receive(
     id: string,
     dto: ReceivePurchaseOrderDto,
     businessId: string,
-    module: BusinessModule,
     receivedById?: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
       const po = await tx.purchaseOrder.findFirst({
-        where: { id, businessId, module },
+        where: { id, businessId },
         include: { items: true },
       });
       if (!po) throw new NotFoundException(`Purchase order #${id} not found`);
@@ -259,7 +211,6 @@ export class PurchaseOrdersService {
               itemId: item.id,
               locationId: item.locationId,
               businessId,
-              module,
               createdById: receivedById,
             },
           });
@@ -294,7 +245,6 @@ export class PurchaseOrdersService {
           receivedById,
           notes: dto.notes,
           businessId,
-          module,
           items: { create: receiptItems },
         },
       });
@@ -306,19 +256,13 @@ export class PurchaseOrdersService {
         (item) => item.receivedQty + item.rejectedQty >= item.quantity,
       );
 
-      const result = await tx.purchaseOrder.updateMany({
-        where: { id, businessId, module },
+      return tx.purchaseOrder.update({
+        where: { id },
         data: {
           status: isComplete ? 'RECEIVED' : 'PARTIALLY_RECEIVED',
           receivedAt: isComplete ? new Date() : undefined,
           receivedById,
         },
-      });
-      if (result.count === 0) {
-        throw new NotFoundException(`Purchase order #${id} not found`);
-      }
-      return tx.purchaseOrder.findFirstOrThrow({
-        where: { id, businessId, module },
         include: this.poInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -329,51 +273,37 @@ export class PurchaseOrdersService {
     reason: string,
     businessId: string,
     role: string,
-    module: BusinessModule,
   ) {
     if (!['Admin', 'Manager'].includes(role)) {
       throw new ForbiddenException(
         'Only Admin or Manager can reject purchase orders',
       );
     }
-    const po = await this.findOne(id, businessId, module);
+    const po = await this.findOne(id, businessId);
     if (!['SUBMITTED', 'APPROVED'].includes(po.status)) {
       throw new BadRequestException(
         'Only SUBMITTED or APPROVED orders can be rejected',
       );
     }
-    const result = await this.prisma.purchaseOrder.updateMany({
-      where: {
-        id,
-        businessId,
-        module,
-        status: { in: ['SUBMITTED', 'APPROVED'] },
-      },
+    return this.prisma.purchaseOrder.update({
+      where: { id },
       data: {
         status: 'REJECTED',
         rejectionReason: reason.trim(),
         rejectedAt: new Date(),
       },
+      include: this.poInclude,
     });
-    if (result.count === 0) {
-      await this.findOne(id, businessId, module);
-      throw new BadRequestException(
-        'Only SUBMITTED or APPROVED orders can be rejected',
-      );
-    }
-    return this.findOne(id, businessId, module);
   }
 
   async findGoodsReceipts(
     businessId: string,
-    module: BusinessModule,
     purchaseOrderId?: string,
     page = 1,
     limit = 50,
   ): Promise<PaginatedResult<any>> {
     const where: Prisma.GoodsReceiptWhereInput = {
       businessId,
-      module,
       ...(purchaseOrderId ? { purchaseOrderId } : {}),
     };
     const include = {
@@ -398,29 +328,16 @@ export class PurchaseOrdersService {
     return paginate(data, total, page, limit);
   }
 
-  async cancel(
-    id: string,
-    businessId: string,
-    module: BusinessModule,
-  ) {
-    const po = await this.findOne(id, businessId, module);
+  async cancel(id: string, businessId: string) {
+    const po = await this.findOne(id, businessId);
     if (po.status === 'RECEIVED') {
       throw new BadRequestException('RECEIVED orders cannot be cancelled');
     }
-    const result = await this.prisma.purchaseOrder.updateMany({
-      where: {
-        id,
-        businessId,
-        module,
-        status: { not: 'RECEIVED' },
-      },
+    return this.prisma.purchaseOrder.update({
+      where: { id },
       data: { status: 'CANCELLED' },
+      include: this.poInclude,
     });
-    if (result.count === 0) {
-      await this.findOne(id, businessId, module);
-      throw new BadRequestException('RECEIVED orders cannot be cancelled');
-    }
-    return this.findOne(id, businessId, module);
   }
 
   private readonly poInclude = {
@@ -440,11 +357,10 @@ export class PurchaseOrdersService {
   private async assertReferencesBelongToBusiness(
     dto: CreatePurchaseOrderDto,
     businessId: string,
-    module: BusinessModule,
   ) {
     if (dto.supplierId) {
       const supplier = await this.prisma.supplier.findFirst({
-        where: { id: dto.supplierId, businessId, module, isActive: true },
+        where: { id: dto.supplierId, businessId, isActive: true },
         select: { id: true },
       });
       if (!supplier) {
@@ -458,14 +374,7 @@ export class PurchaseOrdersService {
     if (itemIds.length === 0) return;
 
     const count = await this.prisma.inventoryItem.count({
-      where: {
-        id: { in: [...new Set(itemIds)] },
-        businessId,
-        itemType:
-          module === BusinessModule.RESTAURANT
-            ? { in: ['INGREDIENT', 'MENU_ITEM', 'SUPPLY'] }
-            : { in: ['RETAIL_ITEM', 'BUNDLE'] },
-      },
+      where: { id: { in: [...new Set(itemIds)] }, businessId },
     });
     if (count !== new Set(itemIds).size) {
       throw new BadRequestException(
