@@ -414,7 +414,7 @@ export default function App() {
         case 'restaurant-reports':
           return <RestaurantReports />;
         case 'user-management':
-          return <UserManagementView currentUser={currentUser} />;
+          return <RestaurantUserManagement />;
         default:
           return <RestaurantDashboard />;
       }
