@@ -3,6 +3,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cel
 import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle } from "lucide-react";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
 import { useRestaurantInventoryQuery, useRestaurantPurchaseOrdersQuery } from "../lib/restaurantQueries";
+import { useSession } from "../../app/hooks/useSession";
 
 type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'financial' | 'confidential';
 
@@ -29,30 +30,22 @@ const statusPill = (status: string) => {
 };
 
 export function Reports() {
+  const { currentUser } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [dateRange, setDateRange] = useState("30days");
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
-  const isAdmin = useMemo(
-    () => (localStorage.getItem("userRole") || "staff").toLowerCase() === "admin",
-    [],
-  );
+  const isAdmin = currentUser?.role.toLowerCase() === "admin";
 
   const productsQuery = useRestaurantInventoryQuery();
   const products = productsQuery.data ?? getInventoryProducts();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<any[]>();
   const purchaseOrders = purchaseOrdersQuery.data ?? [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transfers: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const adjustments: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const wasteLogs: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const goodsReceived: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const users: any[] = [];
 
 

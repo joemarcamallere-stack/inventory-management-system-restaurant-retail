@@ -1,8 +1,8 @@
 import type { PropsWithChildren } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useSession } from './useSession';
+import { SessionProvider, useSession } from './useSession';
 import {
   getCurrentSession,
   loginUser,
@@ -30,41 +30,68 @@ const user = {
   lastLogin: new Date().toISOString(),
 };
 
+function makeWrapper() {
+  const queryClient = new QueryClient();
+  return ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={queryClient}>
+      <SessionProvider>{children}</SessionProvider>
+    </QueryClientProvider>
+  );
+}
+
 describe('useSession', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
   });
 
-  it('restores an authenticated cookie session', async () => {
+  it('restores an authenticated cookie session on mount', async () => {
     vi.mocked(getCurrentSession).mockResolvedValue({ user });
-    const queryClient = new QueryClient();
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
 
-    const { result } = renderHook(() => useSession(), { wrapper });
+    const { result } = renderHook(() => useSession(), { wrapper: makeWrapper() });
+
+    expect(result.current.isRestoringSession).toBe(true);
+    expect(result.current.isLoggedIn).toBe(false);
 
     await waitFor(() => expect(result.current.isRestoringSession).toBe(false));
+
     expect(result.current.isLoggedIn).toBe(true);
     expect(result.current.currentUser).toEqual(user);
-    expect(localStorage.getItem('userRole')).toBe('admin');
   });
 
-  it('clears local session state when restoration is unauthorized', async () => {
+  it('stays logged out when session restoration fails', async () => {
     vi.mocked(getCurrentSession).mockRejectedValue(new Error('Unauthorized'));
-    const queryClient = new QueryClient();
-    const wrapper = ({ children }: PropsWithChildren) => (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
 
-    const { result } = renderHook(() => useSession(), { wrapper });
+    const { result } = renderHook(() => useSession(), { wrapper: makeWrapper() });
 
     await waitFor(() => expect(result.current.isRestoringSession).toBe(false));
+
+    expect(result.current.isLoggedIn).toBe(false);
+    expect(result.current.currentUser).toBeNull();
+  });
+
+  it('sets currentUser in context after login', async () => {
+    vi.mocked(getCurrentSession).mockRejectedValue(new Error('Unauthorized'));
+    vi.mocked(loginUser).mockResolvedValue({ user, accessToken: 'tok' });
+
+    const { result } = renderHook(() => useSession(), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isRestoringSession).toBe(false));
+
+    await act(() => result.current.login('admin@example.com', 'password'));
+
+    expect(result.current.isLoggedIn).toBe(true);
+    expect(result.current.currentUser).toEqual(user);
+  });
+
+  it('clears currentUser from context after logout', async () => {
+    vi.mocked(getCurrentSession).mockResolvedValue({ user });
+    vi.mocked(logoutUser).mockResolvedValue({ message: 'Logged out' });
+
+    const { result } = renderHook(() => useSession(), { wrapper: makeWrapper() });
+    await waitFor(() => expect(result.current.isLoggedIn).toBe(true));
+
+    await act(() => result.current.logout());
+
     expect(result.current.isLoggedIn).toBe(false);
     expect(result.current.currentUser).toBeNull();
   });

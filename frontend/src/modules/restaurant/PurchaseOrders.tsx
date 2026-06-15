@@ -14,6 +14,7 @@ import {
   useRestaurantUsersQuery,
   useSaveRestaurantPurchaseOrderMutation,
 } from "../lib/restaurantQueries";
+import { useSession } from "../../app/hooks/useSession";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
@@ -132,20 +133,6 @@ type UserSummary = {
   role: string;
 };
 
-const getCurrentUser = (users: UserSummary[], userRole: string) => {
-  const email = localStorage.getItem("userEmail") || "";
-  const matchedUser = users.find((user) => (user.email || '').toLowerCase() === email.toLowerCase());
-
-  if (matchedUser) return matchedUser;
-
-  return {
-    id: userRole === "admin" ? 0 : -1,
-    name: userRole === "admin" ? "Admin" : email || "Local User",
-    email: email || (userRole === "admin" ? "admin@local" : "local-user"),
-    role: userRole,
-  };
-};
-
 const getOrderCreator = (order: Order, users: UserSummary[]) => {
   if (order.createdByRole === "admin") return "Admin";
 
@@ -165,6 +152,8 @@ const getOrderCreator = (order: Order, users: UserSummary[]) => {
 const getOrderCreatorRole = (order: Order) => order.createdByRole || "unknown";
 
 export function PurchaseOrders() {
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role.toLowerCase() ?? "staff";
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -179,13 +168,6 @@ export function PurchaseOrders() {
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
   const [approvingOrder, setApprovingOrder] = useState<Order | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
-  const [userRole, setUserRole] = useState<string>("staff");
-
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
-
   useEffect(() => {
     if (sessionStorage.getItem('po-open-approval') === 'true') {
       sessionStorage.removeItem('po-open-approval');

@@ -9,6 +9,7 @@ import {
   useRestaurantInventoryQuery,
   useRestaurantPurchaseOrdersQuery,
 } from "../lib/restaurantQueries";
+import { useSession } from "../../app/hooks/useSession";
 
 type PendingOrder = {
   id: string;
@@ -43,21 +44,17 @@ const goToPurchaseOrders = () => {
 };
 
 export function Dashboard() {
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role.toLowerCase() ?? "staff";
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
-  const [userRole, setUserRole] = useState<string>("staff");
 
   useEffect(() => {
     setChartKey(prev => prev + 1);
   }, [selectedMainCategory, selectedSubCategory]);
-
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
 
   const productsQuery = useRestaurantInventoryQuery<InventoryProduct[]>();
   const products = productsQuery.data ?? getInventoryProducts();
