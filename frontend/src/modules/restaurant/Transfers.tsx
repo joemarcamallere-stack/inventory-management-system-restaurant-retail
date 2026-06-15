@@ -3,16 +3,12 @@ import { ArrowLeftRight, Plus, Search, TrendingUp, TrendingDown, AlertCircle, Ch
 import { toast } from "sonner";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import {
-  cancelTransfer,
-  completeTransfer,
-  createStockMovement,
-  createTransfer,
-  dispatchTransfer,
-} from "../../app/api/client";
-import { domainQueryKeys, useDomainMutation, useLocationsQuery } from "../lib/domainQueries";
-import {
+  useCreateRestaurantStockMovementMutation,
+  useCreateRestaurantTransferMutation,
   useRestaurantAdjustmentsQuery,
   useRestaurantInventoryQuery,
+  useRestaurantLocationsQuery,
+  useRestaurantTransferActionMutation,
   useRestaurantTransfersQuery,
   useRestaurantWasteQuery,
 } from "../lib/restaurantQueries";
@@ -112,28 +108,15 @@ export function Transfers() {
     notes: "",
   });
 
-  const locationQuery = useLocationsQuery();
+  const locationQuery = useRestaurantLocationsQuery();
   const locations = locationQuery.data ?? [];
   const inventoryQuery = useRestaurantInventoryQuery<(InventoryProduct & { backendId?: string; locationId?: string })[]>();
   const inventoryItems = inventoryQuery.data ?? getInventoryProducts();
   const availableItems = inventoryItems.filter(item => item.stock > 0);
   const units = ["kg", "g", "L", "ml", "pcs"];
-  const saveTransfer = useDomainMutation(
-    (data: unknown) => createTransfer(data),
-    [domainQueryKeys.transfers],
-  );
-  const moveTransfer = useDomainMutation(
-    ({ id, action }: { id: string; action: "dispatch" | "complete" | "cancel" }) => {
-      if (action === "dispatch") return dispatchTransfer(id);
-      if (action === "complete") return completeTransfer(id);
-      return cancelTransfer(id);
-    },
-    [domainQueryKeys.transfers, domainQueryKeys.inventory, domainQueryKeys.stockMovements],
-  );
-  const saveMovement = useDomainMutation(
-    (data: unknown) => createStockMovement(data),
-    [domainQueryKeys.stockMovements, domainQueryKeys.inventory],
-  );
+  const saveTransfer = useCreateRestaurantTransferMutation();
+  const moveTransfer = useRestaurantTransferActionMutation();
+  const saveMovement = useCreateRestaurantStockMovementMutation();
 
   const filteredTransfers = transfers.filter(transfer => {
     const matchesSearch = (transfer.item || '').toLowerCase().includes(searchQuery.toLowerCase()) ||

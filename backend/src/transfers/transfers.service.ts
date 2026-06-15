@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BusinessModule, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateTransferDto } from './dto/create-transfer.dto';
@@ -13,7 +13,12 @@ import { CreateTransferDto } from './dto/create-transfer.dto';
 export class TransfersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateTransferDto, businessId: string, createdById?: string) {
+  async create(
+    dto: CreateTransferDto,
+    businessId: string,
+    module: BusinessModule,
+    createdById?: string,
+  ) {
     if (dto.fromLocationId === dto.toLocationId) {
       throw new BadRequestException('Source and destination locations must be different');
     }
@@ -35,6 +40,10 @@ export class TransfersService {
         businessId,
         locationId: dto.fromLocationId,
         id: { in: itemIds },
+        itemType:
+          module === BusinessModule.RESTAURANT
+            ? { in: ['INGREDIENT', 'MENU_ITEM', 'SUPPLY'] }
+            : { in: ['RETAIL_ITEM', 'BUNDLE'] },
       },
       select: { id: true },
     });
@@ -52,6 +61,7 @@ export class TransfersService {
           toLocationId: dto.toLocationId,
           notes: dto.notes,
           businessId,
+          module,
           createdById,
           items: {
             create: dto.items.map((item) => ({
@@ -72,6 +82,7 @@ export class TransfersService {
 
   async findAll(
     businessId: string,
+    module: BusinessModule,
     status?: string,
     fromLocationId?: string,
     toLocationId?: string,
@@ -80,6 +91,7 @@ export class TransfersService {
   ): Promise<PaginatedResult<any>> {
     const where: Prisma.TransferWhereInput = {
       businessId,
+      module,
       ...(status ? { status: status as any } : {}),
       ...(fromLocationId ? { fromLocationId } : {}),
       ...(toLocationId ? { toLocationId } : {}),
@@ -96,31 +108,50 @@ export class TransfersService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string, businessId: string) {
+  async findOne(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+  ) {
     const transfer = await this.prisma.transfer.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, module },
       include: this.transferInclude,
     });
     if (!transfer) throw new NotFoundException(`Transfer #${id} not found`);
     return transfer;
   }
 
-  async dispatch(id: string, businessId: string) {
-    const transfer = await this.findOne(id, businessId);
+  async dispatch(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+  ) {
+    const transfer = await this.findOne(id, businessId, module);
     if (transfer.status !== 'PENDING') {
       throw new BadRequestException('Only PENDING transfers can be dispatched');
     }
-    return this.prisma.transfer.update({
-      where: { id },
+    const result = await this.prisma.transfer.updateMany({
+      where: { id, businessId, module, status: 'PENDING' },
       data: { status: 'IN_TRANSIT' },
-      include: this.transferInclude,
     });
+    if (result.count === 0) {
+      await this.findOne(id, businessId, module);
+      throw new BadRequestException(
+        'Only PENDING transfers can be dispatched',
+      );
+    }
+    return this.findOne(id, businessId, module);
   }
 
-  async complete(id: string, businessId: string, completedById?: string) {
+  async complete(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+    completedById?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const transfer = await tx.transfer.findFirst({
-        where: { id, businessId },
+        where: { id, businessId, module },
         include: { items: true },
       });
       if (!transfer) throw new NotFoundException(`Transfer #${id} not found`);
@@ -170,6 +201,7 @@ export class TransfersService {
             itemId: item.id,
             locationId: transfer.fromLocationId,
             businessId,
+            module,
             createdById: completedById,
           },
         });
@@ -245,29 +277,51 @@ export class TransfersService {
             itemId: destItem.id,
             locationId: transfer.toLocationId,
             businessId,
+            module,
             createdById: completedById,
           },
         });
       }
 
-      return tx.transfer.update({
-        where: { id },
+      const result = await tx.transfer.updateMany({
+        where: { id, businessId, module, status: 'IN_TRANSIT' },
         data: { status: 'COMPLETED', completedAt: new Date() },
+      });
+      if (result.count === 0) {
+        throw new NotFoundException(`Transfer #${id} not found`);
+      }
+      return tx.transfer.findFirstOrThrow({
+        where: { id, businessId, module },
         include: this.transferInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
-  async cancel(id: string, businessId: string) {
-    const transfer = await this.findOne(id, businessId);
+  async cancel(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+  ) {
+    const transfer = await this.findOne(id, businessId, module);
     if (!['PENDING', 'IN_TRANSIT'].includes(transfer.status)) {
       throw new BadRequestException('Only PENDING or IN_TRANSIT transfers can be cancelled');
     }
-    return this.prisma.transfer.update({
-      where: { id },
+    const result = await this.prisma.transfer.updateMany({
+      where: {
+        id,
+        businessId,
+        module,
+        status: { in: ['PENDING', 'IN_TRANSIT'] },
+      },
       data: { status: 'CANCELLED' },
-      include: this.transferInclude,
     });
+    if (result.count === 0) {
+      await this.findOne(id, businessId, module);
+      throw new BadRequestException(
+        'Only PENDING or IN_TRANSIT transfers can be cancelled',
+      );
+    }
+    return this.findOne(id, businessId, module);
   }
 
   private readonly transferInclude = {

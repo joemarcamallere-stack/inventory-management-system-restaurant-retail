@@ -4,22 +4,15 @@ import { toast } from "sonner";
 import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
 import {
-  approvePurchaseOrder,
-  cancelPurchaseOrder,
-  createInventoryItem,
-  createPurchaseOrder,
-  createSupplier,
-  getLocations,
-  rejectPurchaseOrder,
-  submitPurchaseOrder,
-  updatePurchaseOrder,
-} from "../../app/api/client";
-import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
-import {
+  useApproveRestaurantPurchaseOrderMutation,
+  useCancelRestaurantPurchaseOrderMutation,
+  useCreateRestaurantSupplierMutation,
+  useRejectRestaurantPurchaseOrderMutation,
   useRestaurantInventoryQuery,
   useRestaurantPurchaseOrdersQuery,
   useRestaurantSuppliersQuery,
   useRestaurantUsersQuery,
+  useSaveRestaurantPurchaseOrderMutation,
 } from "../lib/restaurantQueries";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
@@ -347,83 +340,11 @@ export function PurchaseOrders() {
   const suppliers = (suppliersQuery.data ?? []).map((supplier) =>
     supplierOverrides.find((override) => override.id === supplier.id) ?? supplier,
   ) as Supplier[];
-  const saveOrder = useDomainMutation(
-    async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
-      const supplier = suppliers.find((item) => item.name === order.supplier);
-      const supplierId = supplier?.backendId ?? supplier?.id;
-      if (!supplierId) throw new Error("Select a supplier saved in the database");
-
-      const locations = await getLocations();
-      if (!locations[0]) throw new Error("Create a location before ordering a new product");
-
-      const apiItems = [];
-      for (const line of order.items) {
-        const product = globalProducts.find((item) =>
-          item.id === line.productId || item.inventoryId === line.inventoryId
-        );
-        let inventoryItemId = product?.backendId
-          ?? (product?.id && !product.id.startsWith("gp-") && !product.id.startsWith("inv-") ? product.id : undefined);
-
-        if (!inventoryItemId) {
-          const created = await createInventoryItem({
-            name: line.productName,
-            itemType: "INGREDIENT",
-            sku: line.sku || undefined,
-            category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
-            quantity: 0,
-            price: line.unitPrice,
-            unit: line.unit || "pcs",
-            minStock: 0,
-            maxStock: 0,
-            reorderPoint: 0,
-            locationId: locations[0].id,
-          });
-          inventoryItemId = created.id;
-        }
-
-        apiItems.push({
-          inventoryItemId,
-          name: line.productName,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-        });
-      }
-
-      const payload = {
-        supplierId,
-        expectedDelivery: order.expectedDelivery
-          ? new Date(`${order.expectedDelivery}T00:00:00`).toISOString()
-          : undefined,
-        items: apiItems,
-      };
-      if (editingId) return updatePurchaseOrder(editingId, payload);
-      const created = await createPurchaseOrder(payload);
-      return submitPurchaseOrder(created.id);
-    },
-    [domainQueryKeys.purchaseOrders, domainQueryKeys.inventory],
-  );
-  const approveOrder = useDomainMutation(
-    (id: string) => approvePurchaseOrder(id),
-    [domainQueryKeys.purchaseOrders, domainQueryKeys.goodsReceipts],
-  );
-  const rejectOrder = useDomainMutation(
-    ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
-    [domainQueryKeys.purchaseOrders],
-  );
-  const cancelOrder = useDomainMutation(
-    (id: string) => cancelPurchaseOrder(id),
-    [domainQueryKeys.purchaseOrders],
-  );
-  const addSupplier = useDomainMutation(
-    (supplier: Supplier) => createSupplier({
-      name: supplier.name,
-      contactPerson: supplier.contact,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-    }),
-    [domainQueryKeys.suppliers],
-  );
+  const saveOrder = useSaveRestaurantPurchaseOrderMutation();
+  const approveOrder = useApproveRestaurantPurchaseOrderMutation();
+  const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
+  const cancelOrder = useCancelRestaurantPurchaseOrderMutation();
+  const addSupplier = useCreateRestaurantSupplierMutation();
 
   // Get available products from selected supplier
   const availableProducts = newOrder.supplier
@@ -560,8 +481,16 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     }
 
     try {
+      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) {
+        throw new Error("Select a supplier saved in the database");
+      }
       await saveOrder.mutateAsync({
-        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+        supplierId,
+        expectedDelivery: newOrder.expectedDelivery,
+        items: orderItems,
+        products: globalProducts,
       });
       setShowCreateModal(false);
       setNewOrder({ supplier: "", expectedDelivery: "" });
@@ -698,9 +627,17 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     if (!editingOrder) return;
 
     try {
+      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) {
+        throw new Error("Select a supplier saved in the database");
+      }
       await saveOrder.mutateAsync({
         editingId: editingOrder.backendId ?? editingOrder.id,
-        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+        supplierId,
+        expectedDelivery: newOrder.expectedDelivery,
+        items: orderItems,
+        products: globalProducts,
       });
       setShowEditModal(false);
       setEditingOrder(null);
@@ -738,7 +675,13 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     };
 
     try {
-      await addSupplier.mutateAsync(supplierToAdd);
+      await addSupplier.mutateAsync({
+        name: supplierToAdd.name,
+        contactPerson: supplierToAdd.contact,
+        email: supplierToAdd.email,
+        phone: supplierToAdd.phone,
+        address: supplierToAdd.address,
+      });
       setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
       setNewSupplier({
         name: "",

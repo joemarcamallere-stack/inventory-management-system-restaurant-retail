@@ -1,0 +1,1 @@
+export { useRestaurantSalesQuery } from './core';

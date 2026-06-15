@@ -2,14 +2,14 @@ import { useState } from "react";
 import { Apple, PhilippinePeso, Hash, Tag, Folder, FileText, Save, X, Calendar, Plus, FolderPlus } from "lucide-react";
 import { toast } from "sonner";
 import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import { createInventoryItem, upsertRestaurantSetting } from "../../app/api/client";
 import {
-  domainQueryKeys,
-  useDomainMutation,
-  useLocationsQuery,
-  useRestaurantSettingsQuery,
-} from "../lib/domainQueries";
-import { useRestaurantInventoryQuery, useRestaurantSuppliersQuery } from "../lib/restaurantQueries";
+  useCreateRestaurantInventoryMutation,
+  useRestaurantInventoryQuery,
+  useRestaurantLocationsQuery,
+  useRestaurantSettings,
+  useRestaurantSuppliersQuery,
+  useUpsertRestaurantSettingMutation,
+} from "../lib/restaurantQueries";
 
 type StoredProduct = {
   id: number;
@@ -64,7 +64,7 @@ export function AddProduct() {
   const productsQuery = useRestaurantInventoryQuery<StoredProduct[]>();
   const products = productsQuery.data
     ?? defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" }));
-  const settingsQuery = useRestaurantSettingsQuery();
+  const settingsQuery = useRestaurantSettings();
   const savedCategoryHierarchy = settingsQuery.data
     ?.find((setting) => setting.key === "CATEGORY_HIERARCHY")?.value as { [key: string]: string[] } | undefined;
   const savedTemperatureOptions = settingsQuery.data
@@ -75,13 +75,17 @@ export function AddProduct() {
   const storageTemperatureOptions = temperatureOverride ?? savedTemperatureOptions ?? getStorageTemperatureOptions();
   const suppliersQuery = useRestaurantSuppliersQuery();
   const storedSuppliers = (suppliersQuery.data ?? []) as Supplier[];
-  const locationsQuery = useLocationsQuery();
+  const locationsQuery = useRestaurantLocationsQuery();
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
-  const createProduct = useDomainMutation(
-    async (product: StoredProduct) => {
+  const createInventoryMutation = useCreateRestaurantInventoryMutation();
+  const saveSetting = useUpsertRestaurantSettingMutation();
+
+  const createProduct = {
+    isPending: createInventoryMutation.isPending,
+    mutateAsync: async (product: StoredProduct) => {
       const locations = locationsQuery.data ?? [];
       if (!locations[0]) throw new Error("Create a location before adding inventory");
-      return createInventoryItem({
+      return createInventoryMutation.mutateAsync({
         name: product.name,
         itemType: product.itemType,
         sku: product.sku || undefined,
@@ -97,13 +101,7 @@ export function AddProduct() {
         locationId: locations[0].id,
       });
     },
-    [domainQueryKeys.inventory],
-  );
-  const saveSetting = useDomainMutation(
-    ({ key, value }: { key: "CATEGORY_HIERARCHY" | "STORAGE_TEMPERATURE_OPTIONS"; value: unknown }) =>
-      upsertRestaurantSetting(key, value),
-    [domainQueryKeys.restaurantSettings],
-  );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

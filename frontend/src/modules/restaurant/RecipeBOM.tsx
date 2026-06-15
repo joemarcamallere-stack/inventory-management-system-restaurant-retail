@@ -2,9 +2,12 @@ import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
-import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
-import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
-import { useRestaurantInventoryQuery, useRestaurantRecipesQuery } from "../lib/restaurantQueries";
+import {
+  useDeleteRestaurantRecipeMutation,
+  useRestaurantInventoryQuery,
+  useRestaurantRecipesQuery,
+  useSaveRestaurantRecipeMutation,
+} from "../lib/restaurantQueries";
 
 type Ingredient = {
   id: string;
@@ -127,15 +130,8 @@ export function RecipeBOM() {
       productId: inventoryItems.find((item) => item.backendId === ingredient.backendItemId)?.id,
     })),
   })) as Recipe[];
-  const saveRecipe = useDomainMutation(
-    ({ id, data }: { id?: string; data: unknown }) =>
-      id ? updateRecipe(id, data) : createRecipe(data),
-    [domainQueryKeys.recipes],
-  );
-  const removeRecipe = useDomainMutation(
-    (id: string) => deleteRecipe(id),
-    [domainQueryKeys.recipes],
-  );
+  const saveRecipe = useSaveRestaurantRecipeMutation();
+  const removeRecipe = useDeleteRestaurantRecipeMutation();
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
 

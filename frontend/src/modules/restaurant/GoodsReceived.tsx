@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Search, Filter, CheckCircle, Package, Calendar, AlertCircle, ClipboardCheck, X, XCircle, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { defaultInventoryProducts, getStorageTemperatureOptions, InventoryProduct } from "../lib/inventoryLogic";
-import { receivePurchaseOrder, upsertRestaurantSetting } from "../../app/api/client";
-import { domainQueryKeys, useDomainMutation, useRestaurantSettingsQuery } from "../lib/domainQueries";
-import { useRestaurantGoodsRecordsQuery } from "../lib/restaurantQueries";
+import {
+  useReceiveRestaurantPurchaseOrderMutation,
+  useRestaurantGoodsRecordsQuery,
+  useRestaurantSettings,
+  useUpsertRestaurantSettingMutation,
+} from "../lib/restaurantQueries";
 
 type QualityCheckCriteria = {
   appearance: "pass" | "fail" | "";
@@ -226,7 +229,7 @@ export function GoodsReceived() {
   const [itemCriteriaScores, setItemCriteriaScores] = useState<{
     [itemIndex: number]: Partial<Record<InspectionCriterionKey, { passed: string; total: string; remarks: string }>>;
   }>({});
-  const settingsQuery = useRestaurantSettingsQuery();
+  const settingsQuery = useRestaurantSettings();
   const savedTemperatureOptions = settingsQuery.data
     ?.find((setting) => setting.key === "STORAGE_TEMPERATURE_OPTIONS")?.value as string[] | undefined;
   const [temperatureOverride, setTemperatureOverride] = useState<string[]>();
@@ -235,15 +238,8 @@ export function GoodsReceived() {
 
   const goodsQuery = useRestaurantGoodsRecordsQuery();
   const receivedGoods = (goodsQuery.data ?? []) as GoodsItem[];
-  const receiveOrder = useDomainMutation(
-    ({ id, items, notes }: { id: string; items: any[]; notes?: string }) =>
-      receivePurchaseOrder(id, items, notes),
-    [domainQueryKeys.goodsReceipts, domainQueryKeys.purchaseOrders, domainQueryKeys.inventory, domainQueryKeys.stockMovements],
-  );
-  const saveTemperatureOptions = useDomainMutation(
-    (value: string[]) => upsertRestaurantSetting("STORAGE_TEMPERATURE_OPTIONS", value),
-    [domainQueryKeys.restaurantSettings],
-  );
+  const receiveOrder = useReceiveRestaurantPurchaseOrderMutation();
+  const saveTemperatureOptionsMutation = useUpsertRestaurantSettingMutation();
 
   const dateFilters = ["all", "today", "week", "month"];
 
@@ -351,7 +347,7 @@ export function GoodsReceived() {
     const trimmed = newStorageTemperature.trim();
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
     const nextOptions = [...storageTemperatureOptions, trimmed];
-    await saveTemperatureOptions.mutateAsync(nextOptions);
+    await saveTemperatureOptionsMutation.mutateAsync({ key: 'STORAGE_TEMPERATURE_OPTIONS', value: nextOptions });
     setTemperatureOverride(nextOptions);
     setNewStorageTemperature("");
   };

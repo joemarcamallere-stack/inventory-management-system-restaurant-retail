@@ -4,9 +4,9 @@ import { toast } from "sonner";
 import {
   useRestaurantAdjustmentsQuery,
   useRestaurantInventoryQuery,
+  useRestaurantStockMovementsQuery,
   useRestaurantWasteQuery,
 } from "../lib/restaurantQueries";
-import { useStockMovementsQuery } from "../lib/domainQueries";
 import { formatQuantity, getDaysUntilExpiry, getInventoryProducts, getStockStatus, splitCategory, StockStatus } from "../lib/inventoryLogic";
 
 type StockItem = {
@@ -74,8 +74,8 @@ export function StockControl() {
   const wasteLogs = (wasteQuery.data ?? []) as WasteLogSummary[];
   const adjustmentsQuery = useRestaurantAdjustmentsQuery();
   const adjustments = (adjustmentsQuery.data ?? []) as AdjustmentSummary[];
-  const movementsQuery = useStockMovementsQuery(undefined, {
-    select: (movements) => movements.map((movement: any) => ({
+  const movementsQuery = useRestaurantStockMovementsQuery(
+    (movements) => movements.map((movement: any) => ({
       id: movement.id,
       type: movement.type,
       source: movement.referenceType ?? "shared-backend",
@@ -86,7 +86,7 @@ export function StockControl() {
       date: movement.createdAt,
       notes: movement.notes ?? movement.reason ?? "",
     })),
-  });
+  );
   const inventoryMovements = (movementsQuery.data ?? []) as InventoryMovementSummary[];
 
   const getRecordedOutflowQuantity = (productName: string) => {

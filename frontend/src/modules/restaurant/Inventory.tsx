@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
 import { toast } from "sonner";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import { deleteInventoryItem, updateInventoryItem } from "../../app/api/client";
-import { domainQueryKeys, useDomainMutation, useLocationsQuery } from "../lib/domainQueries";
-import { useRestaurantInventoryQuery } from "../lib/restaurantQueries";
+import {
+  useDeleteRestaurantInventoryMutation,
+  useRestaurantInventoryQuery,
+  useRestaurantLocationsQuery,
+  useUpdateRestaurantInventoryMutation,
+} from "../lib/restaurantQueries";
 
 type Product = {
   id: number;
@@ -40,16 +43,10 @@ export function Inventory() {
 
   const productsQuery = useRestaurantInventoryQuery<Product[]>();
   const products = productsQuery.data ?? defaultInventoryProducts;
-  const locationQuery = useLocationsQuery();
+  const locationQuery = useRestaurantLocationsQuery();
   const locations = locationQuery.data ?? [];
-  const updateProduct = useDomainMutation(
-    ({ id, data }: { id: string; data: unknown }) => updateInventoryItem(id, data),
-    [domainQueryKeys.inventory],
-  );
-  const deleteProduct = useDomainMutation(
-    (id: string) => deleteInventoryItem(id),
-    [domainQueryKeys.inventory],
-  );
+  const updateProduct = useUpdateRestaurantInventoryMutation();
+  const deleteProduct = useDeleteRestaurantInventoryMutation();
 
   const mainCategories = Object.keys(categoryHierarchy);
 

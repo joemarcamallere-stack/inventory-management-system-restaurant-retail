@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { BusinessModule } from '@prisma/client';
 import { StockMovementType } from './dto/create-stock-movement.dto';
 import { StockMovementsService } from './stock-movements.service';
 
@@ -47,6 +48,7 @@ describe('StockMovementsService', () => {
         reason: 'Physical recount',
       },
       businessId,
+      BusinessModule.RETAIL,
     );
 
     expect(tx.inventoryItem.update).toHaveBeenCalledWith({
@@ -67,6 +69,7 @@ describe('StockMovementsService', () => {
           quantity: 0,
         },
         businessId,
+        BusinessModule.RETAIL,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

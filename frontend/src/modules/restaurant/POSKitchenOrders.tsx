@@ -1,12 +1,12 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
-import { completeKitchenOrder, voidKitchenOrder } from "../../app/api/client";
 import { InventoryProduct } from "../lib/inventoryLogic";
-import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
 import {
+  useCompleteRestaurantKitchenOrderMutation,
   useRestaurantInventoryQuery,
   useRestaurantKitchenOrdersQuery,
   useRestaurantRecipesQuery,
+  useVoidRestaurantKitchenOrderMutation,
 } from "../lib/restaurantQueries";
 
 type Ingredient = {
@@ -82,14 +82,8 @@ export function POSKitchenOrders() {
     })),
   })) as Recipe[];
   const activeRecipes = recipes.filter((recipe) => recipe.isActive ?? true);
-  const completeOrderMutation = useDomainMutation(
-    (data: unknown) => completeKitchenOrder(data),
-    [domainQueryKeys.kitchenOrders, domainQueryKeys.inventory, domainQueryKeys.stockMovements],
-  );
-  const voidOrderMutation = useDomainMutation(
-    ({ id, reason }: { id: string; reason: string }) => voidKitchenOrder(id, reason),
-    [domainQueryKeys.kitchenOrders, domainQueryKeys.inventory, domainQueryKeys.stockMovements],
-  );
+  const completeOrderMutation = useCompleteRestaurantKitchenOrderMutation();
+  const voidOrderMutation = useVoidRestaurantKitchenOrderMutation();
 
   const selectedRecipe = activeRecipes.find((recipe) => recipe.id === recipeId);
 

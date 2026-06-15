@@ -1,7 +1,7 @@
 ﻿import { useState, useMemo } from 'react';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
+import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../models/retail';
 import {
   useCreateRetailLocationMutation,
   useDeleteRetailLocationMutation,

@@ -22,17 +22,20 @@ import {
   type KitchenOrderStatus,
 } from '../../app/api/client';
 import type {
-  RetailApiBundle,
-  RetailApiGoodsReceipt,
-  RetailApiInventoryItem,
-  RetailApiLocation,
-  RetailApiPurchaseOrder,
-  RetailApiSale,
-  RetailApiStockMovement,
-  RetailApiSupplier,
-  RetailApiTransfer,
-  RetailApiUser,
-} from '../../app/api/retailTypes';
+  ApiBundle,
+  ApiGoodsReceipt,
+  ApiInventoryItem,
+  ApiKitchenOrder,
+  ApiLocation,
+  ApiPurchaseOrder,
+  ApiRecipe,
+  ApiSale,
+  ApiStockMovement,
+  ApiSupplier,
+  ApiTransfer,
+  ApiUser,
+  BusinessModule,
+} from '../../app/api/domainTypes';
 
 export const domainQueryKeys = {
   inventory: ['inventory'] as const,
@@ -50,14 +53,61 @@ export const domainQueryKeys = {
   restaurantSettings: ['restaurant-settings'] as const,
 };
 
+const domainInvalidationDependencies = new Map<string, QueryKey[]>([
+  ['inventory', [
+    domainQueryKeys.stockMovements,
+    domainQueryKeys.transfers,
+    domainQueryKeys.bundles,
+    domainQueryKeys.purchaseOrders,
+    domainQueryKeys.goodsReceipts,
+  ]],
+  ['locations', [
+    domainQueryKeys.inventory,
+    domainQueryKeys.transfers,
+    domainQueryKeys.sales,
+    domainQueryKeys.bundles,
+  ]],
+  ['purchase-orders', [
+    domainQueryKeys.goodsReceipts,
+    domainQueryKeys.inventory,
+    domainQueryKeys.stockMovements,
+  ]],
+  ['goods-receipts', [
+    domainQueryKeys.purchaseOrders,
+    domainQueryKeys.inventory,
+    domainQueryKeys.stockMovements,
+  ]],
+  ['suppliers', [domainQueryKeys.purchaseOrders]],
+  ['transfers', [domainQueryKeys.inventory, domainQueryKeys.stockMovements]],
+  ['stock-movements', [domainQueryKeys.inventory]],
+  ['sales', [domainQueryKeys.inventory, domainQueryKeys.stockMovements]],
+  ['bundles', [domainQueryKeys.inventory]],
+  ['recipes', [domainQueryKeys.kitchenOrders]],
+  ['kitchen-orders', [
+    domainQueryKeys.inventory,
+    domainQueryKeys.stockMovements,
+    domainQueryKeys.sales,
+  ]],
+]);
+
+function expandInvalidationKeys(queryKeys: QueryKey[]) {
+  const expanded = queryKeys.flatMap((queryKey) => [
+    queryKey,
+    ...(domainInvalidationDependencies.get(String(queryKey[0])) ?? []),
+  ]);
+  return Array.from(
+    new Map(expanded.map((queryKey) => [JSON.stringify(queryKey), queryKey])).values(),
+  );
+}
+
 type SelectOptions<TQueryFnData, TData> = Pick<
   UseQueryOptions<TQueryFnData, Error, TData>,
   'enabled' | 'select'
 >;
 
-export function useInventoryQuery<TData = RetailApiInventoryItem[]>(
+export function useInventoryQuery<TData = ApiInventoryItem[]>(
   params?: { search?: string; itemType?: string },
-  options?: SelectOptions<RetailApiInventoryItem[], TData>,
+  options?: SelectOptions<ApiInventoryItem[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.inventory, params ?? {}],
@@ -66,8 +116,8 @@ export function useInventoryQuery<TData = RetailApiInventoryItem[]>(
   });
 }
 
-export function useLocationsQuery<TData = RetailApiLocation[]>(
-  options?: SelectOptions<RetailApiLocation[], TData>,
+export function useLocationsQuery<TData = ApiLocation[]>(
+  options?: SelectOptions<ApiLocation[], TData>,
 ) {
   return useQuery({
     queryKey: domainQueryKeys.locations,
@@ -76,8 +126,8 @@ export function useLocationsQuery<TData = RetailApiLocation[]>(
   });
 }
 
-export function useUsersQuery<TData = RetailApiUser[]>(
-  options?: SelectOptions<RetailApiUser[], TData>,
+export function useUsersQuery<TData = ApiUser[]>(
+  options?: SelectOptions<ApiUser[], TData>,
 ) {
   return useQuery({
     queryKey: domainQueryKeys.users,
@@ -86,9 +136,9 @@ export function useUsersQuery<TData = RetailApiUser[]>(
   });
 }
 
-export function usePurchaseOrdersQuery<TData = RetailApiPurchaseOrder[]>(
-  params?: { status?: string; supplierId?: string },
-  options?: SelectOptions<RetailApiPurchaseOrder[], TData>,
+export function usePurchaseOrdersQuery<TData = ApiPurchaseOrder[]>(
+  params?: { module?: BusinessModule; status?: string; supplierId?: string },
+  options?: SelectOptions<ApiPurchaseOrder[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.purchaseOrders, params ?? {}],
@@ -97,9 +147,9 @@ export function usePurchaseOrdersQuery<TData = RetailApiPurchaseOrder[]>(
   });
 }
 
-export function useGoodsReceiptsQuery<TData = RetailApiGoodsReceipt[]>(
-  params?: { purchaseOrderId?: string },
-  options?: SelectOptions<RetailApiGoodsReceipt[], TData>,
+export function useGoodsReceiptsQuery<TData = ApiGoodsReceipt[]>(
+  params?: { module?: BusinessModule; purchaseOrderId?: string },
+  options?: SelectOptions<ApiGoodsReceipt[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.goodsReceipts, params ?? {}],
@@ -108,9 +158,9 @@ export function useGoodsReceiptsQuery<TData = RetailApiGoodsReceipt[]>(
   });
 }
 
-export function useSuppliersQuery<TData = RetailApiSupplier[]>(
-  params?: { isActive?: boolean },
-  options?: SelectOptions<RetailApiSupplier[], TData>,
+export function useSuppliersQuery<TData = ApiSupplier[]>(
+  params?: { module?: BusinessModule; isActive?: boolean },
+  options?: SelectOptions<ApiSupplier[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.suppliers, params ?? {}],
@@ -119,9 +169,14 @@ export function useSuppliersQuery<TData = RetailApiSupplier[]>(
   });
 }
 
-export function useTransfersQuery<TData = RetailApiTransfer[]>(
-  params?: { status?: string; fromLocationId?: string; toLocationId?: string },
-  options?: SelectOptions<RetailApiTransfer[], TData>,
+export function useTransfersQuery<TData = ApiTransfer[]>(
+  params?: {
+    module?: BusinessModule;
+    status?: string;
+    fromLocationId?: string;
+    toLocationId?: string;
+  },
+  options?: SelectOptions<ApiTransfer[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.transfers, params ?? {}],
@@ -130,15 +185,16 @@ export function useTransfersQuery<TData = RetailApiTransfer[]>(
   });
 }
 
-export function useStockMovementsQuery<TData = RetailApiStockMovement[]>(
+export function useStockMovementsQuery<TData = ApiStockMovement[]>(
   params?: {
+    module?: BusinessModule;
     itemId?: string;
     locationId?: string;
     type?: string;
     referenceType?: string;
     referenceId?: string;
   },
-  options?: SelectOptions<RetailApiStockMovement[], TData>,
+  options?: SelectOptions<ApiStockMovement[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.stockMovements, params ?? {}],
@@ -147,9 +203,9 @@ export function useStockMovementsQuery<TData = RetailApiStockMovement[]>(
   });
 }
 
-export function useSalesQuery<TData = RetailApiSale[]>(
-  params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string },
-  options?: SelectOptions<RetailApiSale[], TData>,
+export function useSalesQuery<TData = ApiSale[]>(
+  params?: { module?: BusinessModule; locationId?: string; status?: string; dateFrom?: string; dateTo?: string },
+  options?: SelectOptions<ApiSale[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.sales, params ?? {}],
@@ -158,9 +214,9 @@ export function useSalesQuery<TData = RetailApiSale[]>(
   });
 }
 
-export function useBundlesQuery<TData = RetailApiBundle[]>(
+export function useBundlesQuery<TData = ApiBundle[]>(
   params?: { status?: string },
-  options?: SelectOptions<RetailApiBundle[], TData>,
+  options?: SelectOptions<ApiBundle[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.bundles, params ?? {}],
@@ -169,9 +225,9 @@ export function useBundlesQuery<TData = RetailApiBundle[]>(
   });
 }
 
-export function useRecipesQuery<TData = any[]>(
+export function useRecipesQuery<TData = ApiRecipe[]>(
   params?: { active?: boolean },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<ApiRecipe[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.recipes, params ?? {}],
@@ -180,9 +236,9 @@ export function useRecipesQuery<TData = any[]>(
   });
 }
 
-export function useKitchenOrdersQuery<TData = any[]>(
+export function useKitchenOrdersQuery<TData = ApiKitchenOrder[]>(
   params?: { status?: KitchenOrderStatus },
-  options?: SelectOptions<any[], TData>,
+  options?: SelectOptions<ApiKitchenOrder[], TData>,
 ) {
   return useQuery({
     queryKey: [...domainQueryKeys.kitchenOrders, params ?? {}],
@@ -210,7 +266,9 @@ export function useDomainMutation<TData, TVariables>(
     mutationFn,
     onSuccess: async () => {
       await Promise.all(
-        invalidateKeys.map((queryKey) => queryClient.invalidateQueries({ queryKey })),
+        expandInvalidationKeys(invalidateKeys).map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey }),
+        ),
       );
     },
   });

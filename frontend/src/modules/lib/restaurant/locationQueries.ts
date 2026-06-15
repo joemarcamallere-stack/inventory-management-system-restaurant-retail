@@ -1,0 +1,1 @@
+export { useRestaurantLocationsQuery } from './core';

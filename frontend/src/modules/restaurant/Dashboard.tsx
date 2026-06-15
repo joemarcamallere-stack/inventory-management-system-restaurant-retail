@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, CheckCircle, XCircle, Eye, Clock } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { approvePurchaseOrder, rejectPurchaseOrder } from "../../app/api/client";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
-import { domainQueryKeys, useDomainMutation } from "../lib/domainQueries";
 import {
+  useApproveRestaurantPurchaseOrderMutation,
+  useRejectRestaurantPurchaseOrderMutation,
   useRestaurantGoodsReceiptsQuery,
   useRestaurantInventoryQuery,
   useRestaurantPurchaseOrdersQuery,
@@ -78,14 +78,8 @@ export function Dashboard() {
     (orders) => orders.filter((order) => order.backendStatus === "SUBMITTED"),
   );
   const pendingOrders = pendingOrdersQuery.data ?? [];
-  const approveOrder = useDomainMutation(
-    (orderId: string) => approvePurchaseOrder(orderId),
-    [domainQueryKeys.purchaseOrders, domainQueryKeys.goodsReceipts],
-  );
-  const rejectOrder = useDomainMutation(
-    (orderId: string) => rejectPurchaseOrder(orderId, "Rejected from restaurant dashboard"),
-    [domainQueryKeys.purchaseOrders],
-  );
+  const approveOrder = useApproveRestaurantPurchaseOrderMutation();
+  const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
 
   const handleApproveOrder = async (orderId: string) => {
     await approveOrder.mutateAsync(orderId);
@@ -94,7 +88,7 @@ export function Dashboard() {
   };
 
   const handleRejectOrder = async (orderId: string) => {
-    await rejectOrder.mutateAsync(orderId);
+    await rejectOrder.mutateAsync({ id: orderId, reason: 'Rejected from restaurant dashboard' });
     setShowApprovalModal(false);
     setSelectedOrder(null);
   };

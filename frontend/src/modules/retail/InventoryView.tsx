@@ -10,7 +10,7 @@ import type {
   Adjustment,
   Location,
   User,
-} from '../../app/utils/generateSampleData';
+} from '../../models/retail';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
 
