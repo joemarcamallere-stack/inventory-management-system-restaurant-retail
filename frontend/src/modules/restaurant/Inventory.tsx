@@ -18,6 +18,8 @@ type Product = {
   category: string;
   stock: number;
   maxStock: number;
+  minStock?: number;
+  reorderPoint?: number;
   price: number;
   expiry: string;
   location?: string;
@@ -128,6 +130,8 @@ export function Inventory() {
             category: updatedProduct.category,
             quantity: updatedProduct.stock,
             maxStock: updatedProduct.maxStock,
+            minStock: updatedProduct.minStock,
+            reorderPoint: updatedProduct.reorderPoint,
             price: updatedProduct.price,
             expiryDate: updatedProduct.expiry
               ? new Date(`${updatedProduct.expiry}T00:00:00`).toISOString()
@@ -198,42 +202,26 @@ export function Inventory() {
     }
   };
 
-  const getStockStatus = (stock: number, maxStock: number) => {
-    if (stock === 0) {
-      return {
-        color: "bg-black text-white border-black",
-        label: "Out of Stock",
-        textColor: "text-black"
-      };
+  const getStockStatus = (stock: number, maxStock: number, minStock?: number, reorderPoint?: number) => {
+    if (stock <= 0) {
+      return { color: "bg-black text-white border-black", label: "Out of Stock", textColor: "text-black" };
     }
-
-    const percentage = (stock / maxStock) * 100;
-
-    if (percentage <= 10) {
-      return {
-        color: "bg-red-100 text-red-700 border-red-200",
-        label: "Critical Stock",
-        textColor: "text-red-600"
-      };
-    } else if (percentage <= 30) {
-      return {
-        color: "bg-orange-100 text-orange-700 border-orange-200",
-        label: "Low Stock",
-        textColor: "text-orange-600"
-      };
-    } else if (percentage <= 70) {
-      return {
-        color: "bg-yellow-100 text-yellow-800 border-yellow-200",
-        label: "Medium Stock",
-        textColor: "text-yellow-700"
-      };
-    } else {
-      return {
-        color: "bg-green-100 text-green-700 border-green-200",
-        label: "Healthy Stock",
-        textColor: "text-green-600"
-      };
+    const criticalThreshold = (minStock !== undefined && minStock > 0) ? minStock : (maxStock * 0.1);
+    if (stock <= criticalThreshold) {
+      return { color: "bg-red-100 text-red-700 border-red-200", label: "Critical Stock", textColor: "text-red-600" };
     }
+    const lowThreshold = (reorderPoint !== undefined && reorderPoint > 0) ? reorderPoint : (maxStock * 0.3);
+    if (stock <= lowThreshold) {
+      return { color: "bg-orange-100 text-orange-700 border-orange-200", label: "Low Stock", textColor: "text-orange-600" };
+    }
+    const percentage = maxStock > 0 ? (stock / maxStock) * 100 : 100;
+    if (percentage <= 70) {
+      return { color: "bg-yellow-100 text-yellow-800 border-yellow-200", label: "Medium Stock", textColor: "text-yellow-700" };
+    }
+    if (percentage <= 100) {
+      return { color: "bg-green-100 text-green-700 border-green-200", label: "Healthy Stock", textColor: "text-green-600" };
+    }
+    return { color: "bg-teal-100 text-teal-700 border-teal-200", label: "Overstock", textColor: "text-teal-600" };
   };
 
   return (
@@ -266,35 +254,23 @@ export function Inventory() {
             <p className="text-muted-foreground text-sm">Total</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-black">{products.filter(p => p.stock === 0).length}</p>
+            <p className="text-xl font-bold text-black">{products.filter(p => getStockStatus(p.stock, p.maxStock, p.minStock, p.reorderPoint).label === "Out of Stock").length}</p>
             <p className="text-muted-foreground text-sm">Out</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-red-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return p.stock > 0 && pct <= 10;
-            }).length}</p>
+            <p className="text-xl font-bold text-red-600">{products.filter(p => getStockStatus(p.stock, p.maxStock, p.minStock, p.reorderPoint).label === "Critical Stock").length}</p>
             <p className="text-muted-foreground text-sm">Critical</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-orange-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 10 && pct <= 30;
-            }).length}</p>
+            <p className="text-xl font-bold text-orange-600">{products.filter(p => getStockStatus(p.stock, p.maxStock, p.minStock, p.reorderPoint).label === "Low Stock").length}</p>
             <p className="text-muted-foreground text-sm">Low</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-yellow-700">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 30 && pct <= 70;
-            }).length}</p>
+            <p className="text-xl font-bold text-yellow-700">{products.filter(p => getStockStatus(p.stock, p.maxStock, p.minStock, p.reorderPoint).label === "Medium Stock").length}</p>
             <p className="text-muted-foreground text-sm">Medium</p>
           </div>
           <div className="text-center">
-            <p className="text-xl font-bold text-green-600">{products.filter(p => {
-              const pct = (p.stock / p.maxStock) * 100;
-              return pct > 70 && pct <= 100;
-            }).length}</p>
+            <p className="text-xl font-bold text-green-600">{products.filter(p => getStockStatus(p.stock, p.maxStock, p.minStock, p.reorderPoint).label === "Healthy Stock").length}</p>
             <p className="text-muted-foreground text-sm">Healthy</p>
           </div>
         </div>
@@ -387,7 +363,7 @@ export function Inventory() {
                                     </div>
 
                                     <div>
-                                      <p className={`text-sm font-bold ${getStockStatus(product.stock, product.maxStock).textColor}`}>
+                                      <p className={`text-sm font-bold ${getStockStatus(product.stock, product.maxStock, product.minStock, product.reorderPoint).textColor}`}>
                                         {formatQuantity(product.stock, product.unit)} / {formatQuantity(product.maxStock, product.unit)}
                                       </p>
                                     </div>
@@ -402,8 +378,8 @@ export function Inventory() {
                                   </div>
 
                                   <div className="flex items-center gap-1 flex-shrink-0">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStockStatus(product.stock, product.maxStock).color}`}>
-                                      {getStockStatus(product.stock, product.maxStock).label}
+                                    <span className={`px-2 py-0.5 rounded text-xs font-medium border ${getStockStatus(product.stock, product.maxStock, product.minStock, product.reorderPoint).color}`}>
+                                      {getStockStatus(product.stock, product.maxStock, product.minStock, product.reorderPoint).label}
                                     </span>
                                   </div>
 
@@ -533,11 +509,34 @@ export function Inventory() {
                 </div>
 
                 <div>
+                  <label className="block text-sm mb-2 text-foreground">Min Stock</label>
+                  <input
+                    type="number"
+                    value={editingProduct.minStock ?? ""}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, minStock: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="Critical threshold"
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm mb-2 text-foreground">Reorder Point</label>
+                  <input
+                    type="number"
+                    value={editingProduct.reorderPoint ?? ""}
+                    onChange={(e) => setEditingProduct({ ...editingProduct, reorderPoint: e.target.value ? parseFloat(e.target.value) : undefined })}
+                    placeholder="Low stock threshold"
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  />
+                </div>
+
+                <div>
                   <label className="block text-sm mb-2 text-foreground">Max Stock</label>
                   <input
                     type="number"
                     value={editingProduct.maxStock}
                     onChange={(e) => setEditingProduct({ ...editingProduct, maxStock: parseFloat(e.target.value) })}
+                    placeholder="Maximum capacity"
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                   />
                 </div>
