@@ -8,6 +8,7 @@ import {
   useRestaurantRecipesQuery,
   useSaveRestaurantRecipeMutation,
 } from "../lib/restaurantQueries";
+import { useSession } from "../../app/hooks/useSession";
 
 type Ingredient = {
   id: string;
@@ -41,8 +42,7 @@ type Recipe = {
   instructions: string;
 };
 
-// Use the actual inventory product structure from inventory logic
-// The `inventoryItems` list is loaded from localStorage or defaults when needed.
+// Use the actual inventory product structure from inventory logic.
 type InventoryItem = InventoryProduct & { backendId?: string };
 
 const UNIT_OPTIONS = ["kg", "g", "L", "ml", "pcs", "piece", "liter", "bottle", "pack", "box", "dozen"];
@@ -79,7 +79,8 @@ const calculateRecipeGrossMarginPercent = (recipe: Recipe) => {
 };
 
 export function RecipeBOM() {
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role.toLowerCase() ?? "staff";
   const isAdmin = userRole === "admin";
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");

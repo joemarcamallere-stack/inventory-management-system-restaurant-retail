@@ -1,4 +1,11 @@
-import { useEffect, useState } from 'react';
+import {
+  createContext,
+  createElement,
+  type PropsWithChildren,
+  useContext,
+  useEffect,
+  useState,
+} from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -8,17 +15,17 @@ import {
   type AuthUser,
 } from '../api/client';
 
-function persistUserSummary(user: AuthUser | null) {
-  if (!user) {
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userEmail');
-    return;
-  }
-  localStorage.setItem('userRole', user.role.toLowerCase());
-  localStorage.setItem('userEmail', user.email);
-}
+type SessionContextValue = {
+  currentUser: AuthUser | null;
+  isLoggedIn: boolean;
+  isRestoringSession: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
+};
 
-export function useSession() {
+const SessionContext = createContext<SessionContextValue | null>(null);
+
+export function SessionProvider({ children }: PropsWithChildren) {
   const queryClient = useQueryClient();
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
@@ -29,12 +36,10 @@ export function useSession() {
       .then(({ user }) => {
         if (!active) return;
         setCurrentUser(user);
-        persistUserSummary(user);
       })
       .catch(() => {
         if (!active) return;
         setCurrentUser(null);
-        persistUserSummary(null);
       })
       .finally(() => {
         if (active) setIsRestoringSession(false);
@@ -48,7 +53,6 @@ export function useSession() {
     try {
       const response = await loginUser(email, password);
       setCurrentUser(response.user);
-      persistUserSummary(response.user);
       toast.success('Signed in successfully');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Invalid credentials');
@@ -61,15 +65,24 @@ export function useSession() {
     } finally {
       queryClient.clear();
       setCurrentUser(null);
-      persistUserSummary(null);
     }
   };
 
-  return {
+  const value = {
     currentUser,
     isLoggedIn: Boolean(currentUser),
     isRestoringSession,
     login,
     logout,
   };
+
+  return createElement(SessionContext.Provider, { value }, children);
+}
+
+export function useSession() {
+  const session = useContext(SessionContext);
+  if (!session) {
+    throw new Error('useSession must be used within a SessionProvider');
+  }
+  return session;
 }
