@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { MapPin, Search, Package, TrendingDown, AlertCircle, Building2, BarChart3, Eye, ArrowLeftRight } from "lucide-react";
 import { formatQuantity, getInventoryProducts, getStockStatus, getStorageTemperatureOptions, splitCategory, StockStatus } from "../lib/inventoryLogic";
-import { useRestaurantState } from "../lib/restaurantData";
+import {
+  useRestaurantInventoryQuery,
+  useRestaurantSettings,
+} from "../lib/restaurantQueries";
 
 type LocationStock = {
   location: string;
@@ -121,11 +124,13 @@ export function MultiLocation() {
     },
   ];
 
-  const [inventoryProducts] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [storageTemperatureOptions] = useRestaurantState(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
+  const inventoryQuery = useRestaurantInventoryQuery();
+  const inventoryProducts = inventoryQuery.data ?? getInventoryProducts();
+  const settingsQuery = useRestaurantSettings();
+  const storageTemperatureOptions = (
+    settingsQuery.data?.find((setting) => setting.key === "STORAGE_TEMPERATURE_OPTIONS")?.value
+    ?? getStorageTemperatureOptions()
+  ) as string[];
   const products: Product[] = inventoryProducts.map((item) => {
     const locationName = item.location || "Unassigned";
     const { main } = splitCategory(item.category);
@@ -368,10 +373,11 @@ export function MultiLocation() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">SKU</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Product Name</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Category</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-foreground">Total Stock</th>
+                  <th className="w-28 px-3 py-3 text-center text-xs font-medium text-foreground">Total Stock</th>
                   {selectedLocation === "all" ? (
                     <>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Location Stock Levels</th>
+                      <th className="w-72 px-3 py-3 text-center text-xs font-medium text-foreground">Location Stock Levels</th>
+                      <th className="w-40 px-3 py-3 text-center text-xs font-medium text-foreground">Status</th>
                     </>
                   ) : (
                     <>
@@ -390,21 +396,33 @@ export function MultiLocation() {
                     </td>
                     <td className="px-4 py-3 text-foreground text-sm font-medium">{product.name}</td>
                     <td className="px-4 py-3 text-muted-foreground text-sm">{product.category}</td>
-                    <td className="px-4 py-3 text-center text-foreground text-sm font-bold">
+                    <td className="px-3 py-3 text-center text-foreground text-sm font-bold">
                       {formatQuantity(product.totalStock, product.unit)}
                     </td>
                     {selectedLocation === "all" ? (
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          {product.locations.map((loc, idx) => (
-                            <div key={idx} className="flex items-center gap-2 bg-muted/50 px-2 py-1 rounded-lg">
-                              <MapPin className="w-3 h-3 text-muted-foreground" />
-                              <span className="text-xs text-foreground">{loc.location.split(' ')[0]}: {formatQuantity(loc.currentStock, product.unit)}</span>
-                              {getStatusBadge(loc.status)}
-                            </div>
-                          ))}
-                        </div>
-                      </td>
+                      <>
+                        <td className="px-3 py-3 text-center">
+                          <div className="space-y-2">
+                            {product.locations.map((loc, idx) => (
+                              <div key={idx} className="mx-auto grid min-h-8 w-60 grid-cols-[16px_auto] items-center justify-center gap-2 rounded-lg bg-muted/50 px-3 py-1">
+                                <MapPin className="h-3 w-3 justify-self-center text-muted-foreground" />
+                                <span className="whitespace-nowrap text-center text-xs text-foreground">
+                                  {loc.location}: {formatQuantity(loc.currentStock, product.unit)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="space-y-2">
+                            {product.locations.map((loc, idx) => (
+                              <div key={idx} className="flex min-h-8 items-center justify-center">
+                                {getStatusBadge(loc.status)}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </>
                     ) : (
                       (() => {
                         const locationStock = product.locations.find(loc => loc.location === selectedLocation);

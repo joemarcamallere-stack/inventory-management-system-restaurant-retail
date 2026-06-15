@@ -1,4 +1,5 @@
 import { TransfersService } from './transfers.service';
+import { BusinessModule } from '@prisma/client';
 
 describe('TransfersService', () => {
   it('reuses a SKU-less destination copy on repeated transfers', async () => {
@@ -41,7 +42,11 @@ describe('TransfersService', () => {
           toLocationId: 'destination-location',
           items: [{ inventoryItemId: sourceItem.id, quantity: 2 }],
         }),
-        update: jest.fn().mockResolvedValue({ id: 'transfer', status: 'COMPLETED' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        findFirstOrThrow: jest.fn().mockResolvedValue({
+          id: 'transfer',
+          status: 'COMPLETED',
+        }),
       },
       inventoryItem: {
         findUnique: jest.fn().mockResolvedValue(sourceItem),
@@ -59,7 +64,12 @@ describe('TransfersService', () => {
     };
     const service = new TransfersService(prisma as any);
 
-    await service.complete('transfer', 'business', 'user');
+    await service.complete(
+      'transfer',
+      'business',
+      BusinessModule.RESTAURANT,
+      'user',
+    );
 
     expect(tx.inventoryItem.findFirst).toHaveBeenCalledWith({
       where: {

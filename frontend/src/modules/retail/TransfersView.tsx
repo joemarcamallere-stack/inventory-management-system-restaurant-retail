@@ -1,15 +1,18 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 import {
-  getTransfers,
-  createTransfer,
-  dispatchTransfer,
-  completeTransfer,
-  cancelTransfer,
-  getLocations,
-  getInventory,
-  createStockMovement,
-} from '../../app/api/client';
+  getRetailErrorMessage,
+  type RetailInventoryRecord,
+  useCancelRetailTransferMutation,
+  useCompleteRetailTransferMutation,
+  useCreateRetailAdjustmentMutation,
+  useCreateRetailTransferMutation,
+  useDispatchRetailTransferMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailLocationsQuery,
+  useRetailTransferRecordsQuery,
+} from '../lib/retailQueries';
 
 const TRANSFER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
@@ -25,15 +28,25 @@ const TRANSFER_STATUS_CLASS: Record<string, string> = {
   CANCELLED: 'bg-[#ffe2e2] text-[#E7000B]',
 };
 
+type AdjustmentType = 'Add' | 'Remove' | 'Damage' | 'Lost' | 'Found' | 'Recount';
+
 export default function TransfersView({
   currentUser,
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const transfersQuery = useRetailTransferRecordsQuery();
+  const locationsQuery = useRetailLocationsQuery();
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const addTransfer = useCreateRetailTransferMutation();
+  const dispatch = useDispatchRetailTransferMutation();
+  const complete = useCompleteRetailTransferMutation();
+  const cancel = useCancelRetailTransferMutation();
+  const addAdjustment = useCreateRetailAdjustmentMutation();
+  const transfers = transfersQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = transfersQuery.isLoading || locationsQuery.isLoading || inventoryQuery.isLoading;
   const [activeTab, setActiveTab] = useState<'transfers' | 'adjustments'>('transfers');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
@@ -42,7 +55,12 @@ export default function TransfersView({
   const [itemSearchTerm, setItemSearchTerm] = useState('');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
-  const [saving, setSaving] = useState(false);
+  const saving =
+    addTransfer.isPending ||
+    dispatch.isPending ||
+    complete.isPending ||
+    cancel.isPending ||
+    addAdjustment.isPending;
 
   const [transferForm, setTransferForm] = useState({
     fromLocationId: '',
@@ -52,37 +70,17 @@ export default function TransfersView({
   });
 
   const [adjustmentForm, setAdjustmentForm] = useState({
-    type: 'Add' as 'Add' | 'Remove' | 'Damage' | 'Lost' | 'Found' | 'Recount',
+    type: 'Add' as AdjustmentType,
     reason: '',
     items: [] as { inventoryItemId: string; name: string; quantityChange: number; locationId: string; currentQuantity: number }[],
   });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [transfersData, locationsData, inventoryData] = await Promise.all([
-        getTransfers(),
-        getLocations(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setTransfers(transfersData);
-      setLocations(locationsData);
-      setInventory(inventoryData);
-    } catch (err) {
-      console.error('Failed to load transfers data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
   const availableItemsForTransfer = inventory.filter(
-    (item: any) => item.locationId === transferForm.fromLocationId && item.quantity > 0
+    (item) => item.locationId === transferForm.fromLocationId && item.quantity > 0
   );
 
   const availableItemsForAdjustment = inventory.filter(
-    (item: any) => item.quantity > 0 || adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found'
+    (item) => item.quantity > 0 || adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found'
   );
 
   const toggleCategory = (cat: string) => {
@@ -99,12 +97,12 @@ export default function TransfersView({
 
   const groupedAvailableItems = useMemo(() => {
     const items = activeTab === 'transfers' ? availableItemsForTransfer : availableItemsForAdjustment;
-    const filtered = items.filter((item: any) =>
+    const filtered = items.filter((item) =>
       item.name.toLowerCase().includes(itemSearchTerm.toLowerCase()) ||
       item.category.toLowerCase().includes(itemSearchTerm.toLowerCase())
     );
-    const grouped: Record<string, Record<string, any[]>> = {};
-    filtered.forEach((item: any) => {
+    const grouped: Record<string, Record<string, RetailInventoryRecord[]>> = {};
+    filtered.forEach((item) => {
       const cat = item.category || 'Uncategorized';
       const sub = item.subcategory || 'Other';
       if (!grouped[cat]) grouped[cat] = {};
@@ -114,14 +112,14 @@ export default function TransfersView({
     return grouped;
   }, [availableItemsForTransfer, availableItemsForAdjustment, activeTab, itemSearchTerm]);
 
-  const handleAddItemToTransfer = (item: any) => {
+  const handleAddItemToTransfer = (item: RetailInventoryRecord) => {
     if (!transferForm.items.find(i => i.inventoryItemId === item.id)) {
       setTransferForm({ ...transferForm, items: [...transferForm.items, { inventoryItemId: item.id, name: item.name, quantity: 1, maxQuantity: item.quantity, locationId: item.locationId }] });
     }
     setShowItemSelector(false);
   };
 
-  const handleAddItemToAdjustment = (item: any) => {
+  const handleAddItemToAdjustment = (item: RetailInventoryRecord) => {
     if (!adjustmentForm.items.find(i => i.inventoryItemId === item.id)) {
       const qChange = (adjustmentForm.type === 'Add' || adjustmentForm.type === 'Found') ? 1 : -1;
       setAdjustmentForm({ ...adjustmentForm, items: [...adjustmentForm.items, { inventoryItemId: item.id, name: item.name, quantityChange: qChange, locationId: item.locationId, currentQuantity: item.quantity }] });
@@ -131,12 +129,11 @@ export default function TransfersView({
 
   const handleCreateTransfer = async () => {
     if (!transferForm.fromLocationId || !transferForm.toLocationId || transferForm.items.length === 0) {
-      alert('Fill in all required fields and add at least one item');
+      toast.error('Fill in all required fields and add at least one item');
       return;
     }
-    setSaving(true);
     try {
-      await createTransfer({
+      await addTransfer.mutateAsync({
         fromLocationId: transferForm.fromLocationId,
         toLocationId: transferForm.toLocationId,
         notes: transferForm.notes || undefined,
@@ -144,62 +141,58 @@ export default function TransfersView({
       });
       setTransferForm({ fromLocationId: '', toLocationId: '', notes: '', items: [] });
       setShowTransferModal(false);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to create transfer');
-    } finally {
-      setSaving(false);
+      toast.success('Transfer created successfully');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to create transfer'));
     }
   };
 
   const handleDispatch = async (id: string) => {
     try {
-      await dispatchTransfer(id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to dispatch transfer');
+      await dispatch.mutateAsync(id);
+      toast.success('Transfer dispatched');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to dispatch transfer'));
     }
   };
 
   const handleComplete = async (id: string) => {
     if (!confirm('Complete this transfer? Stock will be moved.')) return;
     try {
-      await completeTransfer(id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to complete transfer');
+      await complete.mutateAsync(id);
+      toast.success('Transfer completed');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to complete transfer'));
     }
   };
 
   const handleCancel = async (id: string) => {
     if (!confirm('Cancel this transfer?')) return;
     try {
-      await cancelTransfer(id);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to cancel transfer');
+      await cancel.mutateAsync(id);
+      toast.success('Transfer cancelled');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to cancel transfer'));
     }
   };
 
   const handleCreateAdjustment = async () => {
     if (!adjustmentForm.reason || adjustmentForm.items.length === 0) {
-      alert('Please provide a reason and add at least one item');
+      toast.error('Please provide a reason and add at least one item');
       return;
     }
-    setSaving(true);
     try {
       for (const adjItem of adjustmentForm.items) {
-        const invItem = inventory.find((i: any) => i.id === adjItem.inventoryItemId);
+        const invItem = inventory.find((item) => item.id === adjItem.inventoryItemId);
         if (!invItem) continue;
-        const qty = Math.abs(adjItem.quantityChange);
-        if (qty === 0) continue;
-        const movType = adjItem.quantityChange >= 0 ? 'STOCK_IN' : 'STOCK_OUT';
-        await createStockMovement({
+        const newQuantity = invItem.quantity + adjItem.quantityChange;
+        if (newQuantity < 0) {
+          throw new Error(`${invItem.name} cannot be adjusted below zero`);
+        }
+        if (newQuantity === invItem.quantity) continue;
+        await addAdjustment.mutateAsync({
           type: 'ADJUSTMENT',
-          quantity: qty,
-          previousQuantity: invItem.quantity,
-          newQuantity: Math.max(0, invItem.quantity + adjItem.quantityChange),
-          unit: invItem.unit,
+          quantity: newQuantity,
           reason: adjustmentForm.reason,
           notes: `${adjustmentForm.type} adjustment`,
           itemId: invItem.id,
@@ -208,11 +201,9 @@ export default function TransfersView({
       }
       setAdjustmentForm({ type: 'Add', reason: '', items: [] });
       setShowAdjustmentModal(false);
-      await loadData();
-    } catch (err: any) {
-      alert(err.message ?? 'Failed to create adjustment');
-    } finally {
-      setSaving(false);
+      toast.success('Stock adjustment saved');
+    } catch (err: unknown) {
+      toast.error(getRetailErrorMessage(err, 'Failed to create adjustment'));
     }
   };
 
@@ -288,7 +279,7 @@ export default function TransfersView({
               <p className="text-[14px] text-[#6b7280] mt-1">Create a transfer to move items between locations</p>
             </div>
           ) : (
-            filteredTransfers.map((transfer: any) => (
+            filteredTransfers.map((transfer) => (
               <div key={transfer.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div>
@@ -316,7 +307,7 @@ export default function TransfersView({
                 <div className="border-t border-[rgba(0,0,0,0.1)] pt-4 mb-4">
                   <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
                   <div className="space-y-2">
-                    {transfer.items?.map((item: any) => (
+                    {transfer.items.map((item) => (
                       <div key={item.id} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] rounded px-3 py-2">
                         <span className="text-[#323B42] font-medium">{item.inventoryItem?.name ?? item.inventoryItemId}</span>
                         <span className="text-[#323B42]">Qty: <span className="font-semibold text-[#007A5E]">{item.quantity}</span></span>
@@ -374,14 +365,14 @@ export default function TransfersView({
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">From Location *</label>
                   <select value={transferForm.fromLocationId} onChange={(e) => setTransferForm({ ...transferForm, fromLocationId: e.target.value, items: [] })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="">Select location</option>
-                    {locations.map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                    {locations.map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">To Location *</label>
                   <select value={transferForm.toLocationId} onChange={(e) => setTransferForm({ ...transferForm, toLocationId: e.target.value })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="">Select location</option>
-                    {locations.filter((loc: any) => loc.id !== transferForm.fromLocationId).map((loc: any) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
+                    {locations.filter((loc) => loc.id !== transferForm.fromLocationId).map((loc) => <option key={loc.id} value={loc.id}>{loc.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -440,7 +431,7 @@ export default function TransfersView({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Adjustment Type *</label>
-                  <select value={adjustmentForm.type} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, type: e.target.value as any, items: [] })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
+                  <select value={adjustmentForm.type} onChange={(e) => setAdjustmentForm({ ...adjustmentForm, type: e.target.value as AdjustmentType, items: [] })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
                     <option value="Add">Add Stock</option>
                     <option value="Remove">Remove Stock</option>
                     <option value="Damage">Damage</option>
@@ -498,7 +489,7 @@ export default function TransfersView({
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h3 className="text-[20px] font-bold text-[#323B42]">Select Items</h3>
-                <p className="text-[14px] text-[#6b7280] mt-1">{activeTab === 'transfers' ? `Items from ${locations.find((l: any) => l.id === transferForm.fromLocationId)?.name ?? 'selected location'}` : 'All inventory items'}</p>
+                <p className="text-[14px] text-[#6b7280] mt-1">{activeTab === 'transfers' ? `Items from ${locations.find((location) => location.id === transferForm.fromLocationId)?.name ?? 'selected location'}` : 'All inventory items'}</p>
               </div>
               <button onClick={() => { setShowItemSelector(false); setItemSearchTerm(''); setExpandedCategories(new Set()); setExpandedSubcategories(new Set()); }} className="p-2 hover:bg-[#F8FAFB] rounded"><X className="size-5 text-[#323B42]" /></button>
             </div>
@@ -541,7 +532,7 @@ export default function TransfersView({
                                 </button>
                                 {isSubExpanded && (
                                   <div className="bg-[#F8FAFB] px-6 py-2 space-y-2">
-                                    {items.map((item: any) => {
+                                    {items.map((item) => {
                                       const isAdded = activeTab === 'transfers'
                                         ? transferForm.items.some(i => i.inventoryItemId === item.id)
                                         : adjustmentForm.items.some(i => i.inventoryItemId === item.id);

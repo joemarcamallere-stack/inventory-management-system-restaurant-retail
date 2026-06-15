@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -11,20 +10,12 @@ import type {
   Adjustment,
   Location,
   User,
-} from '../../app/utils/generateSampleData';
+} from '../../models/retail';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import type { RetailStockAlert } from '../lib/retailQueries';
 
-
-export interface StockAlert {
-  id: string;
-  itemName: string;
-  currentStock: number;
-  threshold: number;
-  severity: 'low' | 'critical';
-}
-
-export function StockAlertsView({ alerts, inventory }: { alerts: StockAlert[]; inventory: InventoryItem[] }) {
+export function StockAlertsView({ alerts, inventory }: { alerts: RetailStockAlert[]; inventory: InventoryItem[] }) {
   const [activeTab, setActiveTab] = useState<'low-stock' | 'stock-control' | 'bad-condition'>('low-stock');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category'>('quantity');
@@ -45,7 +36,7 @@ export function StockAlertsView({ alerts, inventory }: { alerts: StockAlert[]; i
     return alerts.map(alert => {
       const item = inventory.find(i => i.id === alert.id);
       return item ? { ...item, alert } : null;
-    }).filter(Boolean) as (InventoryItem & { alert: StockAlert })[];
+    }).filter(Boolean) as (InventoryItem & { alert: RetailStockAlert })[];
   }, [alerts, inventory]);
 
   // Get damaged items

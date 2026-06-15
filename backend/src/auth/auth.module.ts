@@ -5,6 +5,7 @@ import { UsersModule } from '../users/users.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
+import { getJwtSecret } from './jwt-secret';
 import { RolesGuard } from './roles.guard';
 
 @Global()
@@ -16,7 +17,7 @@ import { RolesGuard } from './roles.guard';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') ?? 'dev-only-secret',
+        secret: getJwtSecret(configService),
         signOptions: { expiresIn: '8h' },
       }),
     }),
