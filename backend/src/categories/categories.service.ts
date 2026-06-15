@@ -58,7 +58,7 @@ export class CategoriesService {
 
   async remove(id: string, businessId: string) {
     await this.findOne(id, businessId);
-    const [itemCount, supplierCount] = await this.prisma.$transaction([
+    const [itemCount, supplierCount] = await Promise.all([
       this.prisma.inventoryItem.count({ where: { categoryId: id } }),
       this.prisma.supplier.count({ where: { categoryId: id } }),
     ]);

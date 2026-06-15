@@ -23,7 +23,7 @@ export class NotificationsService {
       businessId,
       ...(onlyUnread ? { isRead: false } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.notification.findMany({
         where,
         orderBy: { createdAt: 'desc' },

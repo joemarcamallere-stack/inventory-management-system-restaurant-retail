@@ -25,7 +25,7 @@ export class LocationsService {
 
   async findAll(businessId: string, page = 1, limit = 50): Promise<PaginatedResult<any>> {
     const where = { businessId };
-    const [locations, total] = await this.prisma.$transaction([
+    const [locations, total] = await Promise.all([
       this.prisma.location.findMany({
         where,
         include: { _count: { select: { items: true } } },

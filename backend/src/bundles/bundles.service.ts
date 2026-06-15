@@ -78,7 +78,7 @@ export class BundlesService {
       ...(status ? { status: status as any } : {}),
       ...(locationId ? { locationId } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.bundlePackage.findMany({
         where,
         include: this.bundleInclude,

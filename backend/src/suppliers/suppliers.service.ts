@@ -41,7 +41,7 @@ export class SuppliersService {
       businessId,
       ...(isActive !== undefined ? { isActive } : {}),
     };
-    const [data, total] = await this.prisma.$transaction([
+    const [data, total] = await Promise.all([
       this.prisma.supplier.findMany({
         where,
         include: { categoryRef: true },
