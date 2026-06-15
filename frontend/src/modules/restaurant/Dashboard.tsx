@@ -37,12 +37,15 @@ type GoodsRecordSummary = {
 const goToInventory = () =>
   window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
 
+const goToPurchaseOrders = () => {
+  sessionStorage.setItem('po-open-approval', 'true');
+  window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-purchase-orders' }));
+};
+
 export function Dashboard() {
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
-  const [showApprovalModal, setShowApprovalModal] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<PendingOrder | null>(null);
   const [userRole, setUserRole] = useState<string>("staff");
 
   useEffect(() => {
@@ -402,8 +405,8 @@ export function Dashboard() {
 
       {/* Pending Purchase Order Approvals - Admin Only */}
       {userRole === "admin" && pendingOrders.length > 0 && (
-        <div className="bg-card rounded-2xl p-6 shadow-sm border border-border mb-8">
-          <div className="flex items-center justify-between mb-6">
+        <div className="bg-card rounded-2xl p-6 shadow-sm border border-amber-200 mb-8">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-gradient-to-br from-amber-500 to-orange-500 rounded-xl flex items-center justify-center">
                 <Clock className="w-5 h-5 text-white" />
@@ -413,17 +416,24 @@ export function Dashboard() {
                 <p className="text-sm text-muted-foreground">{pendingOrders.length} order{pendingOrders.length !== 1 ? 's' : ''} pending your review</p>
               </div>
             </div>
+            <button
+              onClick={goToPurchaseOrders}
+              className="px-4 py-2 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors flex items-center gap-2 text-sm font-medium"
+            >
+              Go to Purchase Orders
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
 
           <div className="space-y-3">
             {pendingOrders.map((order) => (
               <div
                 key={order.id}
-                className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl hover:shadow-md transition-all"
+                className="flex items-center justify-between p-4 bg-amber-50 border border-amber-200 rounded-xl"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-white rounded-lg flex items-center justify-center border border-amber-200">
-                    <ShoppingCart className="w-6 h-6 text-amber-600" />
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border border-amber-200">
+                    <ShoppingCart className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2 mb-1">
@@ -442,33 +452,9 @@ export function Dashboard() {
                     </p>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-right mr-4">
-                    <p className="text-xs text-muted-foreground">Total Amount</p>
-                    <p className="text-lg font-bold text-foreground">₱{order.total.toLocaleString()}</p>
-                  </div>
-                  <button
-                    onClick={() => handleViewOrder(order)}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-                  >
-                    <Eye className="w-4 h-4" />
-                    Review
-                  </button>
-                  <button
-                    onClick={() => handleApproveOrder(order.id)}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Approve
-                  </button>
-                  <button
-                    onClick={() => handleRejectOrder(order.id)}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject
-                  </button>
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Total Amount</p>
+                  <p className="text-lg font-bold text-foreground">₱{order.total.toLocaleString()}</p>
                 </div>
               </div>
             ))}
@@ -501,86 +487,6 @@ export function Dashboard() {
         </div>
       </div>
 
-      {/* Approval Modal */}
-      {showApprovalModal && selectedOrder && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowApprovalModal(false)}>
-          <div className="bg-card rounded-2xl shadow-xl border border-border w-full max-w-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="p-6 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Review Purchase Order</h2>
-                <p className="text-sm text-muted-foreground mt-1">{selectedOrder.id}</p>
-              </div>
-              <button
-                onClick={() => setShowApprovalModal(false)}
-                className="p-2 hover:bg-muted rounded-xl transition-colors"
-              >
-                <XCircle className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Supplier</p>
-                  <p className="font-semibold text-foreground">{selectedOrder.supplier}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Created By</p>
-                  <p className="font-semibold text-foreground">{selectedOrder.createdBy}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Order Date</p>
-                  <p className="font-semibold text-foreground">{new Date(selectedOrder.date).toLocaleDateString()}</p>
-                </div>
-                <div className="bg-muted/30 rounded-xl p-4">
-                  <p className="text-xs text-muted-foreground mb-1">Expected Delivery</p>
-                  <p className="font-semibold text-foreground">{new Date(selectedOrder.expectedDelivery).toLocaleDateString()}</p>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-blue-900 font-medium">Total Items</p>
-                    <p className="text-2xl font-bold text-blue-900">{selectedOrder.items}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm text-blue-900 font-medium">Total Amount</p>
-                    <p className="text-2xl font-bold text-blue-900">₱{selectedOrder.total.toLocaleString()}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-600" />
-                  <p className="text-sm font-semibold text-amber-900">Action Required</p>
-                </div>
-                <p className="text-sm text-amber-800">
-                  This purchase order was created by <strong>{selectedOrder.createdBy}</strong> and requires your approval before processing.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 border-t border-border flex gap-3">
-              <button
-                onClick={() => handleRejectOrder(selectedOrder.id)}
-                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                <XCircle className="w-5 h-5" />
-                Reject Order
-              </button>
-              <button
-                onClick={() => handleApproveOrder(selectedOrder.id)}
-                className="flex-1 px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all duration-200 flex items-center justify-center gap-2"
-              >
-                <CheckCircle className="w-5 h-5" />
-                Approve Order
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
