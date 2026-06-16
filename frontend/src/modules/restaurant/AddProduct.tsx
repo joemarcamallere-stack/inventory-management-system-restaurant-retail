@@ -7,7 +7,6 @@ import {
   useRestaurantInventoryQuery,
   useRestaurantLocationsQuery,
   useRestaurantSettings,
-  useRestaurantSuppliersQuery,
   useUpsertRestaurantSettingMutation,
 } from "../lib/restaurantQueries";
 
@@ -75,7 +74,6 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     unit: "",
   });
 
-<<<<<<< HEAD
   const productsQuery = useRestaurantInventoryQuery<StoredProduct[]>();
   const products = productsQuery.data
     ?? defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" }));
@@ -88,23 +86,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
   const [temperatureOverride, setTemperatureOverride] = useState<string[]>();
   const categoryHierarchy = categoryOverride ?? savedCategoryHierarchy ?? getCategoryHierarchy();
   const storageTemperatureOptions = temperatureOverride ?? savedTemperatureOptions ?? getStorageTemperatureOptions();
-  const suppliersQuery = useRestaurantSuppliersQuery();
-  const storedSuppliers = (suppliersQuery.data ?? []) as Supplier[];
   const locationsQuery = useRestaurantLocationsQuery();
-=======
-  const [products] = useRestaurantState<StoredProduct[]>(
-    "inventory.products",
-    defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" })),
-  );
-  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
-    "inventory.categoryHierarchy",
-    getCategoryHierarchy(),
-  );
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
->>>>>>> restaurant-adjustments
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
   const createInventoryMutation = useCreateRestaurantInventoryMutation();
   const saveSetting = useUpsertRestaurantSettingMutation();

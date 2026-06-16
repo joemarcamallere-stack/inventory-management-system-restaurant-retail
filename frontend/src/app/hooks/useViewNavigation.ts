@@ -21,7 +21,7 @@ export type ViewType =
   | 'restaurant-dashboard'
   | 'restaurant-stock-control'
   | 'restaurant-food-inventory'
-  | 'restaurant-add-food-item'
+  | 'restaurant-product-management'
   | 'restaurant-purchase-orders'
   | 'restaurant-goods-received'
   | 'restaurant-pos'

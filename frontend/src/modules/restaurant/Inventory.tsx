@@ -1,23 +1,15 @@
 import { useState } from "react";
-<<<<<<< HEAD
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
-=======
-import { useQuery } from "@tanstack/react-query";
-import { Search, Edit, Trash2, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package, PlusCircle } from "lucide-react";
->>>>>>> restaurant-adjustments
+import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-<<<<<<< HEAD
 import {
   useDeleteRestaurantInventoryMutation,
   useRestaurantInventoryQuery,
   useRestaurantLocationsQuery,
+  useRestaurantSettings,
   useUpdateRestaurantInventoryMutation,
 } from "../lib/restaurantQueries";
-=======
-import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
 import { AddProduct } from "./AddProduct";
->>>>>>> restaurant-adjustments
 
 type Product = {
   id: number;
@@ -51,16 +43,13 @@ export function Inventory() {
   const [editMainCategory, setEditMainCategory] = useState("");
   const [editSubCategory, setEditSubCategory] = useState("");
 
-  // Hierarchical category structure — read from persisted backend settings so
-  // categories added via Initial Stock Setup appear here immediately.
-  const [categoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
-    "inventory.categoryHierarchy",
-    getCategoryHierarchy(),
-  );
-  const [storageTemperatureOptions] = useRestaurantState<string[]>(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
+  const settingsQuery = useRestaurantSettings();
+  const categoryHierarchy =
+    (settingsQuery.data?.find((s) => s.key === "CATEGORY_HIERARCHY")?.value as { [key: string]: string[] } | undefined)
+    ?? getCategoryHierarchy();
+  const storageTemperatureOptions =
+    (settingsQuery.data?.find((s) => s.key === "STORAGE_TEMPERATURE_OPTIONS")?.value as string[] | undefined)
+    ?? getStorageTemperatureOptions();
 
   const productsQuery = useRestaurantInventoryQuery<Product[]>();
   const products = productsQuery.data ?? defaultInventoryProducts;
