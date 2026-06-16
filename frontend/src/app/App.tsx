@@ -2,11 +2,31 @@ import { lazy, useState, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
+<<<<<<< HEAD
+=======
+import TransfersView from '../modules/retail/TransfersView';
+import MultilocationView from '../modules/retail/MultilocationView';
+import PurchaseOrdersView from '../modules/retail/PurchaseOrdersView';
+import POSView from '../modules/retail/POSView';
+import { DashboardView, StockAlertsView, InventoryView, ProductsReceivedView, ItemBundlingView, ReportsView, UserManagementView } from '../modules/retail/RetailViews';
+import { Dashboard as RestaurantDashboard } from '../modules/restaurant/Dashboard';
+import { StockControl as RestaurantStockControl } from '../modules/restaurant/StockControl';
+import { Inventory as RestaurantInventory } from '../modules/restaurant/Inventory';
+import { ProductManagement as RestaurantProductManagement } from '../modules/restaurant/ProductManagement';
+import { PurchaseOrders as RestaurantPurchaseOrders } from '../modules/restaurant/PurchaseOrders';
+import { GoodsReceived as RestaurantGoodsReceived } from '../modules/restaurant/GoodsReceived';
+import { POSKitchenOrders as RestaurantPOSKitchenOrders } from '../modules/restaurant/POSKitchenOrders';
+import { RecipeBOM as RestaurantRecipeBOM } from '../modules/restaurant/RecipeBOM';
+import { Transfers as RestaurantTransfers } from '../modules/restaurant/Transfers';
+import { Reports as RestaurantReports } from '../modules/restaurant/Reports';
+import { MultiLocation as RestaurantMultiLocation } from '../modules/restaurant/MultiLocation';
+>>>>>>> restaurant-adjustments
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
 import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
 import { useRetailWorkspace } from './hooks/useRetailWorkspace';
 
+<<<<<<< HEAD
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
 const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
@@ -30,6 +50,84 @@ const RestaurantTransfers = lazy(() => import('../modules/restaurant/Transfers')
 const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').then((module) => ({ default: module.Reports })));
 const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then((module) => ({ default: module.MultiLocation })));
 const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then((module) => ({ default: module.UserManagement })));
+=======
+// Import types and sample data generation
+import type {
+  InventoryItem,
+  PurchaseOrder,
+  ProductReceived,
+  Transfer,
+  Adjustment,
+  Location,
+  User,
+} from './utils/generateSampleData';
+
+// Types
+interface StockAlert {
+  id: string;
+  itemName: string;
+  currentStock: number;
+  threshold: number;
+  severity: 'low' | 'critical';
+}
+
+type ApiLocation = Location & { _count?: { items: number } };
+type ApiInventoryItem = Omit<InventoryItem, 'dateAdded' | 'location' | 'targetCustomer' | 'subcategory' | 'size' | 'condition'> & {
+  dateAdded: string;
+  locationId: string;
+  location?: ApiLocation;
+  itemType?: string;
+  sku?: string | null;
+  targetCustomer?: InventoryItem['targetCustomer'] | null;
+  subcategory?: string | null;
+  size?: string | null;
+  condition?: InventoryItem['condition'] | null;
+  unit?: string | null;
+  minStock?: number | null;
+  maxStock?: number | null;
+  reorderPoint?: number | null;
+  expiryDate?: string | null;
+  storageTemperature?: string | null;
+};
+
+const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
+
+const mapApiLocation = (location: ApiLocation): Location => ({
+  id: location.id,
+  name: location.name,
+  address: location.address,
+  manager: location.manager,
+  phone: location.phone,
+  itemCount: location.itemCount ?? location._count?.items ?? 0
+});
+
+const mapApiInventoryItem = (item: ApiInventoryItem): InventoryItem & { locationId?: string } => ({
+  id: item.id,
+  name: item.name,
+  category: item.category,
+  targetCustomer: item.targetCustomer ?? 'Unisex',
+  subcategory: item.subcategory ?? 'General',
+  size: item.size ?? 'N/A',
+  condition: item.condition ?? 'Good',
+  quantity: item.quantity,
+  price: item.price,
+  dateAdded: formatDate(item.dateAdded),
+  location: item.location?.name ?? 'Unknown Location',
+  locationId: item.locationId
+});
+
+const mapApiUser = (user: any): User => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  status: user.status,
+  lastLogin: formatDate(user.lastLogin)
+});
+
+
+type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation' | 'restaurant-product-management';
+>>>>>>> restaurant-adjustments
 
 export default function App() {
   const {
@@ -144,8 +242,8 @@ export default function App() {
         case 'restaurant-food-inventory':
         case 'restaurant-menu-items':
           return <RestaurantInventory />;
-        case 'restaurant-add-food-item':
-          return <RestaurantAddProduct />;
+        case 'restaurant-product-management':
+          return <RestaurantProductManagement />;
         case 'restaurant-purchase-orders':
           return <RestaurantPurchaseOrders />;
         case 'restaurant-goods-received':

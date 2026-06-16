@@ -16,6 +16,16 @@ import {
 } from "../lib/restaurantQueries";
 import { useSession } from "../../app/hooks/useSession";
 
+const buildGeneratedSku = (name: string, suffix: number) => {
+  const skuBase = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 10);
+  return `${skuBase || "ITEM"}-${suffix}`;
+};
+
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
   return (name || '')
@@ -324,6 +334,7 @@ export function PurchaseOrders() {
     },
   ];
 
+<<<<<<< HEAD
   const suppliersQuery = useRestaurantSuppliersQuery();
   const [supplierOverrides, setSupplierOverrides] = useState<Supplier[]>([]);
   const suppliers = (suppliersQuery.data ?? []).map((supplier) =>
@@ -334,6 +345,86 @@ export function PurchaseOrders() {
   const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
   const cancelOrder = useCancelRestaurantPurchaseOrderMutation();
   const addSupplier = useCreateRestaurantSupplierMutation();
+=======
+  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
+  const saveOrder = useRestaurantMutation(
+    async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
+      const supplier = suppliers.find((item) => item.name === order.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) throw new Error("Select a supplier saved in the database");
+
+      const locations = await getLocations();
+      if (!locations[0]) throw new Error("Create a location before ordering a new product");
+
+      const apiItems = [];
+      for (const line of order.items) {
+        const product = globalProducts.find((item) =>
+          item.id === line.productId || item.inventoryId === line.inventoryId
+        );
+        let inventoryItemId = product?.backendId
+          ?? (product?.id && !product.id.startsWith("gp-") && !product.id.startsWith("inv-") ? product.id : undefined);
+
+        if (!inventoryItemId) {
+          const created = await createInventoryItem({
+            name: line.productName,
+            itemType: "INGREDIENT",
+            sku: line.sku?.trim() || buildGeneratedSku(line.productName, Date.now() % 100000),
+            category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
+            quantity: 0,
+            price: line.unitPrice,
+            unit: line.unit || "pcs",
+            minStock: 0,
+            maxStock: 0,
+            reorderPoint: 0,
+            locationId: locations[0].id,
+          });
+          inventoryItemId = created.id;
+        }
+
+        apiItems.push({
+          inventoryItemId,
+          name: line.productName,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+        });
+      }
+
+      const payload = {
+        supplierId,
+        expectedDelivery: order.expectedDelivery
+          ? new Date(`${order.expectedDelivery}T00:00:00`).toISOString()
+          : undefined,
+        items: apiItems,
+      };
+      if (editingId) return updatePurchaseOrder(editingId, payload);
+      const created = await createPurchaseOrder(payload);
+      return submitPurchaseOrder(created.id);
+    },
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "purchaseOrders.globalProducts"],
+  );
+  const approveOrder = useRestaurantMutation(
+    (id: string) => approvePurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders", "goodsReceived.records"],
+  );
+  const rejectOrder = useRestaurantMutation(
+    ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const cancelOrder = useRestaurantMutation(
+    (id: string) => cancelPurchaseOrder(id),
+    ["purchaseOrders.orders", "dashboard.pendingOrders"],
+  );
+  const addSupplier = useRestaurantMutation(
+    (supplier: Supplier) => createSupplier({
+      name: supplier.name,
+      contactPerson: supplier.contact,
+      email: supplier.email,
+      phone: supplier.phone,
+      address: supplier.address,
+    }),
+    ["purchaseOrders.suppliers"],
+  );
+>>>>>>> restaurant-adjustments
 
   // Get available products from selected supplier
   const availableProducts = newOrder.supplier

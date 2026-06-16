@@ -1,13 +1,23 @@
 import { useState } from "react";
+<<<<<<< HEAD
 import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package } from "lucide-react";
+=======
+import { useQuery } from "@tanstack/react-query";
+import { Search, Edit, Trash2, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package, PlusCircle } from "lucide-react";
+>>>>>>> restaurant-adjustments
 import { toast } from "sonner";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
+<<<<<<< HEAD
 import {
   useDeleteRestaurantInventoryMutation,
   useRestaurantInventoryQuery,
   useRestaurantLocationsQuery,
   useUpdateRestaurantInventoryMutation,
 } from "../lib/restaurantQueries";
+=======
+import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
+import { AddProduct } from "./AddProduct";
+>>>>>>> restaurant-adjustments
 
 type Product = {
   id: number;
@@ -28,20 +38,29 @@ type Product = {
 };
 
 export function Inventory() {
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedMainCategories, setExpandedMainCategories] = useState<Set<string>>(new Set());
   const [expandedSubCategories, setExpandedSubCategories] = useState<Set<string>>(new Set());
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showInitialStockModal, setShowInitialStockModal] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
   const [transferProduct, setTransferProduct] = useState<Product | null>(null);
   const [editMainCategory, setEditMainCategory] = useState("");
   const [editSubCategory, setEditSubCategory] = useState("");
 
-  // Hierarchical category structure
-  const categoryHierarchy = getCategoryHierarchy();
-  const storageTemperatureOptions = getStorageTemperatureOptions();
+  // Hierarchical category structure — read from persisted backend settings so
+  // categories added via Initial Stock Setup appear here immediately.
+  const [categoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
+    "inventory.categoryHierarchy",
+    getCategoryHierarchy(),
+  );
+  const [storageTemperatureOptions] = useRestaurantState<string[]>(
+    "inventory.storageTemperatureOptions",
+    getStorageTemperatureOptions(),
+  );
 
   const productsQuery = useRestaurantInventoryQuery<Product[]>();
   const products = productsQuery.data ?? defaultInventoryProducts;
@@ -227,8 +246,17 @@ export function Inventory() {
   return (
     <div className="p-8">
       {/* Header */}
-      <div className="mb-8">
+      <div className="mb-8 flex items-center justify-between">
         <h1 className="text-3xl font-bold text-foreground">Inventory</h1>
+        {userRole === "admin" && (
+          <button
+            onClick={() => setShowInitialStockModal(true)}
+            className="px-4 py-2 bg-muted text-foreground border border-border rounded-xl hover:bg-muted/80 transition-colors text-sm font-medium flex items-center gap-2"
+          >
+            <PlusCircle className="w-4 h-4" />
+            Initial Stock Setup
+          </button>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -692,6 +720,24 @@ export function Inventory() {
                 Transfer Item
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Initial Stock Setup Modal */}
+      {showInitialStockModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-auto">
+          <div className="min-h-full bg-background">
+            <div className="sticky top-0 bg-card border-b border-border px-8 py-3 flex items-center justify-between z-10">
+              <p className="text-sm font-medium text-muted-foreground">Admin — Initial Stock Setup</p>
+              <button
+                onClick={() => setShowInitialStockModal(false)}
+                className="p-2 hover:bg-muted rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <AddProduct onClose={() => setShowInitialStockModal(false)} />
           </div>
         </div>
       )}

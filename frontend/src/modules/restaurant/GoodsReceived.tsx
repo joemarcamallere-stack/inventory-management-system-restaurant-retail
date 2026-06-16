@@ -513,6 +513,115 @@ export function GoodsReceived() {
       return;
     }
 
+<<<<<<< HEAD
+=======
+    setReceivedGoods(receivedGoods.map(item =>
+      item.id === selectedItem.id
+        ? { ...item, status: newStatus, notes: newNotes, receivedItems: receivedItemsWithExpiry, totalValue: payableTotal }
+        : item
+    ));
+
+    const poStatus = newStatus === "verified" ? "received" : newStatus;
+    setPurchaseOrders(
+      purchaseOrders.map(order => order.id === selectedItem.poId ? { ...order, status: poStatus } : order)
+    );
+
+    if (decision === "accept") {
+      const checkedReceivedItems = receivedItemsWithExpiry
+        ?.filter((item) => (item.acceptedQuantity || 0) > 0)
+        .map((item) => ({ ...item, quantity: item.acceptedQuantity || 0 })) || [];
+
+      const matchedItems = checkedReceivedItems.map((item) => ({
+        item,
+        product: findInventoryProduct(products, item),
+      }));
+
+      const updateMatchedProducts = products.map((product) => {
+        const receivedItems = matchedItems
+          .filter((match) => match.product?.id === product.id)
+          .map((match) => match.item);
+
+        if (receivedItems.length === 0) return product;
+
+        const quantityToAdd = receivedItems.reduce((sum, item) => sum + item.quantity, 0);
+        const nextStock = product.stock + quantityToAdd;
+        const receivedValue = receivedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const wacPrice = nextStock > 0
+          ? (product.stock * product.price + receivedValue) / nextStock
+          : product.price;
+        const earliestExpiry = getEarliestDate([
+          product.expiry,
+          ...receivedItems.map((item) => item.expiryDate || ""),
+        ]);
+
+        return {
+          ...product,
+          stock: nextStock,
+          maxStock: Math.max(product.maxStock, nextStock),
+          price: wacPrice,
+          expiry: earliestExpiry,
+          storageTemperature: receivedItems[receivedItems.length - 1].storageTemperature || (product as any).storageTemperature || "",
+          unit: product.unit || receivedItems[0].unit || "pcs",
+        };
+      });
+
+      const unmatchedItems = matchedItems
+        .filter((match) => !match.product)
+        .map((match) => match.item);
+
+      let nextId = products.reduce((maxId, product) => Math.max(maxId, product.id), 0) + 1;
+      const createdProducts: InventoryProduct[] = unmatchedItems.map((item) => {
+        const sku = item.sku?.trim() || buildGeneratedSku(item.productName, nextId);
+        const category = buildCategory(item);
+        const created = {
+          id: nextId,
+          name: item.productName,
+          sku,
+          category,
+          stock: item.quantity,
+          maxStock: Math.max(item.quantity, 1),
+          price: item.unitPrice || 0,
+          expiry: item.expiryDate || "",
+          storageTemperature: item.storageTemperature || "",
+          location: "Unassigned",
+          unit: item.unit || "pcs",
+        };
+        nextId += 1;
+        return created;
+      });
+
+      setProducts([...updateMatchedProducts, ...createdProducts]);
+
+      const acceptedInventoryLinks = [
+        ...matchedItems
+          .filter((match) => match.product)
+          .map((match) => ({ item: match.item, product: match.product! })),
+        ...unmatchedItems.map((item, index) => ({ item, product: createdProducts[index] })),
+      ];
+
+      setGlobalProducts(
+        globalProducts.map((product) => {
+          const link = acceptedInventoryLinks.find(({ item }) =>
+            item.productId === product.id ||
+            normalizeSku(item.sku) === normalizeSku(product.sku) ||
+            normalizeText(item.productName) === normalizeText(product.name)
+          );
+
+          return link
+            ? { ...product, inventoryId: link.product.id, sku: product.sku || link.product.sku, unit: link.product.unit }
+            : product;
+        })
+      );
+    }
+
+    await invalidateRestaurantData(
+      "goodsReceived.records",
+      "purchaseOrders.orders",
+      "inventory.products",
+      "purchaseOrders.globalProducts",
+    );
+
+>>>>>>> restaurant-adjustments
     setShowQualityCheckModal(false);
     setSelectedItem(null);
   };

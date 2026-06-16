@@ -9,7 +9,7 @@ import {
   LogOut,
   MapPin,
   Package,
-  PlusCircle,
+  PackageSearch,
   ReceiptText,
   Shield,
   ShoppingCart,
@@ -24,7 +24,6 @@ const navItems = [
   { view: "restaurant-dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-stock-control", icon: Package, label: "Stock Control & Alerts", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-food-inventory", icon: Apple, label: "Food Inventory", roles: ["Admin", "Manager", "Staff"] },
-  { view: "restaurant-add-food-item", icon: PlusCircle, label: "Add Food Item", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-purchase-orders", icon: ShoppingCart, label: "Purchase Orders", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-goods-received", icon: ClipboardCheck, label: "Goods Received", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-pos", icon: ReceiptText, label: "POS / Kitchen Orders", roles: ["Admin", "Manager", "Staff"] },
@@ -32,6 +31,7 @@ const navItems = [
   { view: "restaurant-transfers", icon: ArrowLeftRight, label: "Transfers & Adjustments", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-multilocation", icon: MapPin, label: "Multi-Location", roles: ["Admin", "Manager", "Staff"] },
   { view: "restaurant-reports", icon: FileText, label: "Reports", roles: ["Admin", "Manager", "Staff"] },
+  { view: "restaurant-product-management", icon: PackageSearch, label: "Product Management", roles: ["Admin"] },
   { view: "user-management", icon: Users, label: "User Management", roles: ["Admin"] },
 ] as const;
 

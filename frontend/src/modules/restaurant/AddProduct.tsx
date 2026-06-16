@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Apple, PhilippinePeso, Hash, Tag, Folder, FileText, Save, X, Calendar, Plus, FolderPlus } from "lucide-react";
+import { Apple, PhilippinePeso, Hash, Folder, Save, X, Calendar, Plus, FolderPlus, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
 import {
@@ -10,6 +10,16 @@ import {
   useRestaurantSuppliersQuery,
   useUpsertRestaurantSettingMutation,
 } from "../lib/restaurantQueries";
+
+const buildGeneratedSku = (name: string, id: number) => {
+  const skuBase = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 10);
+  return `${skuBase || "ITEM"}-${id}`;
+};
 
 type StoredProduct = {
   id: number;
@@ -28,19 +38,23 @@ type StoredProduct = {
   storageTemperature?: string;
 };
 
-type Supplier = {
-  name: string;
-  contact: string;
-  email: string;
-  phone: string;
-  address: string;
-  products: { name: string; price: number }[];
-};
 
-const goToInventory = () =>
-  window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-food-inventory' }));
+export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
 
-export function AddProduct() {
+  if (userRole !== "admin") {
+    return (
+      <div className="p-8">
+        <div className="max-w-2xl rounded-xl border border-red-200 bg-red-50 p-6">
+          <div className="flex items-center gap-3 text-red-800">
+            <ShieldAlert className="h-6 w-6" />
+            <h1 className="text-xl font-bold">Admin Access Required</h1>
+          </div>
+          <p className="mt-3 text-sm text-red-700">Initial Stock Setup is restricted to admin users. To add new items to inventory, use the Purchase Orders workflow.</p>
+        </div>
+      </div>
+    );
+  }
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedSubCategory, setSelectedSubCategory] = useState("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -56,13 +70,12 @@ export function AddProduct() {
     minStock: "",
     maxStock: "",
     reorderPoint: "",
-    supplier: "",
     expiryDate: "",
     storageTemp: "",
-    description: "",
     unit: "",
   });
 
+<<<<<<< HEAD
   const productsQuery = useRestaurantInventoryQuery<StoredProduct[]>();
   const products = productsQuery.data
     ?? defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" }));
@@ -78,6 +91,20 @@ export function AddProduct() {
   const suppliersQuery = useRestaurantSuppliersQuery();
   const storedSuppliers = (suppliersQuery.data ?? []) as Supplier[];
   const locationsQuery = useRestaurantLocationsQuery();
+=======
+  const [products] = useRestaurantState<StoredProduct[]>(
+    "inventory.products",
+    defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" })),
+  );
+  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
+    "inventory.categoryHierarchy",
+    getCategoryHierarchy(),
+  );
+  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
+    "inventory.storageTemperatureOptions",
+    getStorageTemperatureOptions(),
+  );
+>>>>>>> restaurant-adjustments
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
   const createInventoryMutation = useCreateRestaurantInventoryMutation();
   const saveSetting = useUpsertRestaurantSettingMutation();
@@ -113,12 +140,13 @@ export function AddProduct() {
     const minStock = formData.minStock ? Number(formData.minStock) : undefined;
     const maxStock = formData.maxStock ? Number(formData.maxStock) : Math.max(stock * 2, 1);
     const reorderPoint = formData.reorderPoint ? Number(formData.reorderPoint) : undefined;
+    const sku = formData.sku.trim() || buildGeneratedSku(formData.name, nextId);
 
     const productToAdd: StoredProduct = {
       id: nextId,
       name: formData.name,
       itemType: formData.itemType,
-      sku: formData.sku,
+      sku,
       category: `${selectedCategory} > ${selectedSubCategory}`,
       stock,
       maxStock,
@@ -133,7 +161,7 @@ export function AddProduct() {
 
     try {
       await createProduct.mutateAsync(productToAdd);
-      goToInventory();
+      onClose?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create inventory item");
     }
@@ -191,16 +219,12 @@ export function AddProduct() {
     setNewStorageTemperature("");
   };
 
-  const supplierNames = storedSuppliers.length > 0
-    ? storedSuppliers.map((supplier) => supplier.name)
-    : ["Fresh Farms Co.", "Ocean Harvest", "Local Dairy Inc.", "Organic Produce LLC"];
-
   return (
     <div className="p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-2">Add New Food Item</h1>
-        <p className="text-muted-foreground">Fill in the details to add a new food item to your inventory</p>
+        <h1 className="text-3xl font-bold text-foreground mb-2">Initial Stock Setup</h1>
+        <p className="text-muted-foreground">Add opening stock for items that entered inventory outside the standard purchase order process (e.g. opening stock, samples, donations).</p>
       </div>
 
       <form onSubmit={handleSubmit}>
@@ -252,7 +276,7 @@ export function AddProduct() {
                 <div>
                   <label htmlFor="sku" className="block text-sm mb-2 text-foreground flex items-center gap-2">
                     <Hash className="w-4 h-4 text-muted-foreground" />
-                    SKU *
+                    SKU <span className="text-xs text-muted-foreground font-normal">(auto-generated if blank)</span>
                   </label>
                   <input
                     id="sku"
@@ -260,9 +284,8 @@ export function AddProduct() {
                     type="text"
                     value={formData.sku}
                     onChange={handleChange}
-                    placeholder="e.g., FSH-SAL-001"
+                    placeholder="Leave blank to auto-generate"
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
                   />
                 </div>
 
@@ -370,21 +393,6 @@ export function AddProduct() {
                   </div>
                 </div>
 
-                <div className="md:col-span-2">
-                  <label htmlFor="description" className="block text-sm mb-2 text-foreground flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" />
-                    Description
-                  </label>
-                  <textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleChange}
-                    placeholder="Food item description, allergens, etc..."
-                    rows={4}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all resize-none"
-                  />
-                </div>
               </div>
             </div>
 
@@ -500,26 +508,6 @@ export function AddProduct() {
                   />
                 </div>
 
-                <div className="md:col-span-3">
-                  <label htmlFor="supplier" className="block text-sm mb-2 text-foreground flex items-center gap-2">
-                    <Tag className="w-4 h-4 text-muted-foreground" />
-                    Supplier
-                  </label>
-                  <select
-                    id="supplier"
-                    name="supplier"
-                    value={formData.supplier}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                  >
-                    <option value="">Select supplier</option>
-                    {supplierNames.map((sup) => (
-                      <option key={sup} value={sup}>
-                        {sup}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
             </div>
           </div>
@@ -566,7 +554,7 @@ export function AddProduct() {
               </button>
               <button
                 type="button"
-                onClick={() => goToInventory()}
+                onClick={() => onClose?.()}
                 className="w-full bg-muted text-foreground py-3 text-sm rounded-2xl hover:bg-muted/80 transition-all duration-200 font-medium flex items-center justify-center gap-2"
               >
                 <X className="w-5 h-5" />
