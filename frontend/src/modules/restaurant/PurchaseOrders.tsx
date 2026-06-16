@@ -16,6 +16,16 @@ import {
   updatePurchaseOrder,
 } from "../../app/api/client";
 
+const buildGeneratedSku = (name: string, suffix: number) => {
+  const skuBase = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 10);
+  return `${skuBase || "ITEM"}-${suffix}`;
+};
+
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
   return (name || '')
@@ -346,7 +356,7 @@ export function PurchaseOrders() {
           const created = await createInventoryItem({
             name: line.productName,
             itemType: "INGREDIENT",
-            sku: line.sku || undefined,
+            sku: line.sku?.trim() || buildGeneratedSku(line.productName, Date.now() % 100000),
             category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
             quantity: 0,
             price: line.unitPrice,

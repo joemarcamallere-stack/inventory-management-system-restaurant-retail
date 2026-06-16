@@ -548,6 +548,10 @@ export function GoodsReceived() {
 
         const quantityToAdd = receivedItems.reduce((sum, item) => sum + item.quantity, 0);
         const nextStock = product.stock + quantityToAdd;
+        const receivedValue = receivedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+        const wacPrice = nextStock > 0
+          ? (product.stock * product.price + receivedValue) / nextStock
+          : product.price;
         const earliestExpiry = getEarliestDate([
           product.expiry,
           ...receivedItems.map((item) => item.expiryDate || ""),
@@ -557,7 +561,7 @@ export function GoodsReceived() {
           ...product,
           stock: nextStock,
           maxStock: Math.max(product.maxStock, nextStock),
-          price: receivedItems[receivedItems.length - 1].unitPrice || product.price,
+          price: wacPrice,
           expiry: earliestExpiry,
           storageTemperature: receivedItems[receivedItems.length - 1].storageTemperature || (product as any).storageTemperature || "",
           unit: product.unit || receivedItems[0].unit || "pcs",

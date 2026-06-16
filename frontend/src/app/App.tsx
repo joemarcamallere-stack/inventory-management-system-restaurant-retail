@@ -10,7 +10,7 @@ import { DashboardView, StockAlertsView, InventoryView, ProductsReceivedView, It
 import { Dashboard as RestaurantDashboard } from '../modules/restaurant/Dashboard';
 import { StockControl as RestaurantStockControl } from '../modules/restaurant/StockControl';
 import { Inventory as RestaurantInventory } from '../modules/restaurant/Inventory';
-import { AddProduct as RestaurantAddProduct } from '../modules/restaurant/AddProduct';
+import { ProductManagement as RestaurantProductManagement } from '../modules/restaurant/ProductManagement';
 import { PurchaseOrders as RestaurantPurchaseOrders } from '../modules/restaurant/PurchaseOrders';
 import { GoodsReceived as RestaurantGoodsReceived } from '../modules/restaurant/GoodsReceived';
 import { POSKitchenOrders as RestaurantPOSKitchenOrders } from '../modules/restaurant/POSKitchenOrders';
@@ -107,7 +107,7 @@ const mapApiUser = (user: any): User => ({
 });
 
 
-type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-add-food-item' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation';
+type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation' | 'restaurant-product-management';
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -472,8 +472,8 @@ export default function App() {
         case 'restaurant-food-inventory':
         case 'restaurant-menu-items':
           return <RestaurantInventory />;
-        case 'restaurant-add-food-item':
-          return <RestaurantAddProduct />;
+        case 'restaurant-product-management':
+          return <RestaurantProductManagement />;
         case 'restaurant-purchase-orders':
           return <RestaurantPurchaseOrders />;
         case 'restaurant-goods-received':

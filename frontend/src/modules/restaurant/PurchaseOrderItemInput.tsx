@@ -98,7 +98,7 @@ export function PurchaseOrderItemInput({
       value.quantity.trim() &&
       value.unit.trim() &&
       value.unitPrice.trim() &&
-      (!value.isNewProduct || (value.sku?.trim() && value.category.trim()))
+      (!value.isNewProduct || value.category.trim())
   );
 
   const handleQueryChange = (next: string) => {
@@ -262,14 +262,14 @@ export function PurchaseOrderItemInput({
         {value.isNewProduct && (
           <div>
             <label htmlFor="po-item-sku" className="block text-xs mb-1 text-foreground">
-              SKU *
+              SKU <span className="text-muted-foreground font-normal">(auto-generated if blank)</span>
             </label>
             <input
               id="po-item-sku"
               type="text"
               value={value.sku || ""}
               onChange={(e) => handleFieldChange("sku", e.target.value)}
-              placeholder="e.g. FRU-LEM-001"
+              placeholder="Leave blank to auto-generate"
               className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
             />
           </div>
