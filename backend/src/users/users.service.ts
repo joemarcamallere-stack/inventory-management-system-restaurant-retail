@@ -54,6 +54,13 @@ export class UsersService {
     });
   }
 
+  async findAuthUserById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { business: true },
+    });
+  }
+
   async update(id: string, updateUserDto: UpdateUserDto, businessId: string) {
     await this.findOne(id, businessId);
     const { password, ...userData } = updateUserDto;

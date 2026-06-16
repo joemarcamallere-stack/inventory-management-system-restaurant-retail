@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BusinessModule, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
@@ -13,7 +13,12 @@ import { CreateSaleDto } from './dto/create-sale.dto';
 export class SalesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateSaleDto, businessId: string, cashierId?: string) {
+  async create(
+    dto: CreateSaleDto,
+    businessId: string,
+    module: BusinessModule,
+    cashierId?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const itemIds = dto.items.map((i) => i.inventoryItemId);
 
@@ -65,6 +70,7 @@ export class SalesService {
             change,
             customer: dto.customer,
             businessId,
+            module,
             items: {
               create: dto.items.map((i) => {
                 const item = itemMap.get(i.inventoryItemId)!;
@@ -111,6 +117,7 @@ export class SalesService {
             itemId: item.id,
             locationId: dto.locationId,
             businessId,
+            module,
             createdById: cashierId,
           },
         });
@@ -139,6 +146,7 @@ export class SalesService {
 
   async findAll(
     businessId: string,
+    module: BusinessModule,
     locationId?: string,
     status?: string,
     dateFrom?: string,
@@ -148,6 +156,7 @@ export class SalesService {
   ): Promise<PaginatedResult<any>> {
     const where: Prisma.SaleWhereInput = {
       businessId,
+      module,
       ...(locationId ? { locationId } : {}),
       ...(status ? { status: status as any } : {}),
       ...(dateFrom || dateTo
@@ -171,19 +180,25 @@ export class SalesService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string, businessId: string) {
+  async findOne(id: string, businessId: string, module: BusinessModule) {
     const sale = await this.prisma.sale.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, module },
       include: this.saleInclude,
     });
     if (!sale) throw new NotFoundException(`Sale #${id} not found`);
     return sale;
   }
 
-  async refund(id: string, refundReason: string, businessId: string, refundedById?: string) {
+  async refund(
+    id: string,
+    refundReason: string,
+    businessId: string,
+    module: BusinessModule,
+    refundedById?: string,
+  ) {
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
-        where: { id, businessId },
+        where: { id, businessId, module },
         include: { items: true },
       });
       if (!sale) throw new NotFoundException(`Sale #${id} not found`);
@@ -221,14 +236,21 @@ export class SalesService {
             itemId: item.id,
             locationId: sale.locationId,
             businessId,
+            module: sale.module,
             createdById: refundedById,
           },
         });
       }
 
-      return tx.sale.update({
-        where: { id },
+      const result = await tx.sale.updateMany({
+        where: { id, businessId, module, status: 'COMPLETED' },
         data: { status: 'REFUNDED', refundReason },
+      });
+      if (result.count === 0) {
+        throw new NotFoundException(`Sale #${id} not found`);
+      }
+      return tx.sale.findFirstOrThrow({
+        where: { id, businessId, module },
         include: this.saleInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });

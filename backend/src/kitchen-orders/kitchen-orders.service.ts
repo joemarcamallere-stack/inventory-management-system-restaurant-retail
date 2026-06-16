@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { KitchenOrderStatus, Prisma } from '@prisma/client';
+import { BusinessModule, KitchenOrderStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateKitchenOrderDto } from './dto/create-kitchen-order.dto';
@@ -261,6 +261,7 @@ export class KitchenOrdersService {
             itemId: movement.itemId,
             locationId: movement.locationId,
             businessId,
+            module: BusinessModule.RESTAURANT,
             createdById: order.completedById,
           },
         });
@@ -397,6 +398,7 @@ export class KitchenOrdersService {
           itemId: ingredient.itemId,
           locationId: ingredient.item.locationId,
           businessId,
+          module: BusinessModule.RESTAURANT,
           createdById: completedById,
         },
       });
