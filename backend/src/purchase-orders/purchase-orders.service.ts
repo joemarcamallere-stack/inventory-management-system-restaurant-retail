@@ -183,11 +183,18 @@ export class PurchaseOrdersService {
 
           const previousQuantity = item.quantity;
           const newQuantity = previousQuantity + receiveItem.receivedQty;
+          const wacPrice =
+            newQuantity > 0
+              ? (previousQuantity * item.price +
+                  receiveItem.receivedQty * poItem.unitPrice) /
+                newQuantity
+              : item.price;
 
           await tx.inventoryItem.update({
             where: { id: item.id },
             data: {
               quantity: newQuantity,
+              price: wacPrice,
               ...(receiveItem.expiryDate
                 ? { expiryDate: new Date(receiveItem.expiryDate) }
                 : {}),
