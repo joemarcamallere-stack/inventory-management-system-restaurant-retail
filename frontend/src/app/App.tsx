@@ -1,25 +1,9 @@
-import { useState, useMemo, useEffect } from 'react';
+import { lazy, Suspense, useState, useMemo, useEffect } from 'react';
 import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
-import TransfersView from '../modules/retail/TransfersView';
-import MultilocationView from '../modules/retail/MultilocationView';
-import PurchaseOrdersView from '../modules/retail/PurchaseOrdersView';
-import POSView from '../modules/retail/POSView';
-import { DashboardView, StockAlertsView, InventoryView, ProductsReceivedView, ItemBundlingView, ReportsView, UserManagementView } from '../modules/retail/RetailViews';
-import { Dashboard as RestaurantDashboard } from '../modules/restaurant/Dashboard';
-import { StockControl as RestaurantStockControl } from '../modules/restaurant/StockControl';
-import { Inventory as RestaurantInventory } from '../modules/restaurant/Inventory';
-import { ProductManagement as RestaurantProductManagement } from '../modules/restaurant/ProductManagement';
-import { PurchaseOrders as RestaurantPurchaseOrders } from '../modules/restaurant/PurchaseOrders';
-import { GoodsReceived as RestaurantGoodsReceived } from '../modules/restaurant/GoodsReceived';
-import { POSKitchenOrders as RestaurantPOSKitchenOrders } from '../modules/restaurant/POSKitchenOrders';
-import { RecipeBOM as RestaurantRecipeBOM } from '../modules/restaurant/RecipeBOM';
-import { Transfers as RestaurantTransfers } from '../modules/restaurant/Transfers';
-import { Reports as RestaurantReports } from '../modules/restaurant/Reports';
-import { MultiLocation as RestaurantMultiLocation } from '../modules/restaurant/MultiLocation';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
-import { UserManagement as RestaurantUserManagement } from '../modules/restaurant/UserManagement';
+import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
 import {
   clearStoredToken,
   createInventoryItem,
@@ -31,6 +15,30 @@ import {
   storeToken,
   updateInventoryItem,
 } from './api/client';
+
+const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
+const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
+const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
+const POSView = lazy(() => import('../modules/retail/POSView'));
+const DashboardView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.DashboardView })));
+const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.StockAlertsView })));
+const InventoryView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.InventoryView })));
+const ProductsReceivedView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ProductsReceivedView })));
+const ItemBundlingView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ItemBundlingView })));
+const ReportsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ReportsView })));
+const UserManagementView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.UserManagementView })));
+const RestaurantDashboard = lazy(() => import('../modules/restaurant/Dashboard').then(m => ({ default: m.Dashboard })));
+const RestaurantStockControl = lazy(() => import('../modules/restaurant/StockControl').then(m => ({ default: m.StockControl })));
+const RestaurantInventory = lazy(() => import('../modules/restaurant/Inventory').then(m => ({ default: m.Inventory })));
+const RestaurantProductManagement = lazy(() => import('../modules/restaurant/ProductManagement').then(m => ({ default: m.ProductManagement })));
+const RestaurantPurchaseOrders = lazy(() => import('../modules/restaurant/PurchaseOrders').then(m => ({ default: m.PurchaseOrders })));
+const RestaurantGoodsReceived = lazy(() => import('../modules/restaurant/GoodsReceived').then(m => ({ default: m.GoodsReceived })));
+const RestaurantPOSKitchenOrders = lazy(() => import('../modules/restaurant/POSKitchenOrders').then(m => ({ default: m.POSKitchenOrders })));
+const RestaurantRecipeBOM = lazy(() => import('../modules/restaurant/RecipeBOM').then(m => ({ default: m.RecipeBOM })));
+const RestaurantTransfers = lazy(() => import('../modules/restaurant/Transfers').then(m => ({ default: m.Transfers })));
+const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').then(m => ({ default: m.Reports })));
+const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then(m => ({ default: m.MultiLocation })));
+const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then(m => ({ default: m.UserManagement })));
 
 // Import types and sample data generation
 import type {
@@ -107,12 +115,10 @@ const mapApiUser = (user: any): User => ({
 });
 
 
-type ViewType = 'dashboard' | 'stock-alerts' | 'inventory' | 'pos' | 'purchase-orders' | 'products-received' | 'item-bundling' | 'transfers' | 'multilocation' | 'reports' | 'user-management' | 'restaurant-ingredients' | 'restaurant-menu-items' | 'restaurant-recipes' | 'restaurant-kitchen-orders' | 'restaurant-spoilage' | 'restaurant-dashboard' | 'restaurant-stock-control' | 'restaurant-food-inventory' | 'restaurant-purchase-orders' | 'restaurant-goods-received' | 'restaurant-pos' | 'restaurant-recipe-bom' | 'restaurant-transfers' | 'restaurant-reports' | 'restaurant-multilocation' | 'restaurant-product-management';
-
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
-  const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  const { currentView, navigateToView } = useViewNavigation();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [productsReceived, setProductsReceived] = useState<ProductReceived[]>([]);
@@ -124,22 +130,6 @@ export default function App() {
   const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
-  const navigateToView = (view: ViewType, replace = false) => {
-    setCurrentView(view);
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', view);
-    window.history[replace ? 'replaceState' : 'pushState']({ view }, '', url);
-  };
-
-  useEffect(() => {
-    const handlePopState = () => {
-      const view = new URL(window.location.href).searchParams.get('view') as ViewType | null;
-      if (view) setCurrentView(view);
-    };
-    handlePopState();
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
 
   // When user logs in and has only RESTAURANT module, switch to it automatically
   useEffect(() => {
@@ -157,15 +147,6 @@ export default function App() {
     setActiveModule(module);
     navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
   };
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const view = (e as CustomEvent<string>).detail;
-      if (view) navigateToView(view as ViewType);
-    };
-    window.addEventListener('restaurant-navigate', handler);
-    return () => window.removeEventListener('restaurant-navigate', handler);
-  }, []);
 
   // Global handler to remove leading zeros from number inputs
   useEffect(() => {
@@ -451,7 +432,7 @@ export default function App() {
     clearStoredToken();
     setIsLoggedIn(false);
     setCurrentUser(null);
-    setCurrentView('dashboard');
+    navigateToView('dashboard');
     localStorage.removeItem('userRole');
     localStorage.removeItem('userEmail');
   };
@@ -506,7 +487,9 @@ export default function App() {
         onSwitchToRetail={() => switchModule('RETAIL')}
         onLogout={handleLogout}
       >
-        {restaurantContent}
+        <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
+          {restaurantContent}
+        </Suspense>
       </RestaurantLayout>
     );
   }
@@ -553,11 +536,11 @@ export default function App() {
           {/* Retail navigation */}
           {activeModule === 'RETAIL' && (
             <>
-              <NavButton active={currentView === 'dashboard'} onClick={() => setCurrentView('dashboard')}>
+              <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
                 <DashboardIcon />
                 Dashboard
               </NavButton>
-              <NavButton active={currentView === 'stock-alerts'} onClick={() => setCurrentView('stock-alerts')}>
+              <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
                 <StockAlertsIcon />
                 Stock Alerts
                 {stockAlerts.length > 0 && (
@@ -566,7 +549,7 @@ export default function App() {
                   </span>
                 )}
               </NavButton>
-              <NavButton active={currentView === 'inventory'} onClick={() => setCurrentView('inventory')}>
+              <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
                 <InventoryIcon />
                 Inventory
                 {stats.totalItems > 0 && (
@@ -575,27 +558,27 @@ export default function App() {
                   </span>
                 )}
               </NavButton>
-              <NavButton active={currentView === 'purchase-orders'} onClick={() => setCurrentView('purchase-orders')}>
+              <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
                 <PurchaseOrdersIcon />
                 Purchase Orders
               </NavButton>
-              <NavButton active={currentView === 'products-received'} onClick={() => setCurrentView('products-received')}>
+              <NavButton active={currentView === 'products-received'} onClick={() => navigateToView('products-received')}>
                 <ProductsReceivedIcon />
                 Products Received
               </NavButton>
-              <NavButton active={currentView === 'item-bundling'} onClick={() => setCurrentView('item-bundling')}>
+              <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
                 <ItemBundlingIcon />
                 Item Bundling
               </NavButton>
-              <NavButton active={currentView === 'transfers'} onClick={() => setCurrentView('transfers')}>
+              <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
                 <TransfersIcon />
                 Transfers
               </NavButton>
-              <NavButton active={currentView === 'multilocation'} onClick={() => setCurrentView('multilocation')}>
+              <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
                 <MultilocationIcon />
                 Multilocation
               </NavButton>
-              <NavButton active={currentView === 'reports'} onClick={() => setCurrentView('reports')}>
+              <NavButton active={currentView === 'reports'} onClick={() => navigateToView('reports')}>
                 <ReportsIcon />
                 Reports
               </NavButton>
@@ -603,7 +586,7 @@ export default function App() {
           )}
 
           {currentUser?.role === 'Admin' && (
-            <NavButton active={currentView === 'user-management'} onClick={() => setCurrentView('user-management')}>
+            <NavButton active={currentView === 'user-management'} onClick={() => navigateToView('user-management')}>
               <UserManagementIcon />
               User Management
             </NavButton>
@@ -649,6 +632,7 @@ export default function App() {
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
           {currentView === 'dashboard' && (
             <DashboardView
               stats={stats}
@@ -716,6 +700,7 @@ export default function App() {
               currentUser={currentUser}
             />
           )}
+          </Suspense>
         </div>
       </div>
     </div>
