@@ -59,6 +59,11 @@ export function logoutUser() {
   return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
 }
 
+// Re-hydrate the session from the HttpOnly cookie (used on app load / refresh).
+export function getCurrentUser() {
+  return request<{ user: AuthUser }>('/api/auth/me');
+}
+
 export function getInventory(params?: { search?: string; itemType?: string }) {
   const query = new URLSearchParams();
   if (params?.search) query.set('search', params.search);

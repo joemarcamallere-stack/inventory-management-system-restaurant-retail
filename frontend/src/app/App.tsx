@@ -9,12 +9,14 @@ import {
   createInventoryItem,
   deleteInventoryItem,
   getInventory,
+  getCurrentUser,
   getLocations,
   getUsers,
   loginUser,
   storeToken,
   updateInventoryItem,
 } from './api/client';
+import type { AuthUser } from './api/client';
 
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
@@ -117,6 +119,7 @@ const mapApiUser = (user: any): User => ({
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
   const { currentView, navigateToView } = useViewNavigation();
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -408,21 +411,49 @@ export default function App() {
     setExpandedSubcategories(newExpanded);
   };
 
+  const applyAuthUser = (user: AuthUser) => {
+    setCurrentUser({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      businessId: user.businessId,
+      modules: user.modules
+    });
+    localStorage.setItem('userRole', user.role.toLowerCase());
+    localStorage.setItem('userEmail', user.email);
+    setIsLoggedIn(true);
+  };
+
+  // Restore the session on load from the HttpOnly cookie, so a refresh keeps the
+  // user logged in instead of bouncing back to the login screen.
+  useEffect(() => {
+    let cancelled = false;
+    getCurrentUser()
+      .then(({ user }) => {
+        if (!cancelled) applyAuthUser(user);
+      })
+      .catch(() => {
+        // No valid session cookie — clear any stale local hints and show login.
+        if (!cancelled) {
+          localStorage.removeItem('userRole');
+          localStorage.removeItem('userEmail');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setSessionChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleLogin = async (email: string, password: string) => {
     try {
       const response = await loginUser(email, password);
       storeToken(response.accessToken);
-      setCurrentUser({
-        id: response.user.id,
-        name: response.user.name,
-        email: response.user.email,
-        role: response.user.role,
-        businessId: response.user.businessId,
-        modules: response.user.modules
-      });
-      localStorage.setItem('userRole', response.user.role.toLowerCase());
-      localStorage.setItem('userEmail', response.user.email);
-      setIsLoggedIn(true);
+      applyAuthUser(response.user);
     } catch (error) {
       alert(error instanceof Error ? error.message : 'Invalid credentials');
     }
@@ -436,6 +467,14 @@ export default function App() {
     localStorage.removeItem('userRole');
     localStorage.removeItem('userEmail');
   };
+
+  if (!sessionChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading…
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <LoginPage onLogin={handleLogin} />;
