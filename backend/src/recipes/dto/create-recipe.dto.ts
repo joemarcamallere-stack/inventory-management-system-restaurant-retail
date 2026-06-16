@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -30,6 +31,26 @@ export class RecipeIngredientDto {
   @IsNumber()
   @Min(0)
   unitCost?: number;
+}
+
+export class RecipeModifierDto {
+  @IsString()
+  @MinLength(1)
+  id!: string;
+
+  @IsString()
+  @MinLength(1)
+  name!: string;
+
+  @IsIn(['remove'])
+  type!: 'remove';
+
+  @IsUUID()
+  itemId!: string;
+
+  @IsOptional()
+  @IsString()
+  itemName?: string;
 }
 
 export class CreateRecipeDto {
@@ -108,6 +129,12 @@ export class CreateRecipeDto {
   @IsOptional()
   @IsUUID()
   menuItemId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RecipeModifierDto)
+  modifiers?: RecipeModifierDto[];
 
   @IsArray()
   @ValidateNested({ each: true })

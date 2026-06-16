@@ -139,6 +139,11 @@ const toDateInput = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 };
 
+const parseOrderModifiers = (notes?: string | null) => {
+  const modifierText = notes?.match(/Modifiers:\s*([^|]+)/i)?.[1]?.trim();
+  return modifierText ? modifierText.split(',').map((item) => item.trim()).filter(Boolean) : [];
+};
+
 async function getFoodItems() {
   const groups = await Promise.all([
     getInventory({ itemType: 'INGREDIENT' }),
@@ -322,6 +327,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
     return recipes.map((recipe: any) => {
       const ingredients = (recipe.ingredients ?? []).map((ingredient: any) => ({
         id: ingredient.id,
+        itemBackendId: ingredient.itemId,
         productId: localIdByBackend.get(ingredient.itemId),
         productSku: ingredient.item?.sku,
         name: ingredient.item?.name ?? 'Ingredient',
@@ -349,6 +355,16 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
         sellingPrice: recipe.sellingPrice ?? 0,
         grossMargin: 0,
         isActive: recipe.isActive,
+        modifiers: Array.isArray(recipe.modifiers)
+          ? recipe.modifiers.map((modifier: any) => ({
+              id: modifier.id,
+              name: modifier.name,
+              type: modifier.type ?? 'remove',
+              itemId: modifier.itemId,
+              itemName: modifier.itemName ?? '',
+              productId: localIdByBackend.get(modifier.itemId),
+            }))
+          : [],
         instructions: recipe.instructions ?? '',
       };
     });
@@ -372,6 +388,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       orderedAt: order.createdAt,
       completedBy: order.completedBy?.email ?? 'shared-backend',
       notes: order.notes ?? '',
+      modifiers: parseOrderModifiers(order.notes),
       voidReason: order.voidReason,
       voidedAt: order.voidedAt,
     }));
@@ -402,6 +419,8 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       id: item.id, type: item.type, source: item.referenceType ?? 'shared-backend',
       sourceId: item.referenceId ?? item.id, item: item.item?.name ?? 'Item',
       quantity: item.quantity, unit: item.unit ?? item.item?.unit ?? '',
+      previousQuantity: item.previousQuantity, newQuantity: item.newQuantity,
+      location: item.location?.name ?? '', createdBy: item.createdBy?.name ?? item.createdBy?.email ?? '',
       date: item.createdAt, notes: item.notes ?? item.reason ?? '',
     }));
   }

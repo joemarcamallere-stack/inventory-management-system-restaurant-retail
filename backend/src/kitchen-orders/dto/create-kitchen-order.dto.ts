@@ -1,4 +1,6 @@
 import {
+  ArrayUnique,
+  IsArray,
   IsIn,
   IsNumber,
   IsOptional,
@@ -36,4 +38,10 @@ export class CreateKitchenOrderDto {
   @IsOptional()
   @IsIn([KitchenOrderStatus.PENDING, KitchenOrderStatus.COMPLETED])
   status?: KitchenOrderStatus;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  excludedIngredientIds?: string[];
 }

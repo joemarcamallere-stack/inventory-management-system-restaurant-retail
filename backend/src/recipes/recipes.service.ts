@@ -37,6 +37,7 @@ export class RecipesService {
           isNutFree: createRecipeDto.isNutFree,
           isHalal: createRecipeDto.isHalal,
           allergenNotes: createRecipeDto.allergenNotes,
+          modifiers: this.mapModifiersInput(createRecipeDto.modifiers),
           menuItemId: createRecipeDto.menuItemId,
           businessId,
           ingredients: {
@@ -116,6 +117,10 @@ export class RecipesService {
           isNutFree: updateRecipeDto.isNutFree,
           isHalal: updateRecipeDto.isHalal,
           allergenNotes: updateRecipeDto.allergenNotes,
+          modifiers:
+            updateRecipeDto.modifiers === undefined
+              ? undefined
+              : this.mapModifiersInput(updateRecipeDto.modifiers),
           menuItemId: updateRecipeDto.menuItemId,
           ...(updateRecipeDto.ingredients
             ? {
@@ -142,6 +147,7 @@ export class RecipesService {
   ) {
     const itemIds = [
       ...(recipeDto.ingredients?.map((ingredient) => ingredient.itemId) ?? []),
+      ...(recipeDto.modifiers?.map((modifier) => modifier.itemId) ?? []),
       ...(recipeDto.menuItemId ? [recipeDto.menuItemId] : []),
     ];
 
@@ -194,6 +200,16 @@ export class RecipesService {
           ? ingredient.unitCost * ingredient.quantity
           : undefined,
     }));
+  }
+
+  private mapModifiersInput(modifiers: CreateRecipeDto['modifiers']) {
+    return (modifiers ?? []).map((modifier) => ({
+      id: modifier.id,
+      name: modifier.name,
+      type: modifier.type,
+      itemId: modifier.itemId,
+      itemName: modifier.itemName,
+    })) as Prisma.InputJsonValue;
   }
 
   private computeIngredientCosts(recipe: any) {

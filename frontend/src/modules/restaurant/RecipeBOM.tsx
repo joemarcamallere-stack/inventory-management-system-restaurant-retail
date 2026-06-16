@@ -7,6 +7,7 @@ import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
 
 type Ingredient = {
   id: string;
+  itemBackendId?: string;
   productId?: number;
   productSku?: string;
   name: string;
@@ -16,6 +17,15 @@ type Ingredient = {
   inventoryUnit?: string;
   unitCost: number;
   totalCost: number;
+};
+
+type RecipeModifier = {
+  id: string;
+  name: string;
+  type: "remove";
+  itemId?: string;
+  itemName?: string;
+  productId?: number;
 };
 
 type Recipe = {
@@ -34,6 +44,7 @@ type Recipe = {
   sellingPrice?: number;
   grossMargin?: number;
   isActive?: boolean;
+  modifiers?: RecipeModifier[];
   instructions: string;
 };
 
@@ -100,6 +111,9 @@ export function RecipeBOM() {
   });
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [modifiers, setModifiers] = useState<RecipeModifier[]>([]);
+  const [modifierIngredientId, setModifierIngredientId] = useState("");
+  const [modifierName, setModifierName] = useState("");
   const [currentIngredient, setCurrentIngredient] = useState({
     productId: "",
     name: "",
@@ -215,7 +229,50 @@ export function RecipeBOM() {
   };
 
   const handleRemoveIngredient = (id: string) => {
+    const removed = ingredients.find(ing => ing.id === id);
     setIngredients(ingredients.filter(ing => ing.id !== id));
+    if (removed) {
+      setModifiers(modifiers.filter(modifier => modifier.productId !== removed.productId));
+    }
+  };
+
+  const handleModifierIngredientChange = (ingredientId: string) => {
+    setModifierIngredientId(ingredientId);
+    const ingredient = ingredients.find((item) => item.id === ingredientId);
+    setModifierName(ingredient ? `No ${ingredient.name}` : "");
+  };
+
+  const handleAddModifier = () => {
+    const ingredient = ingredients.find((item) => item.id === modifierIngredientId);
+    if (!ingredient) {
+      toast.error("Please select an ingredient for the modifier");
+      return;
+    }
+    if (!modifierName.trim()) {
+      toast.error("Modifier name is required");
+      return;
+    }
+    if (modifiers.some((modifier) => modifier.productId === ingredient.productId)) {
+      toast.error("A remove modifier already exists for this ingredient");
+      return;
+    }
+
+    setModifiers([
+      ...modifiers,
+      {
+        id: `MOD-${Date.now()}`,
+        name: modifierName.trim(),
+        type: "remove",
+        productId: ingredient.productId,
+        itemName: ingredient.name,
+      },
+    ]);
+    setModifierIngredientId("");
+    setModifierName("");
+  };
+
+  const handleRemoveModifier = (id: string) => {
+    setModifiers(modifiers.filter((modifier) => modifier.id !== id));
   };
 
   const calculateTotalCost = () => {
@@ -314,6 +371,7 @@ export function RecipeBOM() {
       sellingPrice,
       grossMargin,
       isActive: newRecipe.isActive,
+      modifiers,
       instructions: newRecipe.instructions,
     };
 
@@ -330,6 +388,19 @@ export function RecipeBOM() {
           targetFoodCost: recipeToAdd.targetFoodCost,
           sellingPrice: recipeToAdd.sellingPrice,
           isActive: recipeToAdd.isActive,
+          modifiers: modifiers.map((modifier) => {
+            const inventoryItem = inventoryItems.find((item) => item.id === modifier.productId);
+            if (!inventoryItem?.backendId) {
+              throw new Error(`Inventory link is missing for modifier ${modifier.name}`);
+            }
+            return {
+              id: modifier.id,
+              name: modifier.name,
+              type: modifier.type,
+              itemId: inventoryItem.backendId,
+              itemName: modifier.itemName,
+            };
+          }),
           ingredients: recipeToAdd.ingredients.map((ingredient) => {
             const inventoryItem = inventoryItems.find((item) => item.id === ingredient.productId);
             if (!inventoryItem?.backendId) {
@@ -358,6 +429,9 @@ export function RecipeBOM() {
       instructions: "",
       });
       setIngredients([]);
+      setModifiers([]);
+      setModifierIngredientId("");
+      setModifierName("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save recipe");
     }
@@ -388,6 +462,9 @@ export function RecipeBOM() {
       instructions: recipe.instructions,
     });
     setIngredients(recipe.ingredients);
+    setModifiers(recipe.modifiers ?? []);
+    setModifierIngredientId("");
+    setModifierName("");
     setSelectedCategories([]);
     setShowCreateModal(true);
   };
@@ -461,6 +538,9 @@ export function RecipeBOM() {
     setEditingRecipe(null);
     setSelectedCategories([]);
     setIngredients([]);
+    setModifiers([]);
+    setModifierIngredientId("");
+    setModifierName("");
     setCurrentIngredient({
       productId: "",
       name: "",
@@ -954,6 +1034,84 @@ export function RecipeBOM() {
                 )}
               </div>
 
+              <div className="rounded-xl border border-border bg-card p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-foreground">Menu Modifiers</h3>
+                    <p className="text-xs text-muted-foreground">Set the modifier choices that staff can use for this menu item in POS.</p>
+                  </div>
+                  <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    {modifiers.length} option{modifiers.length !== 1 ? "s" : ""}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <div>
+                    <label htmlFor="modifierIngredient" className="block text-xs mb-1 text-foreground">
+                      BOM Ingredient
+                    </label>
+                    <select
+                      id="modifierIngredient"
+                      value={modifierIngredientId}
+                      onChange={(event) => handleModifierIngredientChange(event.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    >
+                      <option value="">Select ingredient</option>
+                      {ingredients.map((ingredient) => (
+                        <option key={ingredient.id} value={ingredient.id}>
+                          {ingredient.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="modifierName" className="block text-xs mb-1 text-foreground">
+                      POS Label
+                    </label>
+                    <input
+                      id="modifierName"
+                      value={modifierName}
+                      onChange={(event) => setModifierName(event.target.value)}
+                      placeholder="No cheese"
+                      className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddModifier}
+                    disabled={ingredients.length === 0}
+                    className="self-end rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  {modifiers.length === 0 ? (
+                    <p className="rounded-lg bg-muted/30 px-3 py-4 text-center text-sm text-muted-foreground">
+                      No modifiers configured for this menu item
+                    </p>
+                  ) : (
+                    modifiers.map((modifier) => (
+                      <div key={modifier.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{modifier.name}</p>
+                          <p className="text-xs text-muted-foreground">Removes {modifier.itemName || "selected ingredient"} from stock deduction</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveModifier(modifier.id)}
+                          className="rounded-lg p-2 text-red-600 transition-colors hover:bg-red-100"
+                          title="Remove modifier"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 gap-3 rounded-xl border border-border bg-muted/30 p-4 md:grid-cols-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Raw ingredient cost</p>
@@ -1103,6 +1261,23 @@ export function RecipeBOM() {
                 <div className="bg-muted/30 rounded-xl p-4">
                   <p className="text-xs text-muted-foreground mb-1">POS Status</p>
                   <p className={`text-lg font-bold ${(selectedRecipe.isActive ?? true) ? "text-green-600" : "text-muted-foreground"}`}>{(selectedRecipe.isActive ?? true) ? "Active" : "Inactive"}</p>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-3">Menu Modifiers</h3>
+                <div className="bg-muted/30 rounded-xl p-4">
+                  {selectedRecipe.modifiers?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedRecipe.modifiers.map((modifier) => (
+                        <span key={modifier.id} className="rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+                          {modifier.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No menu modifiers configured</p>
+                  )}
                 </div>
               </div>
 

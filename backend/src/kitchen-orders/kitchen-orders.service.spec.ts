@@ -97,4 +97,66 @@ describe('KitchenOrdersService', () => {
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('deducts only non-excluded recipe ingredients for a modified menu order', async () => {
+    const tx = {
+      inventoryItem: { update: jest.fn() },
+      stockMovement: { create: jest.fn() },
+    };
+    const service = new KitchenOrdersService({} as any);
+    const recipe = {
+      id: 'recipe-1',
+      name: 'Burger',
+      servings: 1,
+      ingredients: [
+        {
+          id: 'ingredient-patty',
+          itemId: 'item-patty',
+          quantity: 1,
+          unit: 'pcs',
+          item: {
+            name: 'Patty',
+            quantity: 10,
+            unit: 'pcs',
+            locationId: 'loc-1',
+          },
+        },
+        {
+          id: 'ingredient-cheese',
+          itemId: 'item-cheese',
+          quantity: 1,
+          unit: 'slice',
+          item: {
+            name: 'Cheese',
+            quantity: 10,
+            unit: 'slice',
+            locationId: 'loc-1',
+          },
+        },
+      ],
+    };
+
+    await (service as any).deductRecipeInventory(
+      tx,
+      recipe,
+      { id: 'order-1', receiptNo: 'R-1', quantity: 1 },
+      'business-1',
+      'user-1',
+      ['ingredient-cheese'],
+    );
+
+    expect(tx.inventoryItem.update).toHaveBeenCalledTimes(1);
+    expect(tx.inventoryItem.update).toHaveBeenCalledWith({
+      where: { id: 'item-patty' },
+      data: { quantity: 9 },
+    });
+    expect(tx.stockMovement.create).toHaveBeenCalledTimes(1);
+    expect(tx.stockMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        itemId: 'item-patty',
+        quantity: 1,
+        notes: 'Receipt R-1 consumed Burger with modifiers',
+      }),
+    });
+  });
 });

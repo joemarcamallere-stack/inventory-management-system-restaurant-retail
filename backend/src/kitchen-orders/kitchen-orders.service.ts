@@ -86,6 +86,7 @@ export class KitchenOrdersService {
           order,
           businessId,
           completedById,
+          createKitchenOrderDto.excludedIngredientIds ?? [],
         );
       }
 
@@ -349,12 +350,19 @@ export class KitchenOrdersService {
     order: { id: string; receiptNo: string; quantity: number },
     businessId: string,
     completedById?: string,
+    excludedIngredientIds: string[] = [],
   ) {
     const servingFactor = order.quantity / Math.max(recipe.servings, 1);
-    const deductions = recipe.ingredients.map((ingredient) => ({
+    const excludedIds = new Set(excludedIngredientIds);
+    const deductions = recipe.ingredients
+      .filter((ingredient) => !excludedIds.has(ingredient.id))
+      .map((ingredient) => ({
       ingredient,
       requiredQuantity: ingredient.quantity * servingFactor,
     }));
+    if (deductions.length === 0) {
+      throw new BadRequestException('At least one recipe ingredient must be deducted');
+    }
     const insufficientIngredient = deductions.find(
       ({ ingredient, requiredQuantity }) =>
         ingredient.item.quantity < requiredQuantity,
@@ -383,7 +391,9 @@ export class KitchenOrdersService {
           reason: 'Kitchen order recipe consumption',
           referenceType: 'KITCHEN_ORDER',
           referenceId: order.id,
-          notes: `Receipt ${order.receiptNo} consumed ${recipe.name}`,
+          notes: excludedIds.size > 0
+            ? `Receipt ${order.receiptNo} consumed ${recipe.name} with modifiers`
+            : `Receipt ${order.receiptNo} consumed ${recipe.name}`,
           itemId: ingredient.itemId,
           locationId: ingredient.item.locationId,
           businessId,

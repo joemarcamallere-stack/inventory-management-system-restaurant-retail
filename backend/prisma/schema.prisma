@@ -252,6 +252,7 @@ model Recipe {
   isNutFree       Boolean            @default(false)
   isHalal         Boolean            @default(false)
   allergenNotes   String?
+  modifiers       Json               @default("[]")
   menuItemId      String?
   menuItem        InventoryItem?     @relation("RecipeMenuItem", fields: [menuItemId], references: [id])
   ingredients     RecipeIngredient[]

@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
-import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle } from "lucide-react";
+import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle, ClipboardList } from "lucide-react";
 import { useRestaurantState } from "../lib/restaurantData";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
 
-type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'financial' | 'confidential';
+type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'audit' | 'financial' | 'confidential';
 
 const COLORS = ["#007A5E", "#009BA5", "#F59E0B", "#DC2626", "#8B5CF6", "#EC4899", "#10b981"];
 
@@ -28,6 +28,21 @@ const statusPill = (status: string) => {
   return map[status?.toLowerCase()] ?? 'bg-gray-100 text-gray-600';
 };
 
+const formatAuditDate = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-PH', {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+const csvValue = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+
 export function Reports() {
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [dateRange, setDateRange] = useState("30days");
@@ -45,6 +60,8 @@ export function Reports() {
   const [adjustments] = useRestaurantState<any[]>("transfers.adjustments", []);
   const [wasteLogs] = useRestaurantState<any[]>("transfers.wasteLogs", []);
   const [goodsReceived] = useRestaurantState<any[]>("goodsReceived.records", []);
+  const [inventoryMovements] = useRestaurantState<any[]>("inventory.movements", []);
+  const [posOrders] = useRestaurantState<any[]>("pos.orders", []);
   const [users] = useRestaurantState<any[]>("users.records", []);
 
   const inventoryValue = getInventoryValue(products);
@@ -175,6 +192,122 @@ export function Reports() {
     return { totalInventoryValue, totalPOSpending, receivedPOValue, wasteValue, categoryValue, assetHealthScore };
   }, [products, purchaseOrders, receivedPOs, wasteLogs]);
 
+  const auditTrail = useMemo(() => {
+    const entries = [
+      ...inventoryMovements.map(movement => ({
+        id: `movement-${movement.id}`,
+        date: movement.date || '',
+        module: 'Inventory',
+        action: String(movement.type || 'Stock Movement').replace(/_/g, ' '),
+        item: movement.item || 'Item',
+        quantity: movement.quantity ? `${movement.quantity} ${movement.unit || ''}`.trim() : '',
+        performedBy: movement.createdBy || movement.by || '',
+        reference: movement.sourceId || movement.source || movement.id,
+        details: [
+          movement.previousQuantity !== undefined && movement.newQuantity !== undefined
+            ? `${movement.previousQuantity} to ${movement.newQuantity}`
+            : '',
+          movement.notes || movement.reason || '',
+          movement.location ? `Location: ${movement.location}` : '',
+        ].filter(Boolean).join(' | '),
+        status: 'recorded',
+      })),
+      ...posOrders.map(order => ({
+        id: `pos-${order.id}`,
+        date: order.voidedAt || order.orderedAt || '',
+        module: 'POS / Kitchen',
+        action: order.status === 'voided' ? 'Receipt Voided' : 'Receipt Completed',
+        item: order.recipeName || 'Menu item',
+        quantity: order.quantity ? `${order.quantity} order(s)` : '',
+        performedBy: order.completedBy || '',
+        reference: order.receiptNo || order.id,
+        details: [
+          order.modifiers?.length ? `Modifiers: ${order.modifiers.join(', ')}` : '',
+          order.voidReason ? `Void reason: ${order.voidReason}` : '',
+          order.notes || '',
+        ].filter(Boolean).join(' | '),
+        status: order.status || 'recorded',
+      })),
+      ...goodsReceived.map(receipt => ({
+        id: `receipt-${receipt.backendId || receipt.id}`,
+        date: receipt.receivedDate || '',
+        module: 'Goods Received',
+        action: 'Receipt Verified',
+        item: `${receipt.items || receipt.receivedItems?.length || 0} item(s)`,
+        quantity: `${(receipt.receivedItems || []).reduce((sum: number, item: any) => sum + (item.acceptedQuantity || 0), 0)} accepted`,
+        performedBy: receipt.receivedBy || '',
+        reference: receipt.id,
+        details: receipt.notes || `PO: ${receipt.poId || 'N/A'}`,
+        status: receipt.status || 'recorded',
+      })),
+      ...purchaseOrders.map(order => ({
+        id: `po-${order.backendId || order.id}`,
+        date: order.createdAt || order.date || '',
+        module: 'Purchase Order',
+        action: `PO ${order.status || 'created'}`,
+        item: order.supplier || 'Supplier',
+        quantity: `${order.items || order.orderItems?.length || 0} item(s)`,
+        performedBy: order.createdBy || '',
+        reference: order.id,
+        details: order.rejectionNote || `Total: ${formatCurrency(order.total || 0)}`,
+        status: order.status || 'recorded',
+      })),
+      ...transfers.map(transfer => ({
+        id: `transfer-${transfer.backendId || transfer.id}`,
+        date: transfer.completedDate || transfer.requestDate || '',
+        module: 'Transfer',
+        action: `Transfer ${transfer.status || 'requested'}`,
+        item: transfer.item || 'Multiple items',
+        quantity: transfer.quantity ? `${transfer.quantity} ${transfer.unit || ''}`.trim() : '',
+        performedBy: transfer.requestedBy || '',
+        reference: transfer.id,
+        details: `${transfer.from || 'Source'} to ${transfer.to || 'Destination'}`,
+        status: transfer.status || 'recorded',
+      })),
+      ...adjustments.map(adjustment => ({
+        id: `adjustment-${adjustment.id}`,
+        date: adjustment.date || '',
+        module: 'Adjustment',
+        action: adjustment.type || 'Correction',
+        item: adjustment.item || 'Item',
+        quantity: adjustment.quantity ? `${adjustment.quantity} ${adjustment.unit || ''}`.trim() : '',
+        performedBy: adjustment.adjustedBy || '',
+        reference: adjustment.id,
+        details: adjustment.reason || adjustment.notes || '',
+        status: 'recorded',
+      })),
+      ...wasteLogs.map(waste => ({
+        id: `waste-${waste.id}`,
+        date: waste.date || '',
+        module: 'Waste',
+        action: waste.wasteType || 'Waste Log',
+        item: waste.item || 'Item',
+        quantity: waste.quantity ? `${waste.quantity} ${waste.unit || ''}`.trim() : '',
+        performedBy: waste.loggedBy || '',
+        reference: waste.id,
+        details: waste.notes || `Value: ${formatCurrency(waste.totalValue || 0)}`,
+        status: 'recorded',
+      })),
+    ];
+
+    return entries
+      .filter(entry => entry.date || entry.reference)
+      .sort((a, b) => {
+        const aTime = new Date(a.date).getTime();
+        const bTime = new Date(b.date).getTime();
+        return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+      });
+  }, [inventoryMovements, posOrders, goodsReceived, purchaseOrders, transfers, adjustments, wasteLogs]);
+
+  const auditSummary = useMemo(() => {
+    const byModule = auditTrail.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.module] = (acc[entry.module] || 0) + 1;
+      return acc;
+    }, {});
+    const latest = auditTrail[0]?.date ? formatAuditDate(auditTrail[0].date) : 'No activity';
+    return { byModule, latest };
+  }, [auditTrail]);
+
   // ── Confidential ────────────────────────────────────────────────────────────
   const confidentialData = useMemo(() => {
     if (!isAdmin) return null;
@@ -232,6 +365,21 @@ export function Reports() {
       csv += `Total Adjustments,${adjustments.length}\n`;
       csv += `Total Waste Logs,${wasteLogs.length}\n`;
       csv += `Goods Received,${goodsReceived.length}\n`;
+    } else if (activeTab === 'audit') {
+      csv = 'Date,Module,Action,Item,Quantity,Performed By,Reference,Status,Details\n';
+      auditTrail.forEach(entry => {
+        csv += [
+          formatAuditDate(entry.date),
+          entry.module,
+          entry.action,
+          entry.item,
+          entry.quantity,
+          entry.performedBy,
+          entry.reference,
+          entry.status,
+          entry.details,
+        ].map(csvValue).join(',') + '\n';
+      });
     } else if (activeTab === 'financial') {
       if (!isAdmin) return;
       csv = 'Metric,Value\n';
@@ -303,6 +451,10 @@ export function Reports() {
         <button onClick={() => setActiveTab('inventory')} className={tabCls('inventory')}>Inventory Report</button>
         <button onClick={() => setActiveTab('orders')} className={tabCls('orders')}>Purchase Orders</button>
         <button onClick={() => setActiveTab('operations')} className={tabCls('operations')}>Operations Report</button>
+        <button onClick={() => setActiveTab('audit')} className={tabCls('audit')}>
+          <ClipboardList className="w-4 h-4" />
+          Audit Trail
+        </button>
         {isAdmin && (
           <button onClick={() => setActiveTab('financial')} className={tabCls('financial')}>Financial Report</button>
         )}
@@ -657,6 +809,82 @@ export function Reports() {
       )}
 
       {/* ── Financial Report (admin only) ─────────────────────────────────────── */}
+      {activeTab === 'audit' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-foreground">Audit Trail</h3>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <p className="text-muted-foreground text-xs mb-2">Total Events</p>
+              <p className="text-2xl font-bold text-foreground">{auditTrail.length}</p>
+            </div>
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <p className="text-muted-foreground text-xs mb-2">Inventory Events</p>
+              <p className="text-2xl font-bold text-primary">{auditSummary.byModule.Inventory || 0}</p>
+            </div>
+            <div className="bg-card border border-border rounded-2xl p-6">
+              <p className="text-muted-foreground text-xs mb-2">Receiving Events</p>
+              <p className="text-2xl font-bold text-green-700">{auditSummary.byModule['Goods Received'] || 0}</p>
+            </div>
+            <div className="bg-card border border-border rounded-2xl p-6 overflow-hidden">
+              <p className="text-muted-foreground text-xs mb-2">Latest Activity</p>
+              <p className="text-sm font-semibold text-foreground break-words">{auditSummary.latest}</p>
+            </div>
+          </div>
+
+          <div className="bg-card border border-border rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-base font-semibold text-foreground">Recent Activity</h4>
+              <p className="text-xs text-muted-foreground">{auditTrail.length} record{auditTrail.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-muted/40">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Module</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Action</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Item</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Qty</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">By</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Reference</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-foreground uppercase tracking-wider">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {auditTrail.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
+                        No audit trail records found
+                      </td>
+                    </tr>
+                  ) : (
+                    auditTrail.slice(0, 100).map(entry => (
+                      <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatAuditDate(entry.date)}</td>
+                        <td className="px-4 py-3">
+                          <span className="inline-flex px-2 py-1 rounded-lg text-xs font-medium bg-muted text-foreground">
+                            {entry.module}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-medium text-foreground capitalize">{entry.action.toLowerCase()}</td>
+                        <td className="px-4 py-3 text-sm text-foreground">{entry.item}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">{entry.quantity || '-'}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{entry.performedBy || 'System'}</td>
+                        <td className="px-4 py-3 text-xs text-primary font-medium whitespace-nowrap">{entry.reference}</td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground max-w-[260px] truncate">{entry.details || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'financial' && !isAdmin && (
         <div className="bg-card border border-border rounded-2xl p-12 text-center">
           <div className="bg-red-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">

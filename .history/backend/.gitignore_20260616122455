@@ -2,7 +2,6 @@ node_modules
 dist
 
 # Keep environment variables out of version control
-.history
 .env
 .env.*
 !.env.example

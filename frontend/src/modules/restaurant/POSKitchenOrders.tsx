@@ -6,6 +6,7 @@ import { InventoryProduct } from "../lib/inventoryLogic";
 
 type Ingredient = {
   id: string;
+  itemBackendId?: string;
   productId?: number;
   productSku?: string;
   name: string;
@@ -17,12 +18,22 @@ type Ingredient = {
   totalCost: number;
 };
 
+type RecipeModifier = {
+  id: string;
+  name: string;
+  type: "remove";
+  itemId?: string;
+  itemName?: string;
+  productId?: number;
+};
+
 type Recipe = {
   id: string;
   name: string;
   category: string;
   servings: number;
   isActive?: boolean;
+  modifiers?: RecipeModifier[];
   ingredients: Ingredient[];
 };
 
@@ -32,6 +43,7 @@ type POSOrder = {
   recipeId: string;
   recipeName: string;
   quantity: number;
+  modifiers?: string[];
   status: "completed" | "voided";
   orderedAt: string;
   completedBy: string;
@@ -120,6 +132,18 @@ export function POSKitchenOrders() {
   });
 
   const selectedIngredientPreview = ingredientPreview.filter((item) => !excludedIngredientIds.has(item.id));
+  const menuModifierOptions = (selectedRecipe?.modifiers ?? [])
+    .map((modifier) => {
+      const ingredient = ingredientPreview.find((item) =>
+        (modifier.itemId && item.itemBackendId === modifier.itemId) ||
+        (modifier.productId && item.productId === modifier.productId)
+      );
+      return ingredient ? { ...modifier, ingredientId: ingredient.id } : null;
+    })
+    .filter((modifier): modifier is RecipeModifier & { ingredientId: string } => Boolean(modifier));
+  const selectedModifiers = menuModifierOptions
+    .filter((modifier) => excludedIngredientIds.has(modifier.ingredientId))
+    .map((modifier) => modifier.name);
 
   const canCompleteOrder = Boolean(
     receiptNo.trim() &&
@@ -169,7 +193,7 @@ export function POSKitchenOrders() {
       quantity: item.required,
       unit: item.deductionUnit,
       date: now,
-      notes: `POS receipt ${receiptNo.trim()} consumed by ${selectedRecipe.name} x${orderQty}`,
+      notes: `POS receipt ${receiptNo.trim()} consumed by ${selectedRecipe.name} x${orderQty}${selectedModifiers.length ? ` (${selectedModifiers.join(", ")})` : ""}`,
     }));
 
     const order: POSOrder = {
@@ -178,10 +202,13 @@ export function POSKitchenOrders() {
       recipeId: selectedRecipe.id,
       recipeName: selectedRecipe.name,
       quantity: orderQty,
+      modifiers: selectedModifiers,
       status: "completed",
       orderedAt: now,
       completedBy: localStorage.getItem("userEmail") || "local-user",
-      notes,
+      notes: selectedModifiers.length
+        ? [notes, `Modifiers: ${selectedModifiers.join(", ")}`].filter(Boolean).join(" | ")
+        : notes,
     };
 
     setIsCompleting(true);
@@ -192,6 +219,7 @@ export function POSKitchenOrders() {
         recipeId: recipeIdMap[String(order.recipeId)] ?? order.recipeId,
         quantity: order.quantity,
         notes: order.notes,
+        excludedIngredientIds: Array.from(excludedIngredientIds),
       });
       const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
       orderIdMap[orderId] = saved.id;
@@ -310,6 +338,39 @@ export function POSKitchenOrders() {
               <input type="number" min="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-full rounded-lg border border-input bg-input-background px-3 py-2 text-sm outline-none focus:border-primary" required />
             </div>
 
+            <div className="rounded-lg border border-border p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <label className="block text-xs text-foreground">Menu Modifiers</label>
+                {selectedModifiers.length > 0 && (
+                  <span className="rounded-full bg-primary/10 px-2 py-1 text-[11px] font-medium text-primary">
+                    {selectedModifiers.length} selected
+                  </span>
+                )}
+              </div>
+              {!selectedRecipe ? (
+                <p className="text-xs text-muted-foreground">Select a menu item to view available modifiers.</p>
+              ) : menuModifierOptions.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No modifiers configured for this menu item in Recipe &amp; BOM.</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-2">
+                  {menuModifierOptions.map((modifier) => {
+                    const isExcluded = excludedIngredientIds.has(modifier.ingredientId);
+                    return (
+                      <label key={modifier.id} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${isExcluded ? "border-primary bg-primary/10 text-primary" : "border-border bg-muted/20 text-foreground"}`}>
+                        <input
+                          type="checkbox"
+                          checked={isExcluded}
+                          onChange={() => toggleIngredientIncluded(modifier.ingredientId)}
+                          className="h-4 w-4 rounded border-muted-foreground text-primary focus:ring-primary"
+                        />
+                        {modifier.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="mb-1 block text-xs text-foreground">Notes</label>
               <textarea value={notes} onChange={(event) => setNotes(event.target.value)} className="min-h-20 w-full rounded-lg border border-input bg-input-background px-3 py-2 text-sm outline-none focus:border-primary" />
@@ -380,6 +441,7 @@ export function POSKitchenOrders() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Receipt</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Recipe</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-foreground">Qty</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Modifiers</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Actions</th>
                 </tr>
@@ -390,6 +452,9 @@ export function POSKitchenOrders() {
                     <td className="px-4 py-3 text-sm font-medium text-primary">{order.receiptNo}</td>
                     <td className="px-4 py-3 text-sm text-foreground">{order.recipeName}</td>
                     <td className="px-4 py-3 text-center text-sm text-foreground">{order.quantity}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {order.modifiers?.length ? order.modifiers.join(", ") : "-"}
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium"
@@ -416,7 +481,7 @@ export function POSKitchenOrders() {
                 ))}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">No POS kitchen receipts yet</td>
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No POS kitchen receipts yet</td>
                   </tr>
                 )}
               </tbody>
