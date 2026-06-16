@@ -11,7 +11,6 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { BusinessModule } from '@prisma/client';
 
 export enum POPaymentMethod {
   CASH = 'Cash',
@@ -41,10 +40,6 @@ export class PurchaseOrderItemDto {
 }
 
 export class CreatePurchaseOrderDto {
-  @IsOptional()
-  @IsEnum(BusinessModule)
-  module?: BusinessModule;
-
   @IsOptional()
   @IsUUID()
   supplierId?: string;

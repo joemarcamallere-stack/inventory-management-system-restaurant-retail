@@ -18,8 +18,6 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
-import { BusinessModule } from '@prisma/client';
-import { resolveModule } from '../auth/assert-module-allowed';
 
 @Controller('purchase-orders')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -29,18 +27,12 @@ export class PurchaseOrdersController {
 
   @Post()
   create(@Body() dto: CreatePurchaseOrderDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.purchaseOrdersService.create(
-      dto,
-      user.businessId,
-      resolveModule(user, dto.module),
-      user.id,
-    );
+    return this.purchaseOrdersService.create(dto, user.businessId, user.id);
   }
 
   @Get()
   findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
     @Query('status') status?: string,
     @Query('supplierId') supplierId?: string,
     @Query('page') page?: string,
@@ -48,7 +40,6 @@ export class PurchaseOrdersController {
   ) {
     return this.purchaseOrdersService.findAll(
       user.businessId,
-      resolveModule(user, module),
       status,
       supplierId,
       page ? parseInt(page, 10) : 1,
@@ -59,14 +50,12 @@ export class PurchaseOrdersController {
   @Get('goods-receipts')
   findGoodsReceipts(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
     @Query('purchaseOrderId') purchaseOrderId?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
     return this.purchaseOrdersService.findGoodsReceipts(
       user.businessId,
-      resolveModule(user, module),
       purchaseOrderId,
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 50,
@@ -74,16 +63,8 @@ export class PurchaseOrdersController {
   }
 
   @Get(':id')
-  findOne(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.purchaseOrdersService.findOne(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.purchaseOrdersService.findOne(id, user.businessId);
   }
 
   @Patch(':id')
@@ -91,42 +72,19 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
     @Body() dto: UpdatePurchaseOrderDto,
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
   ) {
-    return this.purchaseOrdersService.update(
-      id,
-      dto,
-      user.businessId,
-      resolveModule(user, module),
-    );
+    return this.purchaseOrdersService.update(id, dto, user.businessId);
   }
 
   @Patch(':id/submit')
-  submit(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.purchaseOrdersService.submit(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  submit(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.purchaseOrdersService.submit(id, user.businessId);
   }
 
   @Patch(':id/approve')
   @Roles('Admin', 'Manager')
-  approve(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.purchaseOrdersService.approve(
-      id,
-      user.businessId,
-      user.role,
-      resolveModule(user, module),
-    );
+  approve(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.purchaseOrdersService.approve(id, user.businessId, user.role);
   }
 
   @Patch(':id/reject')
@@ -135,14 +93,12 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
     @Body() dto: RejectPurchaseOrderDto,
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
   ) {
     return this.purchaseOrdersService.reject(
       id,
       dto.reason,
       user.businessId,
       user.role,
-      resolveModule(user, module),
     );
   }
 
@@ -151,27 +107,12 @@ export class PurchaseOrdersController {
     @Param('id') id: string,
     @Body() dto: ReceivePurchaseOrderDto,
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
   ) {
-    return this.purchaseOrdersService.receive(
-      id,
-      dto,
-      user.businessId,
-      resolveModule(user, module),
-      user.id,
-    );
+    return this.purchaseOrdersService.receive(id, dto, user.businessId, user.id);
   }
 
   @Patch(':id/cancel')
-  cancel(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.purchaseOrdersService.cancel(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  cancel(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.purchaseOrdersService.cancel(id, user.businessId);
   }
 }

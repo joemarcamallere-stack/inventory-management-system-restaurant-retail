@@ -1,17 +1,17 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Plus, Search, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Clock, X, FileText, Trash2, PhilippinePeso, BarChart3, Calendar } from "lucide-react";
 import { toast } from "sonner";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import {
-  useCreateRestaurantStockMovementMutation,
-  useCreateRestaurantTransferMutation,
-  useRestaurantAdjustmentsQuery,
-  useRestaurantInventoryQuery,
-  useRestaurantLocationsQuery,
-  useRestaurantTransferActionMutation,
-  useRestaurantTransfersQuery,
-  useRestaurantWasteQuery,
-} from "../lib/restaurantQueries";
+  cancelTransfer,
+  completeTransfer,
+  createStockMovement,
+  createTransfer,
+  dispatchTransfer,
+  getLocations,
+} from "../../app/api/client";
 
 type TransferStatus = "pending" | "approved" | "in-transit" | "completed" | "rejected";
 type AdjustmentType = "damage" | "shrinkage" | "waste" | "found" | "correction";
@@ -72,12 +72,11 @@ export function Transfers() {
   const [selectedItem, setSelectedItem] = useState<Transfer | Adjustment | WasteLog | null>(null);
   const [dateRange, setDateRange] = useState({ start: "2026-05-01", end: "2026-05-31" });
 
-  const transfersQuery = useRestaurantTransfersQuery();
-  const transfers = (transfersQuery.data ?? []) as Transfer[];
-  const adjustmentsQuery = useRestaurantAdjustmentsQuery();
-  const adjustments = (adjustmentsQuery.data ?? []) as Adjustment[];
-  const wasteQuery = useRestaurantWasteQuery();
-  const wasteLogs = (wasteQuery.data ?? []) as WasteLog[];
+  const [transfers] = useRestaurantState<Transfer[]>("transfers.records", []);
+
+  const [adjustments] = useRestaurantState<Adjustment[]>("transfers.adjustments", []);
+
+  const [wasteLogs] = useRestaurantState<WasteLog[]>("transfers.wasteLogs", []);
 
   const [newTransfer, setNewTransfer] = useState({
     item: "",
@@ -108,15 +107,27 @@ export function Transfers() {
     notes: "",
   });
 
-  const locationQuery = useRestaurantLocationsQuery();
+  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
   const locations = locationQuery.data ?? [];
-  const inventoryQuery = useRestaurantInventoryQuery<(InventoryProduct & { backendId?: string; locationId?: string })[]>();
-  const inventoryItems = inventoryQuery.data ?? getInventoryProducts();
+  const [inventoryItems] = useRestaurantState<(InventoryProduct & { backendId?: string; locationId?: string })[]>("inventory.products", getInventoryProducts());
   const availableItems = inventoryItems.filter(item => item.stock > 0);
   const units = ["kg", "g", "L", "ml", "pcs"];
-  const saveTransfer = useCreateRestaurantTransferMutation();
-  const moveTransfer = useRestaurantTransferActionMutation();
-  const saveMovement = useCreateRestaurantStockMovementMutation();
+  const saveTransfer = useRestaurantMutation(
+    (data: unknown) => createTransfer(data),
+    ["transfers.records"],
+  );
+  const moveTransfer = useRestaurantMutation(
+    ({ id, action }: { id: string; action: "dispatch" | "complete" | "cancel" }) => {
+      if (action === "dispatch") return dispatchTransfer(id);
+      if (action === "complete") return completeTransfer(id);
+      return cancelTransfer(id);
+    },
+    ["transfers.records", "inventory.products", "inventory.movements"],
+  );
+  const saveMovement = useRestaurantMutation(
+    (data: unknown) => createStockMovement(data),
+    ["transfers.adjustments", "transfers.wasteLogs", "inventory.products", "inventory.movements"],
+  );
 
   const filteredTransfers = transfers.filter(transfer => {
     const matchesSearch = (transfer.item || '').toLowerCase().includes(searchQuery.toLowerCase()) ||

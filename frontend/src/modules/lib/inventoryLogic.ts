@@ -1,6 +1,7 @@
+import { readRestaurantData } from './restaurantData';
+
 export type InventoryProduct = {
   id: number;
-  backendId?: string;
   name: string;
   sku: string;
   itemType?: string;
@@ -41,15 +42,24 @@ export const defaultStorageTemperatureOptions = [
 export const defaultInventoryProducts: InventoryProduct[] = [];
 
 export function getInventoryProducts() {
-  return defaultInventoryProducts;
+  return readRestaurantData<InventoryProduct[]>('inventory.products', defaultInventoryProducts);
 }
 
 export function getCategoryHierarchy() {
-  return { ...defaultCategoryHierarchy };
+  const storedHierarchy = readRestaurantData<{ [key: string]: string[] }>('inventory.categoryHierarchy', {});
+
+  return Object.entries(storedHierarchy).reduce(
+    (hierarchy, [category, subCategories]) => ({
+      ...hierarchy,
+      [category]: Array.from(new Set([...(hierarchy[category] || []), ...subCategories])),
+    }),
+    { ...defaultCategoryHierarchy },
+  );
 }
 
 export function getStorageTemperatureOptions() {
-  return [...defaultStorageTemperatureOptions];
+  const customOptions = readRestaurantData<string[]>('inventory.storageTemperatureOptions', []);
+  return Array.from(new Set([...defaultStorageTemperatureOptions, ...customOptions].filter(Boolean)));
 }
 
 export function splitCategory(category: string) {

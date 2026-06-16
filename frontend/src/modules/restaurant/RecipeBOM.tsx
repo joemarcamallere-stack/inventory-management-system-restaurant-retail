@@ -1,14 +1,9 @@
 import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
 import { toast } from "sonner";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
-import {
-  useDeleteRestaurantRecipeMutation,
-  useRestaurantInventoryQuery,
-  useRestaurantRecipesQuery,
-  useSaveRestaurantRecipeMutation,
-} from "../lib/restaurantQueries";
-import { useSession } from "../../app/hooks/useSession";
+import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
 
 type Ingredient = {
   id: string;
@@ -42,7 +37,8 @@ type Recipe = {
   instructions: string;
 };
 
-// Use the actual inventory product structure from inventory logic.
+// Use the actual inventory product structure from inventory logic
+// The `inventoryItems` list is loaded from localStorage or defaults when needed.
 type InventoryItem = InventoryProduct & { backendId?: string };
 
 const UNIT_OPTIONS = ["kg", "g", "L", "ml", "pcs", "piece", "liter", "bottle", "pack", "box", "dozen"];
@@ -79,8 +75,7 @@ const calculateRecipeGrossMarginPercent = (recipe: Recipe) => {
 };
 
 export function RecipeBOM() {
-  const { currentUser } = useSession();
-  const userRole = currentUser?.role.toLowerCase() ?? "staff";
+  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
   const isAdmin = userRole === "admin";
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -114,8 +109,7 @@ export function RecipeBOM() {
     unitCost: "",
   });
 
-  const inventoryQuery = useRestaurantInventoryQuery<InventoryItem[]>();
-  const inventoryItems = inventoryQuery.data ?? getInventoryProducts();
+  const [inventoryItems] = useRestaurantState<InventoryItem[]>("inventory.products", getInventoryProducts());
 
   // Only show products that are actually in stock.
   const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
@@ -123,16 +117,16 @@ export function RecipeBOM() {
   // Extract unique categories from inventory
   const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
 
-  const recipesQuery = useRestaurantRecipesQuery();
-  const recipes = (recipesQuery.data ?? []).map((recipe: any) => ({
-    ...recipe,
-    ingredients: (recipe.ingredients ?? []).map((ingredient: any) => ({
-      ...ingredient,
-      productId: inventoryItems.find((item) => item.backendId === ingredient.backendItemId)?.id,
-    })),
-  })) as Recipe[];
-  const saveRecipe = useSaveRestaurantRecipeMutation();
-  const removeRecipe = useDeleteRestaurantRecipeMutation();
+  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
+  const saveRecipe = useRestaurantMutation(
+    ({ id, data }: { id?: string; data: unknown }) =>
+      id ? updateRecipe(id, data) : createRecipe(data),
+    ["recipes.records"],
+  );
+  const removeRecipe = useRestaurantMutation(
+    (id: string) => deleteRecipe(id),
+    ["recipes.records"],
+  );
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
 

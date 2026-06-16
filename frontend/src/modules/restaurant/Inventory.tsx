@@ -1,14 +1,10 @@
 import { useState } from "react";
-import { Search, Filter, Edit, Trash2, Eye, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package, PlusCircle } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Search, Edit, Trash2, AlertCircle, X, Save, ArrowRight, ChevronRight, ChevronDown, Folder, FolderOpen, Package, PlusCircle } from "lucide-react";
 import { toast } from "sonner";
+import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
 import { defaultInventoryProducts, formatQuantity, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import {
-  useDeleteRestaurantInventoryMutation,
-  useRestaurantInventoryQuery,
-  useRestaurantLocationsQuery,
-  useRestaurantSettings,
-  useUpdateRestaurantInventoryMutation,
-} from "../lib/restaurantQueries";
+import { deleteInventoryItem, getLocations, updateInventoryItem } from "../../app/api/client";
 import { AddProduct } from "./AddProduct";
 
 type Product = {
@@ -43,20 +39,28 @@ export function Inventory() {
   const [editMainCategory, setEditMainCategory] = useState("");
   const [editSubCategory, setEditSubCategory] = useState("");
 
-  const settingsQuery = useRestaurantSettings();
-  const categoryHierarchy =
-    (settingsQuery.data?.find((s) => s.key === "CATEGORY_HIERARCHY")?.value as { [key: string]: string[] } | undefined)
-    ?? getCategoryHierarchy();
-  const storageTemperatureOptions =
-    (settingsQuery.data?.find((s) => s.key === "STORAGE_TEMPERATURE_OPTIONS")?.value as string[] | undefined)
-    ?? getStorageTemperatureOptions();
+  // Hierarchical category structure — read from persisted backend settings so
+  // categories added via Initial Stock Setup appear here immediately.
+  const [categoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
+    "inventory.categoryHierarchy",
+    getCategoryHierarchy(),
+  );
+  const [storageTemperatureOptions] = useRestaurantState<string[]>(
+    "inventory.storageTemperatureOptions",
+    getStorageTemperatureOptions(),
+  );
 
-  const productsQuery = useRestaurantInventoryQuery<Product[]>();
-  const products = productsQuery.data ?? defaultInventoryProducts;
-  const locationQuery = useRestaurantLocationsQuery();
+  const [products] = useRestaurantState<Product[]>("inventory.products", defaultInventoryProducts);
+  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
   const locations = locationQuery.data ?? [];
-  const updateProduct = useUpdateRestaurantInventoryMutation();
-  const deleteProduct = useDeleteRestaurantInventoryMutation();
+  const updateProduct = useRestaurantMutation(
+    ({ id, data }: { id: string; data: unknown }) => updateInventoryItem(id, data),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
+  const deleteProduct = useRestaurantMutation(
+    (id: string) => deleteInventoryItem(id),
+    ["inventory.products", "purchaseOrders.globalProducts"],
+  );
 
   const mainCategories = Object.keys(categoryHierarchy);
 

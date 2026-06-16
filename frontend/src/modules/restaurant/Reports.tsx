@@ -1,9 +1,8 @@
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle } from "lucide-react";
+import { useRestaurantState } from "../lib/restaurantData";
 import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
-import { useRestaurantInventoryQuery, useRestaurantPurchaseOrdersQuery } from "../lib/restaurantQueries";
-import { useSession } from "../../app/hooks/useSession";
 
 type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'financial' | 'confidential';
 
@@ -30,24 +29,23 @@ const statusPill = (status: string) => {
 };
 
 export function Reports() {
-  const { currentUser } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [dateRange, setDateRange] = useState("30days");
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
-  const isAdmin = currentUser?.role.toLowerCase() === "admin";
+  const isAdmin = useMemo(
+    () => (localStorage.getItem("userRole") || "staff").toLowerCase() === "admin",
+    [],
+  );
 
-  const productsQuery = useRestaurantInventoryQuery();
-  const products = productsQuery.data ?? getInventoryProducts();
-  const purchaseOrdersQuery = useRestaurantPurchaseOrdersQuery<any[]>();
-  const purchaseOrders = purchaseOrdersQuery.data ?? [];
-  const transfers: any[] = [];
-  const adjustments: any[] = [];
-  const wasteLogs: any[] = [];
-  const goodsReceived: any[] = [];
-  const users: any[] = [];
-
+  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
+  const [purchaseOrders] = useRestaurantState<any[]>("purchaseOrders.orders", []);
+  const [transfers] = useRestaurantState<any[]>("transfers.records", []);
+  const [adjustments] = useRestaurantState<any[]>("transfers.adjustments", []);
+  const [wasteLogs] = useRestaurantState<any[]>("transfers.wasteLogs", []);
+  const [goodsReceived] = useRestaurantState<any[]>("goodsReceived.records", []);
+  const [users] = useRestaurantState<any[]>("users.records", []);
 
   const inventoryValue = getInventoryValue(products);
 

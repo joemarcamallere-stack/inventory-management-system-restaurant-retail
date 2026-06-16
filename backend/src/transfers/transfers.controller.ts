@@ -15,8 +15,6 @@ import { Roles } from '../auth/roles.decorator';
 import { RolesGuard } from '../auth/roles.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
-import { BusinessModule } from '@prisma/client';
-import { resolveModule } from '../auth/assert-module-allowed';
 
 @Controller('transfers')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -26,18 +24,12 @@ export class TransfersController {
 
   @Post()
   create(@Body() dto: CreateTransferDto, @CurrentUser() user: AuthenticatedUser) {
-    return this.transfersService.create(
-      dto,
-      user.businessId,
-      resolveModule(user, dto.module),
-      user.id,
-    );
+    return this.transfersService.create(dto, user.businessId, user.id);
   }
 
   @Get()
   findAll(
     @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
     @Query('status') status?: string,
     @Query('fromLocationId') fromLocationId?: string,
     @Query('toLocationId') toLocationId?: string,
@@ -46,7 +38,6 @@ export class TransfersController {
   ) {
     return this.transfersService.findAll(
       user.businessId,
-      resolveModule(user, module),
       status,
       fromLocationId,
       toLocationId,
@@ -56,55 +47,22 @@ export class TransfersController {
   }
 
   @Get(':id')
-  findOne(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.transfersService.findOne(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.transfersService.findOne(id, user.businessId);
   }
 
   @Patch(':id/dispatch')
-  dispatch(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.transfersService.dispatch(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  dispatch(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.transfersService.dispatch(id, user.businessId);
   }
 
   @Patch(':id/complete')
-  complete(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.transfersService.complete(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-      user.id,
-    );
+  complete(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.transfersService.complete(id, user.businessId, user.id);
   }
 
   @Patch(':id/cancel')
-  cancel(
-    @Param('id') id: string,
-    @CurrentUser() user: AuthenticatedUser,
-    @Query('module') module?: BusinessModule,
-  ) {
-    return this.transfersService.cancel(
-      id,
-      user.businessId,
-      resolveModule(user, module),
-    );
+  cancel(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
+    return this.transfersService.cancel(id, user.businessId);
   }
 }
