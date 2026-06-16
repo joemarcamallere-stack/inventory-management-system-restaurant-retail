@@ -313,7 +313,7 @@ export function Reports() {
 
     return auditTrail.filter((entry) => {
       const performedBy = normalizeAuditActor(entry.performedBy);
-      return performedBy === currentActor || performedBy.includes(currentActor);
+      return performedBy === currentActor;
     });
   }, [auditTrail, currentUserEmail, hasFullAuditTrailAccess]);
 

@@ -144,6 +144,9 @@ const parseOrderModifiers = (notes?: string | null) => {
   return modifierText ? modifierText.split(',').map((item) => item.trim()).filter(Boolean) : [];
 };
 
+const actorEmail = (actor?: { email?: string | null; name?: string | null } | null) =>
+  actor?.email ?? '';
+
 async function getFoodItems() {
   const groups = await Promise.all([
     getInventory({ itemType: 'INGREDIENT' }),
@@ -251,7 +254,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
         CANCELLED: 'cancelled',
       } as Record<string, string>)[order.status] ?? order.status.toLowerCase(),
       expectedDelivery: toDateInput(order.expectedDelivery),
-      createdBy: order.createdBy?.name ?? order.createdBy?.email ?? '',
+      createdBy: actorEmail(order.createdBy),
       createdAt: order.createdAt,
       rejectionNote: order.rejectionReason,
       backendStatus: order.status,
@@ -291,7 +294,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
         (sum: number, line: any) => sum + line.receivedQty * (line.purchaseOrderItem?.unitPrice ?? 0),
         0,
       ),
-      receivedBy: receipt.receivedBy?.name ?? receipt.receivedBy?.email ?? '',
+      receivedBy: actorEmail(receipt.receivedBy),
       status: (receipt.items ?? []).some((line: any) => line.rejectedQty > 0) ? 'partial' : 'verified',
       notes: receipt.notes ?? '',
     }));
@@ -386,7 +389,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       quantity: order.quantity,
       status: order.status === 'VOIDED' ? 'voided' : 'completed',
       orderedAt: order.createdAt,
-      completedBy: order.completedBy?.email ?? 'shared-backend',
+      completedBy: actorEmail(order.completedBy) || 'shared-backend',
       notes: order.notes ?? '',
       modifiers: parseOrderModifiers(order.notes),
       voidReason: order.voidReason,
@@ -400,7 +403,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       return movements.filter((item: any) => item.type === 'ADJUSTMENT').map((item: any) => ({
         id: item.id, item: item.item?.name ?? 'Item', quantity: item.newQuantity,
         unit: item.unit ?? item.item?.unit ?? 'pcs', location: item.location?.name ?? '',
-        type: 'correction', reason: item.reason ?? '', adjustedBy: item.createdBy?.name ?? '',
+        type: 'correction', reason: item.reason ?? '', adjustedBy: actorEmail(item.createdBy),
         date: toDateInput(item.createdAt), notes: item.notes ?? '',
       }));
     }
@@ -411,7 +414,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
         wasteType: item.type === 'EXPIRY' ? 'expiry' : 'spoilage',
         unitCost: item.item?.costPrice ?? item.item?.price ?? 0,
         totalValue: item.quantity * (item.item?.costPrice ?? item.item?.price ?? 0),
-        date: toDateInput(item.createdAt), loggedBy: item.createdBy?.name ?? '',
+        date: toDateInput(item.createdAt), loggedBy: actorEmail(item.createdBy),
         source: 'manual', notes: item.notes ?? item.reason ?? '',
       }));
     }
@@ -420,7 +423,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       sourceId: item.referenceId ?? item.id, item: item.item?.name ?? 'Item',
       quantity: item.quantity, unit: item.unit ?? item.item?.unit ?? '',
       previousQuantity: item.previousQuantity, newQuantity: item.newQuantity,
-      location: item.location?.name ?? '', createdBy: item.createdBy?.name ?? item.createdBy?.email ?? '',
+      location: item.location?.name ?? '', createdBy: actorEmail(item.createdBy),
       date: item.createdAt, notes: item.notes ?? item.reason ?? '',
     }));
   }
@@ -437,7 +440,7 @@ async function loadRestaurantKeyFromApi(key: string): Promise<unknown> {
       quantity: transfer.items?.[0]?.quantity ?? 0,
       unit: transfer.items?.[0]?.inventoryItem?.unit ?? 'pcs',
       from: transfer.fromLocation?.name ?? '', to: transfer.toLocation?.name ?? '',
-      requestedBy: transfer.createdBy?.name ?? '', requestDate: toDateInput(transfer.createdAt),
+      requestedBy: actorEmail(transfer.createdBy), requestDate: toDateInput(transfer.createdAt),
       status: transfer.status === 'IN_TRANSIT' ? 'in-transit' : transfer.status.toLowerCase(),
       completedDate: toDateInput(transfer.completedAt), notes: transfer.notes ?? '',
     }));
