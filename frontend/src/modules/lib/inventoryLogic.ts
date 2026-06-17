@@ -1,5 +1,3 @@
-import { readRestaurantData } from './restaurantData';
-
 export type InventoryProduct = {
   id: number;
   name: string;
@@ -42,24 +40,15 @@ export const defaultStorageTemperatureOptions = [
 export const defaultInventoryProducts: InventoryProduct[] = [];
 
 export function getInventoryProducts() {
-  return readRestaurantData<InventoryProduct[]>('inventory.products', defaultInventoryProducts);
+  return defaultInventoryProducts;
 }
 
 export function getCategoryHierarchy() {
-  const storedHierarchy = readRestaurantData<{ [key: string]: string[] }>('inventory.categoryHierarchy', {});
-
-  return Object.entries(storedHierarchy).reduce(
-    (hierarchy, [category, subCategories]) => ({
-      ...hierarchy,
-      [category]: Array.from(new Set([...(hierarchy[category] || []), ...subCategories])),
-    }),
-    { ...defaultCategoryHierarchy },
-  );
+  return { ...defaultCategoryHierarchy };
 }
 
 export function getStorageTemperatureOptions() {
-  const customOptions = readRestaurantData<string[]>('inventory.storageTemperatureOptions', []);
-  return Array.from(new Set([...defaultStorageTemperatureOptions, ...customOptions].filter(Boolean)));
+  return [...defaultStorageTemperatureOptions];
 }
 
 export function splitCategory(category: string) {

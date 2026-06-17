@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,6 +13,7 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { useRetailWorkspace } from '../lib/retail';
 
 
 export interface StockAlert {
@@ -24,7 +24,15 @@ export interface StockAlert {
   severity: 'low' | 'critical';
 }
 
-export function StockAlertsView({ alerts, inventory }: { alerts: StockAlert[]; inventory: InventoryItem[] }) {
+export function StockAlertsView() {
+  const {
+    stockAlerts: alerts,
+    inventory,
+  } = useRetailWorkspace({
+    enabled: true,
+    loadSharedData: true,
+    loadUsers: false,
+  });
   const [activeTab, setActiveTab] = useState<'low-stock' | 'stock-control' | 'bad-condition'>('low-stock');
   const [filterCategory, setFilterCategory] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'name' | 'quantity' | 'category'>('quantity');

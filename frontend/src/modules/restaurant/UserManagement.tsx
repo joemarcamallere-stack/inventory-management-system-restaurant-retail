@@ -1,10 +1,16 @@
 import { useState } from "react";
 import { Plus, Search, Edit, Trash2, Shield, Mail, Phone, MoreVertical, X, Save, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantState } from "../lib/restaurantData";
+import {
+  useCreateRestaurantUserMutation,
+  useDeleteRestaurantUserMutation,
+  useRestaurantUsersQuery,
+  useUpdateRestaurantUserMutation,
+} from "../lib/restaurant";
 
 type User = {
   id: number;
+  backendId?: string;
   name: string;
   email: string;
   phone: string;
@@ -24,12 +30,16 @@ export function UserManagement() {
   const [newUser, setNewUser] = useState({
     name: "",
     email: "",
+    password: "",
     phone: "",
     role: "staff",
     status: "active",
   });
 
-  const [users, setUsers] = useRestaurantState<User[]>("users.records", []);
+  const { data: users = [] } = useRestaurantUsersQuery();
+  const createUser = useCreateRestaurantUserMutation();
+  const updateUser = useUpdateRestaurantUserMutation();
+  const deleteUser = useDeleteRestaurantUserMutation();
 
   const roles = ["all", "admin", "manager", "staff"];
 
@@ -82,37 +92,42 @@ export function UserManagement() {
     { label: "Staff", value: users.filter(u => u.role === "staff").length, color: "#6B7280" },
   ];
 
-  const handleAddUser = (e: React.FormEvent) => {
+  const toBackendRole = (role: string) =>
+    ({ admin: "Admin", manager: "Manager", staff: "Staff" }[role] ?? "Staff");
+  const toBackendStatus = (status: string) =>
+    status === "inactive" ? "Inactive" : "Active";
+
+  const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!newUser.name.trim() || !newUser.email.trim()) {
+    if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) {
       toast.error("Please fill in all required fields");
       return;
     }
 
-    const userToAdd: User = {
-      id: users.length > 0 ? Math.max(...users.map(u => u.id)) + 1 : 1,
-      name: newUser.name.trim(),
-      email: newUser.email.trim(),
-      phone: newUser.phone.trim(),
-      role: newUser.role,
-      status: newUser.status,
-      lastLogin: "Never",
-      avatar: newUser.name.trim().split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
-    };
-
-    setUsers([...users, userToAdd]);
-    setNewUser({
-      name: "",
-      email: "",
-      phone: "",
-      role: "staff",
-      status: "active",
-    });
-    setShowAddModal(false);
+    try {
+      await createUser.mutateAsync({
+        name: newUser.name.trim(),
+        email: newUser.email.trim(),
+        password: newUser.password,
+        role: toBackendRole(newUser.role),
+        status: toBackendStatus(newUser.status),
+      });
+      setNewUser({
+        name: "",
+        email: "",
+        password: "",
+        phone: "",
+        role: "staff",
+        status: "active",
+      });
+      setShowAddModal(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to create user");
+    }
   };
 
-  const handleEditUser = (e: React.FormEvent) => {
+  const handleEditUser = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!selectedUser) return;
@@ -122,33 +137,40 @@ export function UserManagement() {
       return;
     }
 
-    const updatedUser: User = {
-      ...selectedUser,
-      name: newUser.name.trim(),
-      email: newUser.email.trim(),
-      phone: newUser.phone.trim(),
-      role: newUser.role,
-      status: newUser.status,
-      avatar: newUser.name.trim().split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2),
-    };
-
-    setUsers(users.map(user => user.id === selectedUser.id ? updatedUser : user));
-    setShowEditModal(false);
-    setSelectedUser(null);
-    setNewUser({
-      name: "",
-      email: "",
-      phone: "",
-      role: "staff",
-      status: "active",
-    });
+    try {
+      await updateUser.mutateAsync({
+        id: selectedUser.backendId ?? String(selectedUser.id),
+        data: {
+          name: newUser.name.trim(),
+          email: newUser.email.trim(),
+          role: toBackendRole(newUser.role),
+          status: toBackendStatus(newUser.status),
+        },
+      });
+      setShowEditModal(false);
+      setSelectedUser(null);
+      setNewUser({
+        name: "",
+        email: "",
+        password: "",
+        phone: "",
+        role: "staff",
+        status: "active",
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update user");
+    }
   };
 
-  const handleDeleteUser = () => {
+  const handleDeleteUser = async () => {
     if (!selectedUser) return;
-    setUsers(users.filter(user => user.id !== selectedUser.id));
-    setShowDeleteModal(false);
-    setSelectedUser(null);
+    try {
+      await deleteUser.mutateAsync(selectedUser.backendId ?? String(selectedUser.id));
+      setShowDeleteModal(false);
+      setSelectedUser(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete user");
+    }
   };
 
   const openEditModal = (user: User) => {
@@ -156,6 +178,7 @@ export function UserManagement() {
     setNewUser({
       name: user.name,
       email: user.email,
+      password: "",
       phone: user.phone,
       role: user.role,
       status: user.status,
@@ -368,6 +391,23 @@ export function UserManagement() {
                   value={newUser.email}
                   onChange={handleInputChange}
                   placeholder="e.g., john.smith@bukolabs.io"
+                  className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                  required
+                />
+              </div>
+
+              <div>
+                <label htmlFor="add-password" className="block text-sm mb-2 text-foreground font-medium">
+                  Password *
+                </label>
+                <input
+                  id="add-password"
+                  name="password"
+                  type="password"
+                  value={newUser.password}
+                  onChange={handleInputChange}
+                  placeholder="Minimum 6 characters"
+                  minLength={6}
                   className="w-full px-4 py-3 text-sm bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
                   required
                 />

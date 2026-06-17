@@ -1,24 +1,27 @@
-import { lazy, Suspense, useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed, Settings2, Receipt } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  FileText,
+  Layers,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Package,
+  PackageCheck,
+  Receipt,
+  Settings2,
+  ShoppingCart,
+  Store,
+  Users,
+  UtensilsCrossed,
+} from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
+import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
-import {
-  clearStoredToken,
-  createInventoryItem,
-  deleteInventoryItem,
-  getAdjustments,
-  getInventory,
-  getGoodsReceipts,
-  getLocations,
-  getPurchaseOrders,
-  getTransfers,
-  getUsers,
-  loginUser,
-  storeToken,
-  updateInventoryItem,
-} from './api/client';
+import { useRetailInventoryQuery } from '../modules/lib/retail';
 
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
@@ -46,222 +49,37 @@ const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').the
 const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then(m => ({ default: m.MultiLocation })));
 const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then(m => ({ default: m.UserManagement })));
 
-// Import types and sample data generation
-import type {
-  InventoryItem,
-  PurchaseOrder,
-  ProductReceived,
-  Transfer,
-  Adjustment,
-  Location,
-  User,
-} from './utils/generateSampleData';
-
-// Types
-interface StockAlert {
-  id: string;
-  itemName: string;
-  currentStock: number;
-  threshold: number;
-  severity: 'low' | 'critical';
-}
-
-type ApiLocation = Location & { _count?: { items: number } };
-type ApiInventoryItem = Omit<InventoryItem, 'dateAdded' | 'location' | 'targetCustomer' | 'subcategory' | 'size' | 'condition'> & {
-  dateAdded: string;
-  locationId: string;
-  location?: ApiLocation;
-  itemType?: string;
-  sku?: string | null;
-  targetCustomer?: InventoryItem['targetCustomer'] | null;
-  subcategory?: string | null;
-  size?: string | null;
-  condition?: InventoryItem['condition'] | null;
-  unit?: string | null;
-  minStock?: number | null;
-  maxStock?: number | null;
-  reorderPoint?: number | null;
-  expiryDate?: string | null;
-  storageTemperature?: string | null;
-};
-
-const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
-
-const mapApiLocation = (location: ApiLocation): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
-
-const mapApiInventoryItem = (item: ApiInventoryItem): InventoryItem & { locationId?: string } => ({
-  id: item.id,
-  name: item.name,
-  category: item.category,
-  targetCustomer: item.targetCustomer ?? 'Unisex',
-  subcategory: item.subcategory ?? 'General',
-  size: item.size ?? 'N/A',
-  condition: item.condition ?? 'Good',
-  quantity: item.quantity,
-  price: item.price,
-  dateAdded: formatDate(item.dateAdded),
-  location: item.location?.name ?? 'Unknown Location',
-  locationId: item.locationId
-});
-
-const mapApiUser = (user: any): User => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  status: user.status,
-  lastLogin: formatDate(user.lastLogin)
-});
-
-const mapPoStatus = (status: string): PurchaseOrder['status'] => {
-  switch (status) {
-    case 'APPROVED': return 'Approved';
-    case 'RECEIVED':
-    case 'PARTIALLY_RECEIVED': return 'Received';
-    case 'REJECTED': return 'Rejected';
-    case 'CANCELLED': return 'Cancelled';
-    default: return 'Pending'; // DRAFT, SUBMITTED
-  }
-};
-
-const mapApiPurchaseOrder = (po: any): PurchaseOrder => ({
-  id: po.id,
-  orderNumber: po.orderNumber,
-  supplier: po.supplier?.name ?? '',
-  date: formatDate(po.createdAt),
-  status: mapPoStatus(po.status),
-  items: (po.items ?? []).map((item: any) => ({
-    name: item.name,
-    quantity: item.quantity,
-    price: item.unitPrice,
-  })),
-  totalAmount: po.totalAmount,
-  paymentMethod: po.paymentMethod,
-  createdBy: po.createdBy?.name,
-});
-
-const mapTransferStatus = (status: string): Transfer['status'] => {
-  switch (status) {
-    case 'IN_TRANSIT': return 'In Transit';
-    case 'COMPLETED': return 'Completed';
-    case 'CANCELLED': return 'Cancelled';
-    default: return 'Pending';
-  }
-};
-
-const mapApiTransfer = (transfer: any): Transfer => ({
-  id: transfer.id,
-  transferNumber: transfer.transferNumber ?? `TR-${transfer.id.slice(0, 8)}`,
-  fromLocation: transfer.fromLocation?.name ?? '',
-  toLocation: transfer.toLocation?.name ?? '',
-  date: formatDate(transfer.createdAt),
-  status: mapTransferStatus(transfer.status),
-  items: (transfer.items ?? []).map((item: any) => ({
-    itemId: item.inventoryItemId ?? '',
-    name: item.inventoryItem?.name ?? '',
-    quantity: item.quantity,
-  })),
-  createdBy: transfer.createdBy?.name ?? '',
-  notes: transfer.notes,
-});
-
-const mapAdjustmentType = (type: string): Adjustment['type'] => {
-  const map: Record<string, Adjustment['type']> = {
-    ADD: 'Add',
-    REMOVE: 'Remove',
-    DAMAGE: 'Damage',
-    LOST: 'Lost',
-    FOUND: 'Found',
-    RECOUNT: 'Recount',
-  };
-  return map[type] ?? 'Add';
-};
-
-const mapAdjustmentStatus = (status: string): Adjustment['status'] => {
-  const map: Record<string, Adjustment['status']> = {
-    PENDING: 'Pending',
-    APPROVED: 'Approved',
-    REJECTED: 'Rejected',
-  };
-  return map[status] ?? 'Pending';
-};
-
-const mapApiAdjustment = (adj: any): Adjustment => ({
-  id: adj.id,
-  adjustmentNumber: adj.adjustmentNumber,
-  date: formatDate(adj.createdAt),
-  type: mapAdjustmentType(adj.type),
-  reason: adj.reason,
-  items: (adj.items ?? []).map((item: any) => ({
-    itemId: item.inventoryItemId ?? '',
-    name: item.inventoryItem?.name ?? '',
-    quantityChange: item.quantityChange,
-    location: item.location?.name ?? '',
-  })),
-  createdBy: adj.createdBy?.name ?? '',
-  status: mapAdjustmentStatus(adj.status),
-});
-
-const mapApiProductReceived = (receipt: any): ProductReceived => {
-  const items = (receipt.items ?? []).map((item: any) => {
-    const receivedQty: number = item.receivedQty ?? 0;
-    const rejectedQty: number = item.rejectedQty ?? 0;
-    return {
-      name: item.purchaseOrderItem?.name ?? item.inventoryItem?.name ?? 'Unknown',
-      orderedQty: item.purchaseOrderItem?.quantity ?? receivedQty + rejectedQty,
-      receivedQty: receivedQty + rejectedQty,
-      acceptedQty: receivedQty,
-      rejectedQty,
-      category: item.inventoryItem?.category ?? '',
-      condition: (item.condition ?? 'Good') as ProductReceived['items'][0]['condition'],
-      inspectionNotes: item.notes,
-      price: item.purchaseOrderItem?.unitPrice ?? 0,
-    };
-  });
-  const totalOrdered = items.reduce((s: number, i: typeof items[0]) => s + i.orderedQty, 0);
-  const totalAccepted = items.reduce((s: number, i: typeof items[0]) => s + i.acceptedQty, 0);
-  const totalRejected = items.reduce((s: number, i: typeof items[0]) => s + i.rejectedQty, 0);
-  return {
-    id: receipt.id,
-    receiptNumber: receipt.receiptNumber,
-    poNumber: receipt.purchaseOrder?.orderNumber ?? '',
-    poId: receipt.purchaseOrderId,
-    supplier: receipt.purchaseOrder?.supplier?.name ?? '',
-    dateReceived: formatDate(receipt.createdAt),
-    items,
-    receivedBy: receipt.receivedBy?.name ?? '',
-    status: totalRejected === 0 ? 'Fully Accepted' : 'Partially Accepted',
-    totalOrdered,
-    totalAccepted,
-    totalRejected,
-  };
-};
-
-
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
+  const { currentUser, isLoggedIn, isRestoringSession, login, logout } = useSession();
   const { currentView, navigateToView } = useViewNavigation();
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [productsReceived, setProductsReceived] = useState<ProductReceived[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
+  const resolvedActiveModule = hasRestaurantModule && !hasRetailModule ? 'RESTAURANT' : activeModule;
 
-  // When user logs in and has only RESTAURANT module, switch to it automatically
+  const { data: navInventory = [] } = useRetailInventoryQuery(isLoggedIn && hasRetailModule);
+  const retailNavStats = useMemo(
+    () => ({
+      totalItems: navInventory.reduce((sum, item) => sum + item.quantity, 0),
+    }),
+    [navInventory],
+  );
+  const retailNavStockAlerts = useMemo(
+    () =>
+      navInventory
+        .filter((item) => item.quantity <= 3 && item.condition !== 'Damaged')
+        .map((item) => ({
+          id: item.id,
+          itemName: item.name,
+          currentStock: item.quantity,
+          threshold: 5,
+          severity: item.quantity <= 1 ? 'critical' : 'low',
+        })),
+    [navInventory],
+  );
+
+  // When user logs in and has only RESTAURANT module, switch to it automatically.
   useEffect(() => {
     if (hasRestaurantModule && currentView.startsWith('restaurant-')) {
       setActiveModule('RESTAURANT');
@@ -272,307 +90,51 @@ export default function App() {
     }
   }, [currentView, hasRestaurantModule, hasRetailModule]);
 
-  // When switching modules, navigate to the appropriate default view
-  const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
-    setActiveModule(module);
-    navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
-  };
-
-  // Global handler to remove leading zeros from number inputs
+  // Global handler to remove leading zeros from number inputs.
   useEffect(() => {
-    const handleNumberInput = (e: Event) => {
-      const input = e.target as HTMLInputElement;
+    const handleNumberInput = (event: Event) => {
+      const input = event.target as HTMLInputElement;
       if (input.type === 'number' && input.value && input.value !== '0') {
-        // Remove leading zeros
         const cleaned = input.value.replace(/^0+/, '') || '0';
         if (cleaned !== input.value) {
           input.value = cleaned;
-          // Trigger change event to update React state
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }
     };
 
-    // Add event listener to all number inputs on blur
     document.addEventListener('blur', handleNumberInput, true);
-
-    return () => {
-      document.removeEventListener('blur', handleNumberInput, true);
-    };
+    return () => document.removeEventListener('blur', handleNumberInput, true);
   }, []);
 
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const loadPhaseOneData = async () => {
-      try {
-        if (hasRetailModule) {
-          const [inventoryData, locationData, poData, receiptsData, transfersData, adjData] = await Promise.all([
-            getInventory({ itemType: 'RETAIL_ITEM' }),
-            getLocations(),
-            getPurchaseOrders(),
-            getGoodsReceipts(),
-            getTransfers(),
-            getAdjustments(),
-          ]);
-          setInventory(inventoryData.map(mapApiInventoryItem));
-          setLocations(locationData.map(mapApiLocation));
-          setPurchaseOrders(poData.map(mapApiPurchaseOrder));
-          setProductsReceived(receiptsData.map(mapApiProductReceived));
-          setTransfers(transfersData.map(mapApiTransfer));
-          setAdjustments(adjData.map(mapApiAdjustment));
-        } else {
-          const locationData = await getLocations();
-          setLocations(locationData.map(mapApiLocation));
-        }
-
-        if (currentUser?.role === 'Admin') {
-          const userData = await getUsers();
-          setUsers(userData.map(mapApiUser));
-        }
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to load backend data');
-      }
-    };
-
-    loadPhaseOneData();
-  }, [isLoggedIn, currentUser?.role, hasRetailModule]);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    targetCustomer: 'Unisex' as 'Male' | 'Female' | 'Unisex',
-    subcategory: '',
-    size: '',
-    condition: 'Good' as 'Excellent' | 'Good' | 'Fair' | 'Damaged',
-    quantity: 1,
-    price: 0,
-    location: 'Main Store'
-  });
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
-
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
-    const availableStock = inventory.filter(item => item.condition !== 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const damagedItems = inventory.filter(item => item.condition === 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const stockMovements = inventory.length;
-
-    return {
-      totalItems,
-      availableStock,
-      damagedItems,
-      stockMovements,
-    };
-  }, [inventory]);
-
-  const stockAlerts = useMemo(() => {
-    return inventory
-      .filter(item => item.quantity <= 3 && item.condition !== 'Damaged')
-      .map(item => ({
-        id: item.id,
-        itemName: item.name,
-        currentStock: item.quantity,
-        threshold: 5,
-        severity: (item.quantity <= 1 ? 'critical' : 'low') as 'low' | 'critical'
-      }));
-  }, [inventory]);
-
-  const getLocationIdByName = (name: string) => {
-    return locations.find(location => location.name === name)?.id;
-  };
-
-  const toInventoryPayload = () => {
-    const locationId = getLocationIdByName(formData.location);
-    if (!locationId) {
-      throw new Error('Please select a valid location');
-    }
-
-    return {
-      name: formData.name,
-      category: formData.category,
-      targetCustomer: formData.targetCustomer,
-      subcategory: formData.subcategory,
-      size: formData.size,
-      condition: formData.condition,
-      quantity: Number(formData.quantity),
-      price: Number(formData.price),
-      locationId
-    };
-  };
-
-  const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.category || !formData.size) return;
-
-    try {
-      if (editingId) {
-        const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-        setInventory(inventory.map(item =>
-          item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-        ));
-        setEditingId(null);
-      } else {
-        const newItem = await createInventoryItem(toInventoryPayload());
-        setInventory([...inventory, mapApiInventoryItem(newItem)]);
-      }
-
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to save inventory item');
-    }
-  };
-
-  const handleEdit = (item: InventoryItem) => {
-    setFormData({
-      name: item.name,
-      category: item.category,
-      targetCustomer: item.targetCustomer,
-      subcategory: item.subcategory,
-      size: item.size,
-      condition: item.condition,
-      quantity: item.quantity,
-      price: item.price,
-      location: item.location
-    });
-    setEditingId(item.id);
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingId) return;
-
-    if (!formData.name || !formData.category || !formData.size) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-      setInventory(inventory.map(item =>
-        item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-      ));
-
-      setEditingId(null);
-      setShowEditModal(false);
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update inventory item');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setShowEditModal(false);
-    setFormData({
-      name: '',
-      category: '',
-      targetCustomer: 'Unisex',
-      subcategory: '',
-      size: '',
-      condition: 'Good',
-      quantity: 1,
-      price: 0,
-      location: 'Main Store'
-    });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this item?')) {
-      try {
-        await deleteInventoryItem(id);
-        setInventory(inventory.filter(item => item.id !== id));
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete inventory item');
-      }
-    }
-  };
-
-  const filteredInventory = inventory.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.subcategory.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
-  };
-
-  const toggleSubcategory = (key: string) => {
-    const newExpanded = new Set(expandedSubcategories);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedSubcategories(newExpanded);
+  const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
+    setActiveModule(module);
+    navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
   };
 
   const handleLogin = async (email: string, password: string) => {
-    try {
-      const response = await loginUser(email, password);
-      storeToken(response.accessToken);
-      setCurrentUser({
-        id: response.user.id,
-        name: response.user.name,
-        email: response.user.email,
-        role: response.user.role,
-        businessId: response.user.businessId,
-        modules: response.user.modules
-      });
-      localStorage.setItem('userRole', response.user.role.toLowerCase());
-      localStorage.setItem('userEmail', response.user.email);
-      setIsLoggedIn(true);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Invalid credentials');
-    }
+    await login(email, password);
   };
 
-  const handleLogout = () => {
-    clearStoredToken();
-    setIsLoggedIn(false);
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    await logout();
     navigateToView('dashboard');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userEmail');
+    setActiveModule('RETAIL');
   };
+
+  if (isRestoringSession) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading...
+      </div>
+    );
+  }
 
   if (!isLoggedIn) {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  if (activeModule === 'RESTAURANT' && hasRestaurantModule) {
+  if (resolvedActiveModule === 'RESTAURANT' && hasRestaurantModule) {
     const restaurantContent = (() => {
       switch (currentView) {
         case 'restaurant-dashboard':
@@ -618,7 +180,7 @@ export default function App() {
         onSwitchToRetail={() => switchModule('RETAIL')}
         onLogout={handleLogout}
       >
-        <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
           {restaurantContent}
         </Suspense>
       </RestaurantLayout>
@@ -627,9 +189,7 @@ export default function App() {
 
   return (
     <div className="bg-[#F8FAFB] h-screen w-screen overflow-hidden flex" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* Sidebar */}
-      <div className="h-full w-[256px] flex flex-col" style={{ background: "#003534" }}>
-        {/* Header */}
+      <div className="h-full w-[256px] flex flex-col" style={{ background: '#003534' }}>
         <div className="p-6 flex items-center gap-3">
           <div className="bg-white rounded-full size-[40px] flex items-center justify-center shadow-sm overflow-hidden">
             <img src={logoImage} alt="IMS Logo" className="w-full h-full object-contain p-1" />
@@ -642,19 +202,18 @@ export default function App() {
           </div>
         </div>
 
-        {/* Module switch â€” only shown when business has BOTH modules */}
         {hasBothModules && (
           <div className="px-4 pb-3 flex gap-2">
             <button
               onClick={() => switchModule('RETAIL')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${activeModule === 'RETAIL' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${resolvedActiveModule === 'RETAIL' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
             >
               <Store className="size-3.5" />
               Retail
             </button>
             <button
               onClick={() => switchModule('RESTAURANT')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${activeModule === 'RESTAURANT' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${resolvedActiveModule === 'RESTAURANT' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
             >
               <UtensilsCrossed className="size-3.5" />
               Restaurant
@@ -662,10 +221,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Navigation */}
         <nav className="flex-1 px-6 pb-4 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {/* Retail navigation */}
-          {activeModule === 'RETAIL' && (
+          {resolvedActiveModule === 'RETAIL' && (
             <>
               <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
                 <DashboardIcon />
@@ -674,18 +231,18 @@ export default function App() {
               <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
                 <StockAlertsIcon />
                 Stock Alerts
-                {stockAlerts.length > 0 && (
+                {retailNavStockAlerts.length > 0 && (
                   <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
-                    {stockAlerts.length}
+                    {retailNavStockAlerts.length}
                   </span>
                 )}
               </NavButton>
               <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
                 <InventoryIcon />
                 Inventory
-                {stats.totalItems > 0 && (
+                {retailNavStats.totalItems > 0 && (
                   <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
-                    {stats.totalItems}
+                    {retailNavStats.totalItems}
                   </span>
                 )}
               </NavButton>
@@ -732,7 +289,6 @@ export default function App() {
           )}
         </nav>
 
-        {/* User Profile */}
         <div className="bg-[#005656] border-t border-[rgba(255,255,255,0.1)] p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="bg-[#008967] rounded-full size-[40px] flex items-center justify-center">
@@ -760,87 +316,40 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 h-full flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="bg-[#005656] border-b border-[rgba(255,255,255,0.1)] px-6 py-4 flex items-center">
           <h1 className="text-white text-[20px] leading-[28px] flex-1" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
             {currentView.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
           </h1>
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
-          {currentView === 'dashboard' && (
-            <DashboardView
-              stats={stats}
-              stockAlerts={stockAlerts}
-              inventory={inventory}
-              purchaseOrders={purchaseOrders}
-              productsReceived={productsReceived}
-            />
-          )}
-          {currentView === 'stock-alerts' && (
-            <StockAlertsView alerts={stockAlerts} inventory={inventory} />
-          )}
-          {currentView === 'inventory' && (
-            <InventoryView
-              inventory={filteredInventory}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              expandedCategories={expandedCategories}
-              expandedSubcategories={expandedSubcategories}
-              toggleCategory={toggleCategory}
-              toggleSubcategory={toggleSubcategory}
-              showEditModal={showEditModal}
-              editingId={editingId}
-              formData={formData}
-              setFormData={setFormData}
-              onSaveEdit={handleSaveEdit}
-              onCancelEdit={handleCancelEdit}
-              locations={locations}
-            />
-          )}
-          {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
-          {currentView === 'pos' && <POSView currentUser={currentUser} />}
-          {currentView === 'sales-history' && <SalesHistoryView currentUser={currentUser} />}
-          {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
-          {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
-          {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
-          {currentView === 'transfers' && (
-            <TransfersView currentUser={currentUser} />
-          )}
-          {currentView === 'multilocation' && (
-            <MultilocationView
-              locations={locations}
-              setLocations={setLocations}
-              inventory={inventory}
-              transfers={transfers}
-              purchaseOrders={purchaseOrders}
-            />
-          )}
-          {currentView === 'reports' && (
-            <ReportsView
-              inventory={inventory}
-              transfers={transfers}
-              adjustments={adjustments}
-              purchaseOrders={purchaseOrders}
-              productsReceived={productsReceived}
-              locations={locations}
-              users={users}
-              currentUser={currentUser}
-            />
-          )}
-          {currentView === 'user-management' && (
-            <UserManagementView
-              users={users}
-              setUsers={setUsers}
-              currentUser={currentUser}
-            />
-          )}
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
+            {currentView === 'dashboard' && (
+              <DashboardView />
+            )}
+            {currentView === 'stock-alerts' && (
+              <StockAlertsView />
+            )}
+            {currentView === 'inventory' && (
+              <InventoryView />
+            )}
+            {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
+            {currentView === 'pos' && <POSView currentUser={currentUser} />}
+            {currentView === 'sales-history' && <SalesHistoryView currentUser={currentUser} />}
+            {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
+            {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
+            {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
+            {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
+            {currentView === 'multilocation' && <MultilocationView />}
+            {currentView === 'reports' && (
+              <ReportsView />
+            )}
+            {currentView === 'user-management' && (
+              <UserManagementView
+                currentUser={currentUser}
+              />
+            )}
           </Suspense>
         </div>
       </div>
@@ -848,14 +357,11 @@ export default function App() {
   );
 }
 
-
-
-// Navigation Button Component
-function NavButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function NavButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[14px] whitespace-nowrap overflow-hidden transition-colors ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[16px] transition-colors ${
         active
           ? 'bg-[#009BA5] text-white font-medium'
           : 'text-[#e5e7eb] hover:bg-[rgba(255,255,255,0.05)] font-normal'
@@ -867,7 +373,6 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-// Icon components using lucide-react
 const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
@@ -875,10 +380,9 @@ const ProductManagementIcon = () => <Settings2 className="size-5" />;
 const PurchaseOrdersIcon = () => <ShoppingCart className="size-5" />;
 const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;
+const SalesHistoryIcon = () => <Receipt className="size-5" />;
 const TransfersIcon = () => <ArrowRightLeft className="size-5" />;
 const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;
-const SalesHistoryIcon = () => <Receipt className="size-5" />;
 const UserManagementIcon = () => <Users className="size-5" />;
 const LogoutIcon = () => <LogOut className="size-4" />;
-

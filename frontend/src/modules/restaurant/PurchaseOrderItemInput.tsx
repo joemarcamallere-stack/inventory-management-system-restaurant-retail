@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Plus } from "lucide-react";
-import { getCategoryHierarchy } from "../lib/inventoryLogic";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { upsertRestaurantSetting } from "../../app/api/client";
+import {
+  useRestaurantCategoryHierarchyQuery,
+  useUpsertRestaurantCategoryHierarchyMutation,
+} from "../lib/restaurant";
 
 type SupplierProduct = {
   name: string;
@@ -58,16 +59,10 @@ export function PurchaseOrderItemInput({
 }: PurchaseOrderItemInputProps) {
   const [query, setQuery] = useState(value.productName);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
-    "inventory.categoryHierarchy",
-    getCategoryHierarchy()
-  );
+  const { data: categoryHierarchy = {} } = useRestaurantCategoryHierarchyQuery();
   const [newCategory, setNewCategory] = useState("");
   const [newSubCategory, setNewSubCategory] = useState("");
-  const saveHierarchy = useRestaurantMutation(
-    (value: Record<string, string[]>) => upsertRestaurantSetting("CATEGORY_HIERARCHY", value),
-    ["inventory.categoryHierarchy"],
-  );
+  const saveHierarchy = useUpsertRestaurantCategoryHierarchyMutation();
 
   useEffect(() => {
     setQuery(value.productName);
@@ -184,7 +179,6 @@ export function PurchaseOrderItemInput({
       [trimmed]: [],
     };
     await saveHierarchy.mutateAsync(nextHierarchy);
-    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       category: trimmed,
@@ -201,7 +195,6 @@ export function PurchaseOrderItemInput({
       [value.category]: [...subCategoryOptions, trimmed],
     };
     await saveHierarchy.mutateAsync(nextHierarchy);
-    setCategoryHierarchy(nextHierarchy);
     onChange({
       ...value,
       subCategory: trimmed,

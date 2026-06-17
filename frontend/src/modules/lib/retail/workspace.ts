@@ -1,18 +1,22 @@
 import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import type { InventoryItem } from '../../models/retail';
+import type { InventoryItem } from '../../../models/retail';
 import {
   useDeleteRetailInventoryMutation,
   useRetailAdjustmentsQuery,
-  useRetailGoodsReceiptsQuery,
   useRetailInventoryQuery,
-  useRetailLocationsQuery,
-  useRetailPurchaseOrdersQuery,
-  useRetailTransfersQuery,
-  useRetailUsersQuery,
   useSaveRetailInventoryMutation,
-  type RetailStockAlert,
-} from '../../modules/lib/retailQueries';
+} from './inventoryQueries';
+import type { RetailStockAlert } from './shared';
+import {
+  useRetailGoodsReceiptsQuery,
+  useRetailPurchaseOrdersQuery,
+} from './purchaseOrderQueries';
+import {
+  useRetailLocationsQuery,
+  useRetailUsersQuery,
+} from './locationQueries';
+import { useRetailTransfersQuery } from './transferQueries';
 
 const emptyForm = {
   name: '',

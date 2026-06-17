@@ -48,28 +48,28 @@ enum InventoryItemType {
 }
 
 model Business {
-  id        String           @id @default(uuid())
-  name      String           @unique
-  modules   BusinessModule[] @default([RETAIL])
-  users     User[]
-  locations Location[]
-  items     InventoryItem[]
-  stockMovements StockMovement[]
-  recipes   Recipe[]
-  kitchenOrders KitchenOrder[]
-  suppliers      Supplier[]
-  purchaseOrders PurchaseOrder[]
-  goodsReceipts  GoodsReceipt[]
-  transfers      Transfer[]
-  sales          Sale[]
-  bundles        BundlePackage[]
-  stockAdjustments StockAdjustment[]
-  diningTables   DiningTable[]
-  notifications  Notification[]
-  categories     Category[]
+  id                 String              @id @default(uuid())
+  name               String              @unique
+  modules            BusinessModule[]    @default([RETAIL])
+  users              User[]
+  locations          Location[]
+  items              InventoryItem[]
+  stockMovements     StockMovement[]
+  recipes            Recipe[]
+  kitchenOrders      KitchenOrder[]
+  suppliers          Supplier[]
+  purchaseOrders     PurchaseOrder[]
+  goodsReceipts      GoodsReceipt[]
+  transfers          Transfer[]
+  sales              Sale[]
+  bundles            BundlePackage[]
+  stockAdjustments   StockAdjustment[]
+  diningTables       DiningTable[]
+  notifications      Notification[]
+  categories         Category[]
   restaurantSettings RestaurantSetting[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 }
 
 model RestaurantSetting {
@@ -86,85 +86,85 @@ model RestaurantSetting {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  passwordHash String
-  role      UserRole   @default(Staff)
-  status    UserStatus @default(Active)
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id])
-  stockMovements StockMovement[]
-  kitchenOrders KitchenOrder[]
-  purchaseOrders         PurchaseOrder[]  @relation("POCreatedBy")
-  receivedPurchaseOrders PurchaseOrder[]  @relation("POReceivedBy")
+  id                     String          @id @default(uuid())
+  name                   String
+  email                  String          @unique
+  passwordHash           String
+  role                   UserRole        @default(Staff)
+  status                 UserStatus      @default(Active)
+  businessId             String
+  business               Business        @relation(fields: [businessId], references: [id])
+  stockMovements         StockMovement[]
+  kitchenOrders          KitchenOrder[]
+  purchaseOrders         PurchaseOrder[] @relation("POCreatedBy")
+  receivedPurchaseOrders PurchaseOrder[] @relation("POReceivedBy")
   goodsReceipts          GoodsReceipt[]
   transfers              Transfer[]
   sales                  Sale[]
-  createdBundles         BundlePackage[]  @relation("BundleCreatedBy")
-  approvedBundles        BundlePackage[]  @relation("BundleApprovedBy")
+  createdBundles         BundlePackage[] @relation("BundleCreatedBy")
+  approvedBundles        BundlePackage[] @relation("BundleApprovedBy")
   createdAdjustments     StockAdjustment[] @relation("AdjustmentCreatedBy")
   reviewedAdjustments    StockAdjustment[] @relation("AdjustmentReviewedBy")
-  notifications  Notification[]
-  lastLogin DateTime @default(now())
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  notifications          Notification[]
+  lastLogin              DateTime        @default(now())
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
 }
 
 model Location {
-  id        String   @id @default(uuid())
-  name      String
-  address   String
-  manager   String
-  phone     String
-  itemCount Int      @default(0)
-  businessId String
-  business   Business @relation(fields: [businessId], references: [id])
-  items     InventoryItem[]
+  id             String          @id @default(uuid())
+  name           String
+  address        String
+  manager        String
+  phone          String
+  itemCount      Int             @default(0)
+  businessId     String
+  business       Business        @relation(fields: [businessId], references: [id])
+  items          InventoryItem[]
   stockMovements StockMovement[]
-  transfersFrom  Transfer[] @relation("TransferFrom")
-  transfersTo    Transfer[] @relation("TransferTo")
+  transfersFrom  Transfer[]      @relation("TransferFrom")
+  transfersTo    Transfer[]      @relation("TransferTo")
   sales          Sale[]
   bundles        BundlePackage[]
   adjustmentItems StockAdjustmentItem[]
   kitchenOrders  KitchenOrder[]
   diningTables   DiningTable[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@unique([businessId, name])
 }
 
 model Category {
-  id          String         @id @default(uuid())
+  id          String          @id @default(uuid())
   name        String
   description String?
   module      BusinessModule
   businessId  String
-  business    Business       @relation(fields: [businessId], references: [id])
+  business    Business        @relation(fields: [businessId], references: [id])
   items       InventoryItem[]
-  suppliers   Supplier[]     @relation("SupplierCategory")
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  suppliers   Supplier[]      @relation("SupplierCategory")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
   @@unique([businessId, name, module])
   @@index([businessId, module])
 }
 
 model DiningTable {
-  id          String            @id @default(uuid())
-  tableNumber String
-  capacity    Int
-  status      DiningTableStatus @default(AVAILABLE)
-  floor       String?
-  notes       String?
-  locationId  String
-  location    Location          @relation(fields: [locationId], references: [id])
-  businessId  String
-  business    Business          @relation(fields: [businessId], references: [id])
+  id            String            @id @default(uuid())
+  tableNumber   String
+  capacity      Int
+  status        DiningTableStatus @default(AVAILABLE)
+  floor         String?
+  notes         String?
+  locationId    String
+  location      Location          @relation(fields: [locationId], references: [id])
+  businessId    String
+  business      Business          @relation(fields: [businessId], references: [id])
   kitchenOrders KitchenOrder[]
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   @@unique([businessId, locationId, tableNumber])
   @@index([businessId, status])
@@ -192,50 +192,50 @@ model Notification {
 }
 
 model InventoryItem {
-  id             String   @id @default(uuid())
-  name           String
-  itemType       InventoryItemType @default(RETAIL_ITEM)
-  sku            String?
-  barcode        String?
-  category       String
-  categoryId     String?
-  categoryRef    Category?         @relation(fields: [categoryId], references: [id])
-  targetCustomer String?  // Male, Female, Unisex
-  subcategory    String?
-  size           String?
-  condition      String?  // Excellent, Good, Fair, Damaged
-  quantity       Float    @default(0.0)
-  price          Float    @default(0.0)
-  costPrice      Float?
-  imageUrl       String?
-  unit           String?
-  minStock       Float?
-  maxStock       Float?
-  reorderPoint   Float?
-  expiryDate     DateTime?
+  id                 String              @id @default(uuid())
+  name               String
+  itemType           InventoryItemType   @default(RETAIL_ITEM)
+  sku                String?
+  barcode            String?
+  category           String
+  categoryId         String?
+  categoryRef        Category?           @relation(fields: [categoryId], references: [id])
+  targetCustomer     String? // Male, Female, Unisex
+  subcategory        String?
+  size               String?
+  condition          String? // Excellent, Good, Fair, Damaged
+  quantity           Float               @default(0.0)
+  price              Float               @default(0.0)
+  costPrice          Float?
+  imageUrl           String?
+  unit               String?
+  minStock           Float?
+  maxStock           Float?
+  reorderPoint       Float?
+  expiryDate         DateTime?
   storageTemperature String?
-  dateAdded      DateTime @default(now())
-  locationId     String
-  location       Location @relation(fields: [locationId], references: [id])
-  businessId     String
-  business       Business @relation(fields: [businessId], references: [id])
-  stockMovements StockMovement[]
-  recipeIngredients RecipeIngredient[]
-  menuRecipes Recipe[] @relation("RecipeMenuItem")
+  dateAdded          DateTime            @default(now())
+  locationId         String
+  location           Location            @relation(fields: [locationId], references: [id])
+  businessId         String
+  business           Business            @relation(fields: [businessId], references: [id])
+  stockMovements     StockMovement[]
+  recipeIngredients  RecipeIngredient[]
+  menuRecipes        Recipe[]            @relation("RecipeMenuItem")
   purchaseOrderItems PurchaseOrderItem[]
   goodsReceiptItems  GoodsReceiptItem[]
   transferItems      TransferItem[]
   saleItems          SaleItem[]
   bundleItems        BundleItem[]
   adjustmentItems    StockAdjustmentItem[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
+  @@unique([businessId, sku])
+  @@unique([businessId, barcode])
   @@index([businessId])
   @@index([businessId, itemType])
   @@index([businessId, locationId])
-  @@unique([businessId, sku])
-  @@unique([businessId, barcode])
 }
 
 model Recipe {
@@ -272,17 +272,17 @@ model Recipe {
 }
 
 model RecipeIngredient {
-  id          String        @id @default(uuid())
-  recipeId    String
-  recipe      Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  itemId      String
-  item        InventoryItem @relation(fields: [itemId], references: [id])
-  quantity    Float
-  unit        String?
-  unitCost    Float?
-  totalCost   Float?
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id        String        @id @default(uuid())
+  recipeId  String
+  recipe    Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      InventoryItem @relation(fields: [itemId], references: [id])
+  quantity  Float
+  unit      String?
+  unitCost  Float?
+  totalCost Float?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
 
   @@unique([recipeId, itemId])
   @@index([itemId])
@@ -304,27 +304,27 @@ enum KitchenOrderStatus {
 }
 
 model KitchenOrder {
-  id          String             @id @default(uuid())
-  receiptNo   String
-  quantity    Float
-  status      KitchenOrderStatus @default(COMPLETED)
-  notes       String?
-  voidReason  String?
-  voidedAt    DateTime?
-  recipeId    String
-  recipe      Recipe             @relation(fields: [recipeId], references: [id])
-  locationId  String?
-  location    Location?          @relation(fields: [locationId], references: [id])
-  tableId     String?
-  table       DiningTable?       @relation(fields: [tableId], references: [id])
-  saleId      String?            @unique
-  sale        Sale?              @relation(fields: [saleId], references: [id])
-  businessId  String
-  business    Business           @relation(fields: [businessId], references: [id])
+  id            String             @id @default(uuid())
+  receiptNo     String
+  quantity      Float
+  status        KitchenOrderStatus @default(COMPLETED)
+  notes         String?
+  voidReason    String?
+  voidedAt      DateTime?
+  recipeId      String
+  recipe        Recipe             @relation(fields: [recipeId], references: [id])
+  locationId    String?
+  location      Location?          @relation(fields: [locationId], references: [id])
+  tableId       String?
+  table         DiningTable?       @relation(fields: [tableId], references: [id])
+  saleId        String?            @unique
+  sale          Sale?              @relation(fields: [saleId], references: [id])
+  businessId    String
+  business      Business           @relation(fields: [businessId], references: [id])
   completedById String?
-  completedBy User?              @relation(fields: [completedById], references: [id])
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
+  completedBy   User?              @relation(fields: [completedById], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
 
   @@unique([businessId, receiptNo])
   @@index([businessId, createdAt])
@@ -346,53 +346,57 @@ enum StockMovementType {
 }
 
 model StockMovement {
-  id              String            @id @default(uuid())
-  type            StockMovementType
-  quantity        Float
+  id               String            @id @default(uuid())
+  type             StockMovementType
+  quantity         Float
   previousQuantity Float
-  newQuantity     Float
-  unit            String?
-  reason          String?
-  referenceType   String?
-  referenceId     String?
-  notes           String?
-  itemId          String
-  item            InventoryItem     @relation(fields: [itemId], references: [id])
-  locationId      String
-  location        Location          @relation(fields: [locationId], references: [id])
-  businessId      String
-  business        Business          @relation(fields: [businessId], references: [id])
-  createdById     String?
-  createdBy       User?             @relation(fields: [createdById], references: [id])
-  createdAt       DateTime          @default(now())
+  newQuantity      Float
+  unit             String?
+  reason           String?
+  referenceType    String?
+  referenceId      String?
+  notes            String?
+  itemId           String
+  item             InventoryItem     @relation(fields: [itemId], references: [id])
+  locationId       String
+  location         Location          @relation(fields: [locationId], references: [id])
+  businessId       String
+  business         Business          @relation(fields: [businessId], references: [id])
+  module           BusinessModule    @default(RETAIL)
+  createdById      String?
+  createdBy        User?             @relation(fields: [createdById], references: [id])
+  createdAt        DateTime          @default(now())
 
   @@index([businessId, createdAt])
   @@index([businessId, itemId])
   @@index([businessId, locationId])
   @@index([businessId, type])
+  @@index([businessId, module, createdAt])
 }
 
 // ─── Supplier ────────────────────────────────────────────────────────────────
 
 model Supplier {
-  id            String          @id @default(uuid())
-  name          String
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  category      String?
-  categoryId    String?
-  categoryRef   Category?       @relation("SupplierCategory", fields: [categoryId], references: [id])
-  isActive      Boolean         @default(true)
-  businessId    String
-  business      Business        @relation(fields: [businessId], references: [id])
+  id             String          @id @default(uuid())
+  name           String
+  contactPerson  String?
+  email          String?
+  phone          String?
+  address        String?
+  category       String?
+  categoryId     String?
+  categoryRef    Category?       @relation("SupplierCategory", fields: [categoryId], references: [id])
+  isActive       Boolean         @default(true)
+  businessId     String
+  business       Business        @relation(fields: [businessId], references: [id])
+  module         BusinessModule  @default(RETAIL)
   purchaseOrders PurchaseOrder[]
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
-  @@unique([businessId, name])
+  @@unique([businessId, name, module])
   @@index([businessId])
+  @@index([businessId, module])
 }
 
 // ─── Purchase Orders ─────────────────────────────────────────────────────────
@@ -408,49 +412,51 @@ enum PurchaseOrderStatus {
 }
 
 model PurchaseOrder {
-  id            String              @id @default(uuid())
-  orderNumber   String
-  supplierId    String?
-  supplier      Supplier?           @relation(fields: [supplierId], references: [id])
-  status        PurchaseOrderStatus @default(DRAFT)
-  notes         String?
-  paymentMethod String?
-  paymentTerms  String?
+  id               String              @id @default(uuid())
+  orderNumber      String
+  supplierId       String?
+  supplier         Supplier?           @relation(fields: [supplierId], references: [id])
+  status           PurchaseOrderStatus @default(DRAFT)
+  notes            String?
+  paymentMethod    String?
+  paymentTerms     String?
   expectedDelivery DateTime?
-  rejectionReason String?
-  rejectedAt      DateTime?
-  totalAmount   Float               @default(0)
-  businessId    String
-  business      Business            @relation(fields: [businessId], references: [id])
-  createdById   String?
-  createdBy     User?               @relation("POCreatedBy", fields: [createdById], references: [id])
-  receivedById  String?
-  receivedBy    User?               @relation("POReceivedBy", fields: [receivedById], references: [id])
-  receivedAt    DateTime?
-  items         PurchaseOrderItem[]
-  goodsReceipts GoodsReceipt[]
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
+  rejectionReason  String?
+  rejectedAt       DateTime?
+  totalAmount      Float               @default(0)
+  businessId       String
+  business         Business            @relation(fields: [businessId], references: [id])
+  module           BusinessModule      @default(RETAIL)
+  createdById      String?
+  createdBy        User?               @relation("POCreatedBy", fields: [createdById], references: [id])
+  receivedById     String?
+  receivedBy       User?               @relation("POReceivedBy", fields: [receivedById], references: [id])
+  receivedAt       DateTime?
+  items            PurchaseOrderItem[]
+  goodsReceipts    GoodsReceipt[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   @@unique([businessId, orderNumber])
   @@index([businessId, status])
   @@index([businessId, createdAt])
+  @@index([businessId, module, status])
 }
 
 model PurchaseOrderItem {
-  id              String         @id @default(uuid())
+  id              String             @id @default(uuid())
   purchaseOrderId String
-  purchaseOrder   PurchaseOrder  @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrder   PurchaseOrder      @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   inventoryItemId String?
-  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  inventoryItem   InventoryItem?     @relation(fields: [inventoryItemId], references: [id])
   name            String
   quantity        Float
-  receivedQty     Float          @default(0)
-  rejectedQty     Float          @default(0)
+  receivedQty     Float              @default(0)
+  rejectedQty     Float              @default(0)
   unitPrice       Float
   totalPrice      Float
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   receiptItems    GoodsReceiptItem[]
 
   @@index([purchaseOrderId])
@@ -466,12 +472,14 @@ model GoodsReceipt {
   notes           String?
   businessId      String
   business        Business           @relation(fields: [businessId], references: [id])
+  module          BusinessModule     @default(RETAIL)
   items           GoodsReceiptItem[]
   createdAt       DateTime           @default(now())
 
   @@unique([businessId, receiptNumber])
   @@index([businessId, createdAt])
   @@index([purchaseOrderId])
+  @@index([businessId, module, createdAt])
 }
 
 model GoodsReceiptItem {
@@ -513,6 +521,7 @@ model Transfer {
   notes          String?
   businessId     String
   business       Business       @relation(fields: [businessId], references: [id])
+  module         BusinessModule @default(RETAIL)
   createdById    String?
   createdBy      User?          @relation(fields: [createdById], references: [id])
   completedAt    DateTime?
@@ -523,6 +532,7 @@ model Transfer {
   @@unique([businessId, transferNumber])
   @@index([businessId, status])
   @@index([businessId, createdAt])
+  @@index([businessId, module, status])
 }
 
 model TransferItem {
@@ -546,33 +556,35 @@ enum SaleStatus {
 }
 
 model Sale {
-  id                String     @id @default(uuid())
+  id                String         @id @default(uuid())
   transactionNumber String
   locationId        String
-  location          Location   @relation(fields: [locationId], references: [id])
+  location          Location       @relation(fields: [locationId], references: [id])
   cashierId         String?
-  cashier           User?      @relation(fields: [cashierId], references: [id])
+  cashier           User?          @relation(fields: [cashierId], references: [id])
   subtotal          Float
-  discount          Float      @default(0)
-  tax               Float      @default(0)
+  discount          Float          @default(0)
+  tax               Float          @default(0)
   total             Float
   paymentMethod     String
   amountPaid        Float
-  change            Float      @default(0)
+  change            Float          @default(0)
   customer          String?
-  status            SaleStatus @default(COMPLETED)
+  status            SaleStatus     @default(COMPLETED)
   refundReason      String?
   kitchenOrder      KitchenOrder?
   businessId        String
-  business          Business   @relation(fields: [businessId], references: [id])
+  business          Business       @relation(fields: [businessId], references: [id])
+  module            BusinessModule @default(RETAIL)
   items             SaleItem[]
-  createdAt         DateTime   @default(now())
-  updatedAt         DateTime   @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@unique([businessId, transactionNumber])
   @@index([businessId, createdAt])
   @@index([businessId, locationId])
   @@index([businessId, status])
+  @@index([businessId, module, createdAt])
 }
 
 model SaleItem {

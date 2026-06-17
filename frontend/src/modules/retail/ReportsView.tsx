@@ -1,19 +1,20 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users, ClipboardList } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
-  InventoryItem,
-  PurchaseOrder,
-  ProductReceived,
-  Bundle,
-  Transfer,
   Adjustment,
+  Bundle,
+  InventoryItem,
   Location,
+  ProductReceived,
+  PurchaseOrder,
+  Transfer,
   User,
-} from '../../app/utils/generateSampleData';
+} from '../../models/retail';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { useSession } from '../../app/hooks/useSession';
+import { useRetailWorkspace } from '../lib/retail';
 
 const formatAuditDate = (value?: string) => {
   if (!value) return '';
@@ -25,25 +26,21 @@ const formatAuditDate = (value?: string) => {
   });
 };
 
-export function ReportsView({
-  inventory,
-  transfers,
-  adjustments,
-  purchaseOrders,
-  productsReceived,
-  locations,
-  users,
-  currentUser
-}: {
-  inventory: InventoryItem[];
-  transfers: Transfer[];
-  adjustments: Adjustment[];
-  purchaseOrders: PurchaseOrder[];
-  productsReceived: ProductReceived[];
-  locations: Location[];
-  users: User[];
-  currentUser: { email: string; role: string } | null;
-}) {
+export function ReportsView() {
+  const { currentUser } = useSession();
+  const {
+    inventory,
+    transfers,
+    adjustments,
+    purchaseOrders,
+    productsReceived,
+    locations,
+    users,
+  } = useRetailWorkspace({
+    enabled: true,
+    loadSharedData: true,
+    loadUsers: currentUser?.role === 'Admin',
+  });
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'transfers' | 'financial' | 'operations' | 'audit' | 'confidential'>('overview');
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | 'year' | 'all'>('30days');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');

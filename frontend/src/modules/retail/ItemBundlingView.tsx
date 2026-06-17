@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,15 +13,35 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import {
+  useActivateRetailBundleMutation,
+  useApproveRetailBundleMutation,
+  useCreateRetailBundleMutation,
+  useDeactivateRetailBundleMutation,
+  useDeleteRetailBundleMutation,
+  useRejectRetailBundleMutation,
+  useRetailBundlesQuery,
+  useRetailInventoryRecordsQuery,
+  useUpdateRetailBundleMutation,
+} from '../lib/retail';
 
 export function ItemBundlingView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [bundles, setBundles] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const bundlesQuery = useRetailBundlesQuery();
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const createBundleMutation = useCreateRetailBundleMutation();
+  const updateBundleMutation = useUpdateRetailBundleMutation();
+  const approveBundleMutation = useApproveRetailBundleMutation();
+  const rejectBundleMutation = useRejectRetailBundleMutation();
+  const activateBundleMutation = useActivateRetailBundleMutation();
+  const deactivateBundleMutation = useDeactivateRetailBundleMutation();
+  const deleteBundleMutation = useDeleteRetailBundleMutation();
+  const bundles = bundlesQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = bundlesQuery.isLoading || inventoryQuery.isLoading;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,25 +63,6 @@ export function ItemBundlingView({
   const [itemSearchTerm, setItemSearchTerm] = useState('');
 
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
-
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [bundleData, inventoryData] = await Promise.all([
-        getBundles(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setBundles(bundleData);
-      setInventory(inventoryData);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   // ─── Derived state ───────────────────────────────────────────────────────────
 
@@ -138,10 +138,9 @@ export function ItemBundlingView({
     try {
       setSaving(true);
       setError(null);
-      await createBundle({ name: bundleForm.name, discount: bundleForm.discount, items: bundleForm.items });
+      await createBundleMutation.mutateAsync({ name: bundleForm.name, discount: bundleForm.discount, items: bundleForm.items });
       resetForm();
       setShowCreateModal(false);
-      await loadData();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -154,10 +153,12 @@ export function ItemBundlingView({
     try {
       setSaving(true);
       setError(null);
-      await updateBundle(selectedBundle.id, { name: bundleForm.name, discount: bundleForm.discount });
+      await updateBundleMutation.mutateAsync({
+        id: selectedBundle.id,
+        data: { name: bundleForm.name, discount: bundleForm.discount },
+      });
       resetForm();
       setShowEditModal(false);
-      await loadData();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -169,10 +170,9 @@ export function ItemBundlingView({
     try {
       setSaving(true);
       setError(null);
-      await approveBundle(id);
+      await approveBundleMutation.mutateAsync(id);
       setShowApprovalModal(false);
       setSelectedBundle(null);
-      await loadData();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -185,11 +185,10 @@ export function ItemBundlingView({
     try {
       setSaving(true);
       setError(null);
-      await rejectBundle(id, rejectionReason);
+      await rejectBundleMutation.mutateAsync({ id, reason: rejectionReason });
       setShowApprovalModal(false);
       setSelectedBundle(null);
       setRejectionReason('');
-      await loadData();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -198,20 +197,20 @@ export function ItemBundlingView({
   };
 
   const handleActivateBundle = async (id: string) => {
-    try { setSaving(true); await activateBundle(id); await loadData(); }
+    try { setSaving(true); await activateBundleMutation.mutateAsync(id); }
     catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
   };
 
   const handleDeactivateBundle = async (id: string) => {
-    try { setSaving(true); await deactivateBundle(id); await loadData(); }
+    try { setSaving(true); await deactivateBundleMutation.mutateAsync(id); }
     catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
   };
 
   const handleDeleteBundle = async (id: string) => {
     if (!confirm('Delete this bundle? This cannot be undone.')) return;
-    try { setSaving(true); await deleteBundle(id); await loadData(); }
+    try { setSaving(true); await deleteBundleMutation.mutateAsync(id); }
     catch (e: any) { setError(e.message); }
     finally { setSaving(false); }
   };

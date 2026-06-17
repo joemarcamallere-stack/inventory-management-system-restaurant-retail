@@ -1,10 +1,25 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Boxes, Link2, Merge, PackageSearch, Save, ShieldAlert } from "lucide-react";
-import { readRestaurantData, useRestaurantState, writeRestaurantData } from "../lib/restaurantData";
+import { toast } from "sonner";
+import { useSession } from "../../app/hooks/useSession";
 import { defaultCategoryHierarchy, InventoryProduct } from "../lib/inventoryLogic";
+import {
+  useRestaurantCategoryHierarchyQuery,
+  useRestaurantGlobalProductsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantSuppliersQuery,
+  useUpdateRestaurantInventoryMutation,
+  useRestaurantProductMergeMetadataQuery,
+  useUpsertRestaurantProductMergeMetadataMutation,
+} from "../lib/restaurant";
+
+type RestaurantInventoryProduct = InventoryProduct & {
+  backendId?: string;
+};
 
 type GlobalProduct = {
   id: string;
+  backendId?: string;
   inventoryId?: number;
   sku?: string;
   name: string;
@@ -22,33 +37,30 @@ type Supplier = {
   products: Array<{ name: string; price: number }>;
 };
 
-type OrderItem = {
-  productId?: string;
-  productName: string;
-  category: string;
-  subCategory: string;
-  unit: string;
-  quantity: number;
-  unitPrice: number;
-};
-
-type PurchaseOrder = {
-  id: string;
-  orderItems: OrderItem[];
-};
-
-type GoodsRecord = {
-  id: string;
-  receivedItems?: Array<OrderItem & { condition: string }>;
+type ProductMergeMetadata = {
+  aliases?: Record<string, string>;
+  overrides?: Record<
+    string,
+    {
+      name?: string;
+      category?: string;
+      subCategory?: string;
+      unit?: string;
+      sku?: string;
+    }
+  >;
+  supplierPrices?: Record<string, Record<string, number>>;
 };
 
 type CatalogProduct = {
   key: string;
+  sourceKeys: string[];
   name: string;
   category: string;
   subCategory: string;
   unit: string;
   inventoryIds: number[];
+  inventoryItems: RestaurantInventoryProduct[];
   globalIds: string[];
   stock: number;
   maxStock: number;
@@ -69,14 +81,24 @@ function joinCategory(category: string, subCategory: string) {
   return subCategory ? `${category} > ${subCategory}` : category;
 }
 
+function getCanonicalKey(productName: string, metadata: ProductMergeMetadata) {
+  const key = normalizeName(productName);
+  return metadata.aliases?.[key] ?? key;
+}
+
 export function ProductManagement() {
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
+  const { currentUser } = useSession();
+  const isAdmin = currentUser?.role === "Admin";
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedKey, setSelectedKey] = useState<string>("");
   const [mergeKey, setMergeKey] = useState<string>("");
-  const [products, setProducts] = useRestaurantState<InventoryProduct[]>("inventory.products", []);
-  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>("purchaseOrders.globalProducts", []);
-  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
+  const { data: products = [] } = useRestaurantInventoryQuery<RestaurantInventoryProduct[]>();
+  const { data: globalProducts = [] } = useRestaurantGlobalProductsQuery() as { data?: GlobalProduct[] };
+  const { data: suppliers = [] } = useRestaurantSuppliersQuery() as { data?: Supplier[] };
+  const { data: categoryHierarchy = defaultCategoryHierarchy } = useRestaurantCategoryHierarchyQuery();
+  const { data: productMetadata = {} } = useRestaurantProductMergeMetadataQuery<ProductMergeMetadata>();
+  const updateInventory = useUpdateRestaurantInventoryMutation();
+  const saveMetadata = useUpsertRestaurantProductMergeMetadataMutation();
   const [form, setForm] = useState({
     name: "",
     category: "",
@@ -92,49 +114,54 @@ export function ProductManagement() {
     const grouped = new Map<string, CatalogProduct>();
 
     products.forEach((product) => {
-      const key = normalizeName(product.name);
+      const sourceKey = normalizeName(product.name);
+      const key = getCanonicalKey(product.name, productMetadata);
+      const override = productMetadata.overrides?.[key];
       const categoryParts = splitCategory(product.category);
+      const category = override?.category ?? categoryParts.category;
+      const subCategory = override?.subCategory ?? categoryParts.subCategory;
       const linkedGlobalIds = globalProducts
-        .filter((globalProduct) => globalProduct.inventoryId === product.id)
+        .filter((globalProduct) =>
+          globalProduct.backendId === product.backendId ||
+          globalProduct.id === product.backendId ||
+          globalProduct.inventoryId === product.id
+        )
         .map((globalProduct) => globalProduct.id);
       const current = grouped.get(key) || {
         key,
-        name: product.name,
-        category: categoryParts.category,
-        subCategory: categoryParts.subCategory,
-        unit: product.unit || "pcs",
+        sourceKeys: [],
+        name: override?.name ?? product.name,
+        category,
+        subCategory,
+        unit: override?.unit ?? (product.unit || "pcs"),
         inventoryIds: [],
+        inventoryItems: [],
         globalIds: linkedGlobalIds,
         stock: 0,
         maxStock: product.maxStock || 0,
         minStock: product.minStock ?? Math.ceil((product.maxStock || 0) * 0.25),
         reorderPoint: product.reorderPoint ?? Math.ceil((product.maxStock || 0) * 0.3),
-        supplierNames: [],
+        supplierNames: Object.keys(productMetadata.supplierPrices?.[key] ?? {}),
       };
+      if (!current.sourceKeys.includes(sourceKey)) current.sourceKeys.push(sourceKey);
       current.inventoryIds.push(product.id);
+      current.inventoryItems.push(product);
       linkedGlobalIds.forEach((id) => {
         if (!current.globalIds.includes(id)) current.globalIds.push(id);
       });
       current.stock += product.stock || 0;
       current.maxStock = Math.max(current.maxStock, product.maxStock || 0);
+      current.minStock = Math.min(current.minStock, product.minStock ?? current.minStock);
+      current.reorderPoint = Math.max(current.reorderPoint, product.reorderPoint ?? 0);
       grouped.set(key, current);
     });
 
-    suppliers.forEach((supplier) => {
-      supplier.products.forEach((product) => {
-        const current = grouped.get(normalizeName(product.name));
-        if (current && !current.supplierNames.includes(supplier.name)) {
-          current.supplierNames.push(supplier.name);
-        }
-      });
-    });
-
     return Array.from(grouped.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [products, globalProducts, suppliers]);
+  }, [products, globalProducts, productMetadata]);
 
   const selectedProduct = catalog.find((product) => product.key === selectedKey);
-  const categoryOptions = Object.keys(defaultCategoryHierarchy);
-  const subCategoryOptions = form.category ? defaultCategoryHierarchy[form.category] || [] : [];
+  const categoryOptions = Object.keys(categoryHierarchy);
+  const subCategoryOptions = form.category ? categoryHierarchy[form.category] || [] : [];
 
   const filteredCatalog = catalog.filter((product) => {
     const query = searchQuery.toLowerCase();
@@ -158,46 +185,17 @@ export function ProductManagement() {
       reorderPoint: String(product.reorderPoint || 0),
     });
 
+    const savedPrices = productMetadata.supplierPrices?.[product.key] ?? {};
     const nextSupplierPrices: Record<string, string> = {};
     suppliers.forEach((supplier) => {
-      const linked = supplier.products.find((item) => normalizeName(item.name) === product.key);
-      if (linked) nextSupplierPrices[supplier.name] = String(linked.price);
+      if (savedPrices[supplier.name] !== undefined) {
+        nextSupplierPrices[supplier.name] = String(savedPrices[supplier.name]);
+      }
     });
     setSupplierPrices(nextSupplierPrices);
   };
 
-  const updateLinkedRecords = (oldNames: string[], nextProduct: { name: string; category: string; subCategory: string; unit: string }, oldGlobalIds: string[] = []) => {
-    const oldNameSet = new Set(oldNames.map(normalizeName));
-    const oldIdSet = new Set(oldGlobalIds);
-
-    const purchaseOrders = readRestaurantData<PurchaseOrder[]>("purchaseOrders.orders", []);
-    writeRestaurantData(
-      "purchaseOrders.orders",
-      purchaseOrders.map((order) => ({
-        ...order,
-        orderItems: order.orderItems.map((item) =>
-          item.productId && oldIdSet.has(item.productId)
-            ? { ...item, productName: nextProduct.name, category: nextProduct.category, subCategory: nextProduct.subCategory, unit: nextProduct.unit }
-            : item
-        ),
-      }))
-    );
-
-    const goodsRecords = readRestaurantData<GoodsRecord[]>("goodsReceived.records", []);
-    writeRestaurantData(
-      "goodsReceived.records",
-      goodsRecords.map((record) => ({
-        ...record,
-        receivedItems: record.receivedItems?.map((item) =>
-          oldNameSet.has(normalizeName(item.productName)) || (item.productId && oldIdSet.has(item.productId))
-            ? { ...item, productName: nextProduct.name, category: nextProduct.category, subCategory: nextProduct.subCategory, unit: nextProduct.unit }
-            : item
-        ),
-      }))
-    );
-  };
-
-  const saveProduct = () => {
+  const saveProduct = async () => {
     if (!selectedProduct || !form.name.trim() || !form.category.trim() || !form.unit.trim()) return;
 
     const next = {
@@ -210,98 +208,102 @@ export function ProductManagement() {
       minStock: Number(form.minStock) || 0,
       reorderPoint: Number(form.reorderPoint) || 0,
     };
-
-    const oldNames = [selectedProduct.name];
-    const oldGlobalIds = selectedProduct.globalIds;
-
-    setProducts(
-      products.map((product) =>
-        selectedProduct.inventoryIds.includes(product.id) || normalizeName(product.name) === selectedProduct.key
-          ? { ...product, name: next.name, category: next.fullCategory, unit: next.unit, maxStock: next.maxStock, minStock: next.minStock, reorderPoint: next.reorderPoint }
-          : product
-      )
+    const nextKey = normalizeName(next.name);
+    const currentKey = selectedProduct.key;
+    const supplierPriceValues = Object.fromEntries(
+      Object.entries(supplierPrices)
+        .filter(([, value]) => value !== "")
+        .map(([name, value]) => [name, Number(value) || 0]),
     );
 
-    setGlobalProducts(
-      globalProducts.map((product) =>
-        selectedProduct.globalIds.includes(product.id) || (product.inventoryId !== undefined && selectedProduct.inventoryIds.includes(product.inventoryId))
-          ? { ...product, name: next.name, category: next.category, subCategory: next.subCategory, unit: next.unit }
-          : product
-      )
-    );
+    const nextMetadata: ProductMergeMetadata = {
+      ...productMetadata,
+      aliases: { ...(productMetadata.aliases ?? {}) },
+      overrides: { ...(productMetadata.overrides ?? {}) },
+      supplierPrices: { ...(productMetadata.supplierPrices ?? {}) },
+    };
 
-    setSuppliers(
-      suppliers.map((supplier) => {
-        const price = supplierPrices[supplier.name];
-        const isLinked = price !== undefined && price !== "";
-        const others = supplier.products.filter((item) => normalizeName(item.name) !== selectedProduct.key);
-        return {
-          ...supplier,
-          products: isLinked ? [...others, { name: next.name, price: Number(price) || 0 }] : others,
-        };
-      })
-    );
+    selectedProduct.sourceKeys.forEach((sourceKey) => {
+      if (sourceKey !== nextKey) nextMetadata.aliases![sourceKey] = nextKey;
+    });
+    Object.entries(nextMetadata.aliases!).forEach(([source, canonical]) => {
+      if (canonical === currentKey) nextMetadata.aliases![source] = nextKey;
+    });
+    if (currentKey !== nextKey) {
+      delete nextMetadata.overrides![currentKey];
+      delete nextMetadata.supplierPrices![currentKey];
+      nextMetadata.aliases![currentKey] = nextKey;
+    }
+    nextMetadata.overrides![nextKey] = {
+      name: next.name,
+      category: next.category,
+      subCategory: next.subCategory,
+      unit: next.unit,
+    };
+    nextMetadata.supplierPrices![nextKey] = supplierPriceValues;
 
-    updateLinkedRecords(oldNames, next, oldGlobalIds);
-    setSelectedKey(normalizeName(next.name));
+    try {
+      await Promise.all(
+        selectedProduct.inventoryItems
+          .filter((product) => product.backendId)
+          .map((product) =>
+            updateInventory.mutateAsync({
+              id: product.backendId!,
+              data: {
+                name: next.name,
+                category: next.fullCategory,
+                unit: next.unit,
+                maxStock: next.maxStock,
+                minStock: next.minStock,
+                reorderPoint: next.reorderPoint,
+              },
+            }),
+          ),
+      );
+      await saveMetadata.mutateAsync(nextMetadata);
+      setSelectedKey(nextKey);
+      toast.success("Product master data saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to save product");
+    }
   };
 
-  const mergeDuplicate = () => {
+  const mergeDuplicate = async () => {
     if (!selectedProduct || !mergeKey || mergeKey === selectedProduct.key) return;
     const duplicate = catalog.find((product) => product.key === mergeKey);
     if (!duplicate) return;
 
-    const next = {
-      name: selectedProduct.name,
-      category: selectedProduct.category,
-      subCategory: selectedProduct.subCategory,
-      unit: selectedProduct.unit,
-      fullCategory: joinCategory(selectedProduct.category, selectedProduct.subCategory),
+    const nextMetadata: ProductMergeMetadata = {
+      ...productMetadata,
+      aliases: { ...(productMetadata.aliases ?? {}) },
+      overrides: { ...(productMetadata.overrides ?? {}) },
+      supplierPrices: { ...(productMetadata.supplierPrices ?? {}) },
     };
 
-    const duplicateInventoryItems = products.filter((product) => duplicate.inventoryIds.includes(product.id) || normalizeName(product.name) === duplicate.key);
-    const duplicateStock = duplicateInventoryItems.reduce((sum, product) => sum + product.stock, 0);
-    const existingPrimaryInventoryId = selectedProduct.inventoryIds[0];
-    const primaryInventoryId = existingPrimaryInventoryId ?? duplicateInventoryItems[0]?.id;
+    duplicate.sourceKeys.forEach((sourceKey) => {
+      nextMetadata.aliases![sourceKey] = selectedProduct.key;
+    });
+    Object.entries(nextMetadata.aliases!).forEach(([source, canonical]) => {
+      if (canonical === duplicate.key) nextMetadata.aliases![source] = selectedProduct.key;
+    });
+    nextMetadata.aliases![duplicate.key] = selectedProduct.key;
+    delete nextMetadata.overrides![duplicate.key];
+    nextMetadata.supplierPrices![selectedProduct.key] = {
+      ...(nextMetadata.supplierPrices?.[duplicate.key] ?? {}),
+      ...(nextMetadata.supplierPrices?.[selectedProduct.key] ?? {}),
+    };
+    delete nextMetadata.supplierPrices![duplicate.key];
 
-    setProducts(
-      products
-        .filter((product) => product.id === primaryInventoryId || !(duplicate.inventoryIds.includes(product.id) || normalizeName(product.name) === duplicate.key))
-        .map((product) =>
-          product.id === primaryInventoryId || normalizeName(product.name) === selectedProduct.key
-            ? { ...product, name: next.name, category: next.fullCategory, unit: next.unit, stock: product.id === primaryInventoryId ? (existingPrimaryInventoryId ? product.stock + duplicateStock : duplicateStock) : product.stock }
-            : product
-        )
-    );
-
-    setGlobalProducts(
-      globalProducts
-        .filter((product) => !(duplicate.globalIds.includes(product.id) || (product.inventoryId !== undefined && duplicate.inventoryIds.includes(product.inventoryId))))
-        .map((product) =>
-          selectedProduct.globalIds.includes(product.id) || (product.inventoryId !== undefined && selectedProduct.inventoryIds.includes(product.inventoryId))
-            ? { ...product, name: next.name, category: next.category, subCategory: next.subCategory, unit: next.unit }
-            : product
-        )
-    );
-
-    setSuppliers(
-      suppliers.map((supplier) => {
-        const primary = supplier.products.find((item) => normalizeName(item.name) === selectedProduct.key);
-        const duplicateLink = supplier.products.find((item) => normalizeName(item.name) === duplicate.key);
-        const others = supplier.products.filter((item) => normalizeName(item.name) !== selectedProduct.key && normalizeName(item.name) !== duplicate.key);
-        const linked = primary || duplicateLink;
-        return {
-          ...supplier,
-          products: linked ? [...others, { name: next.name, price: linked.price }] : others,
-        };
-      })
-    );
-
-    updateLinkedRecords([duplicate.name], next, duplicate.globalIds);
-    setMergeKey("");
+    try {
+      await saveMetadata.mutateAsync(nextMetadata);
+      setMergeKey("");
+      toast.success("Duplicate product merged");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to merge product");
+    }
   };
 
-  if (userRole !== "admin") {
+  if (!isAdmin) {
     return (
       <div className="p-8">
         <div className="max-w-2xl rounded-xl border border-red-200 bg-red-50 p-6">
@@ -467,14 +469,14 @@ export function ProductManagement() {
                       <option key={product.key} value={product.key}>{product.name}</option>
                     ))}
                   </select>
-                  <button type="button" onClick={mergeDuplicate} disabled={!mergeKey} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+                  <button type="button" onClick={mergeDuplicate} disabled={!mergeKey || saveMetadata.isPending} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
                     Merge
                   </button>
                 </div>
               </div>
 
               <div className="flex justify-end">
-                <button type="button" onClick={saveProduct} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90">
+                <button type="button" onClick={saveProduct} disabled={updateInventory.isPending || saveMetadata.isPending} className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50">
                   <Save className="h-4 w-4" />
                   Save Master Data
                 </button>

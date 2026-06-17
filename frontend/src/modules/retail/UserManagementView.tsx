@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -10,32 +9,28 @@ import type {
   Transfer,
   Adjustment,
   Location,
-  User,
 } from '../../app/utils/generateSampleData';
+import type { User } from '../../models/domain';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import {
+  useCreateRetailUserMutation,
+  useDeleteRetailUserMutation,
+  useRetailUsersQuery,
+  useUpdateRetailUserMutation,
+} from '../lib/retail';
 
 
-const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
-
-const mapApiUser = (user: any): User => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  status: user.status,
-  lastLogin: formatDate(user.lastLogin)
-});
 // Dashboard View
 export function UserManagementView({
-  users,
-  setUsers,
   currentUser
 }: {
-  users: User[];
-  setUsers: React.Dispatch<React.SetStateAction<User[]>>;
   currentUser: { id?: string; name?: string; email: string; role: string } | null;
 }) {
+  const { data: users = [] } = useRetailUsersQuery(currentUser?.role === 'Admin') as { data?: User[] };
+  const createUserMutation = useCreateRetailUserMutation();
+  const updateUserMutation = useUpdateRetailUserMutation();
+  const deleteUserMutation = useDeleteRetailUserMutation();
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -107,7 +102,7 @@ export function UserManagementView({
     }
 
     try {
-      const newUser = await createUser({
+      const newUser = await createUserMutation.mutateAsync({
         name: userForm.name,
         email: userForm.email,
         password: userForm.password,
@@ -115,7 +110,6 @@ export function UserManagementView({
         status: 'Active'
       });
 
-      setUsers([...users, mapApiUser(newUser)]);
       setShowAddModal(false);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
       alert(`User ${newUser.name} has been created successfully!`);
@@ -141,16 +135,15 @@ export function UserManagementView({
     }
 
     try {
-      const updatedUser = await updateUser(selectedUser.id, {
-        name: userForm.name,
-        email: userForm.email,
-        role: userForm.role,
-        status: selectedUser.status
+      await updateUserMutation.mutateAsync({
+        id: selectedUser.id,
+        data: {
+          name: userForm.name,
+          email: userForm.email,
+          role: userForm.role,
+          status: selectedUser.status
+        },
       });
-
-      setUsers(users.map(user =>
-        user.id === selectedUser.id ? mapApiUser(updatedUser) : user
-      ));
 
       setShowEditModal(false);
       setSelectedUser(null);
@@ -182,7 +175,10 @@ export function UserManagementView({
     }
 
     try {
-      await updateUser(selectedUser.id, { password: userForm.password });
+      await updateUserMutation.mutateAsync({
+        id: selectedUser.id,
+        data: { password: userForm.password },
+      });
       setShowPasswordModal(false);
       setSelectedUser(null);
       setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
@@ -202,10 +198,10 @@ export function UserManagementView({
 
     if (confirm(`Are you sure you want to ${newStatus === 'Active' ? 'activate' : 'deactivate'} ${user.name}?`)) {
       try {
-        const updatedUser = await updateUser(user.id, { status: newStatus });
-        setUsers(users.map(u =>
-          u.id === user.id ? mapApiUser(updatedUser) : u
-        ));
+        await updateUserMutation.mutateAsync({
+          id: user.id,
+          data: { status: newStatus },
+        });
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to update user status');
       }
@@ -220,8 +216,7 @@ export function UserManagementView({
 
     if (confirm(`Are you sure you want to delete ${user.name}? This action cannot be undone.`)) {
       try {
-        await deleteUser(user.id);
-        setUsers(users.filter(u => u.id !== user.id));
+        await deleteUserMutation.mutateAsync(user.id);
         alert(`User ${user.name} has been deleted`);
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to delete user');

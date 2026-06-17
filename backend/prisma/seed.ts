@@ -769,21 +769,21 @@ async function main() {
 
   // ─── Restaurant-Only: Suppliers ───────────────────────────────────────────
   const freshMarket = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Fresh Market Suppliers' } },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Fresh Market Suppliers', module: 'RESTAURANT' } },
     update: { contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true },
-    create: { name: 'Fresh Market Suppliers', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true, businessId: restaurantBusiness.id },
+    create: { name: 'Fresh Market Suppliers', contactPerson: 'Maria Santos', email: 'maria@freshmarket.ph', phone: '+63 917 000 1001', address: 'Divisoria, Manila', category: 'Vegetables & Seafood', isActive: true, businessId: restaurantBusiness.id, module: 'RESTAURANT' },
   });
 
   const primeMeats = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Prime Meats & Poultry' } },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Prime Meats & Poultry', module: 'RESTAURANT' } },
     update: { contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true },
-    create: { name: 'Prime Meats & Poultry', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true, businessId: restaurantBusiness.id },
+    create: { name: 'Prime Meats & Poultry', contactPerson: 'Jose Reyes', email: 'jose@primemeats.ph', phone: '+63 917 000 1002', address: 'Commonwealth, Quezon City', category: 'Meat & Poultry', isActive: true, businessId: restaurantBusiness.id, module: 'RESTAURANT' },
   });
 
   const dryGoodsDepot = await prisma.supplier.upsert({
-    where: { businessId_name: { businessId: restaurantBusiness.id, name: 'Dry Goods Depot' } },
+    where: { businessId_name_module: { businessId: restaurantBusiness.id, name: 'Dry Goods Depot', module: 'RESTAURANT' } },
     update: { contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true },
-    create: { name: 'Dry Goods Depot', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true, businessId: restaurantBusiness.id },
+    create: { name: 'Dry Goods Depot', contactPerson: 'Ana Cruz', email: 'ana@drygoodsdepot.ph', phone: '+63 917 000 1003', address: 'Binondo, Manila', category: 'Grains & Condiments', isActive: true, businessId: restaurantBusiness.id, module: 'RESTAURANT' },
   });
 
   // ─── Restaurant-Only: Purchase Orders ────────────────────────────────────
