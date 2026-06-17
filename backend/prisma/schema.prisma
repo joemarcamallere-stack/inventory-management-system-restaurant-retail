@@ -628,6 +628,7 @@ model StockAdjustment {
   rejectionReason  String?
   businessId       String
   business         Business         @relation(fields: [businessId], references: [id])
+  module           BusinessModule   @default(RETAIL)
   createdById      String?
   createdBy        User?            @relation("AdjustmentCreatedBy", fields: [createdById], references: [id])
   reviewedById     String?
@@ -640,6 +641,7 @@ model StockAdjustment {
   @@unique([businessId, adjustmentNumber])
   @@index([businessId, status])
   @@index([businessId, createdAt])
+  @@index([businessId, module, status])
 }
 
 model StockAdjustmentItem {

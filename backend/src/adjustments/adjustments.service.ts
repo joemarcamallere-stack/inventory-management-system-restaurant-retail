@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BusinessModule, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateAdjustmentDto } from './dto/create-adjustment.dto';
@@ -13,7 +13,12 @@ import { CreateAdjustmentDto } from './dto/create-adjustment.dto';
 export class AdjustmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateAdjustmentDto, businessId: string, createdById?: string) {
+  async create(
+    dto: CreateAdjustmentDto,
+    businessId: string,
+    module: BusinessModule,
+    createdById?: string,
+  ) {
     const adjustmentNumber = `ADJ-${Date.now()}`;
 
     const itemIds = [...new Set(dto.items.map((i) => i.inventoryItemId))];
@@ -32,6 +37,7 @@ export class AdjustmentsService {
         type: dto.type,
         reason: dto.reason,
         businessId,
+        module,
         createdById,
         items: {
           create: dto.items.map((item) => ({
@@ -47,12 +53,14 @@ export class AdjustmentsService {
 
   async findAll(
     businessId: string,
+    module: BusinessModule,
     status?: string,
     page = 1,
     limit = 50,
   ): Promise<PaginatedResult<any>> {
     const where: Prisma.StockAdjustmentWhereInput = {
       businessId,
+      module,
       ...(status ? { status: status as any } : {}),
     };
     const [data, total] = await Promise.all([
@@ -67,22 +75,28 @@ export class AdjustmentsService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string, businessId: string) {
+  async findOne(id: string, businessId: string, module: BusinessModule) {
     const adj = await this.prisma.stockAdjustment.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, module },
       include: this.adjustmentInclude,
     });
     if (!adj) throw new NotFoundException(`Adjustment #${id} not found`);
     return adj;
   }
 
-  async approve(id: string, businessId: string, role: string, reviewedById?: string) {
+  async approve(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+    role: string,
+    reviewedById?: string,
+  ) {
     if (!['Admin', 'Manager'].includes(role)) {
       throw new ForbiddenException('Only Admin or Manager can approve adjustments');
     }
     return this.prisma.$transaction(async (tx) => {
       const adj = await tx.stockAdjustment.findFirst({
-        where: { id, businessId },
+        where: { id, businessId, module },
         include: { items: true },
       });
       if (!adj) throw new NotFoundException(`Adjustment #${id} not found`);
@@ -123,6 +137,7 @@ export class AdjustmentsService {
             itemId: item.id,
             locationId: adjItem.locationId,
             businessId,
+            module,
             createdById: reviewedById,
           },
         });
@@ -139,6 +154,7 @@ export class AdjustmentsService {
   async reject(
     id: string,
     businessId: string,
+    module: BusinessModule,
     role: string,
     reason: string,
     reviewedById?: string,
@@ -146,7 +162,7 @@ export class AdjustmentsService {
     if (!['Admin', 'Manager'].includes(role)) {
       throw new ForbiddenException('Only Admin or Manager can reject adjustments');
     }
-    const adj = await this.findOne(id, businessId);
+    const adj = await this.findOne(id, businessId, module);
     if (adj.status !== 'PENDING') {
       throw new BadRequestException('Only PENDING adjustments can be rejected');
     }

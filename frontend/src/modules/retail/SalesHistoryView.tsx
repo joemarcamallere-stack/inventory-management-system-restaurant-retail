@@ -1,6 +1,10 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { Search, Receipt, RotateCcw, X, Download, TrendingUp, PhilippinePeso, ShoppingBag } from 'lucide-react';
-import { getSales, getLocations, refundSale } from '../../app/api/client';
+import {
+  useRefundRetailSaleMutation,
+  useRetailLocationsQuery,
+  useRetailSalesQuery,
+} from '../lib/retail';
 
 type Sale = {
   id: string;
@@ -41,9 +45,12 @@ export default function SalesHistoryView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [sales, setSales] = useState<Sale[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const salesQuery = useRetailSalesQuery({ limit: 500 });
+  const locationsQuery = useRetailLocationsQuery();
+  const refundSaleMutation = useRefundRetailSaleMutation();
+  const sales = (salesQuery.data ?? []) as Sale[];
+  const locations = locationsQuery.data ?? [];
+  const loading = salesQuery.isLoading || locationsQuery.isLoading;
 
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | 'year' | 'all'>('30days');
   const [locationId, setLocationId] = useState('all');
@@ -54,27 +61,8 @@ export default function SalesHistoryView({
   const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
   const [refundTarget, setRefundTarget] = useState<Sale | null>(null);
   const [refundReason, setRefundReason] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const canRefund = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [salesData, locData] = await Promise.all([
-        getSales({ limit: 500 }),
-        getLocations(),
-      ]);
-      setSales(salesData as Sale[]);
-      setLocations(locData);
-    } catch (err) {
-      console.error('Failed to load sales history', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   const rangeStart = useMemo(() => {
     if (dateRange === 'all') return null;
@@ -131,16 +119,12 @@ export default function SalesHistoryView({
   const handleRefund = async () => {
     if (!refundTarget) return;
     if (!refundReason.trim()) { alert('Please provide a reason for the refund'); return; }
-    setSaving(true);
     try {
-      await refundSale(refundTarget.id, refundReason.trim());
+      await refundSaleMutation.mutateAsync({ id: refundTarget.id, reason: refundReason.trim() });
       setRefundTarget(null);
       setRefundReason('');
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to process refund');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -434,8 +418,8 @@ export default function SalesHistoryView({
             />
             <div className="flex gap-3">
               <button onClick={() => { setRefundTarget(null); setRefundReason(''); }} className="flex-1 bg-muted text-foreground px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-muted/80">Cancel</button>
-              <button onClick={handleRefund} disabled={saving} className="flex-1 bg-destructive text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-destructive/90 disabled:opacity-60">
-                {saving ? 'Processing…' : 'Confirm Refund'}
+              <button onClick={handleRefund} disabled={refundSaleMutation.isPending} className="flex-1 bg-destructive text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-destructive/90 disabled:opacity-60">
+                {refundSaleMutation.isPending ? 'Processing…' : 'Confirm Refund'}
               </button>
             </div>
           </div>

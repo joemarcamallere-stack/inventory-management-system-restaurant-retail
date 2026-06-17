@@ -435,8 +435,9 @@ export function refundSale(id: string, refundReason: string, module?: BusinessMo
 
 // ─── Adjustments ─────────────────────────────────────────────────────────────
 
-export function getAdjustments(params?: { status?: string }) {
+export function getAdjustments(params?: { module?: BusinessModule; status?: string }) {
   const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
   if (params?.status) query.set('status', params.status);
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return request<PagedResponse<unknown>>(`/api/adjustments${suffix}`).then((r) => r.data);
@@ -446,12 +447,12 @@ export function createAdjustment(data: unknown) {
   return request<unknown>('/api/adjustments', { method: 'POST', body: JSON.stringify(data) });
 }
 
-export function approveAdjustment(id: string) {
-  return request<unknown>(`/api/adjustments/${id}/approve`, { method: 'PATCH' });
+export function approveAdjustment(id: string, module?: BusinessModule) {
+  return request<unknown>(`/api/adjustments/${id}/approve${moduleSuffix(module)}`, { method: 'PATCH' });
 }
 
-export function rejectAdjustment(id: string, reason: string) {
-  return request<unknown>(`/api/adjustments/${id}/reject`, {
+export function rejectAdjustment(id: string, reason: string, module?: BusinessModule) {
+  return request<unknown>(`/api/adjustments/${id}/reject${moduleSuffix(module)}`, {
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });

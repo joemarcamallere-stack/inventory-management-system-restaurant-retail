@@ -11,7 +11,14 @@ export const mapRetailSaleRecord = (sale: ApiSale): ApiSale => ({
 });
 
 export function useRetailSalesQuery<TData = ApiSale[]>(
-  params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string },
+  params?: {
+    locationId?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  },
   select?: (items: ApiSale[]) => TData,
 ) {
   return useSalesQuery({ module: 'RETAIL', ...params }, {

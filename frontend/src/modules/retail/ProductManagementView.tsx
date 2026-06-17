@@ -1,7 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Search, Save, Trash2, Plus, X, PackageSearch, AlertTriangle, ShieldAlert, Boxes } from 'lucide-react';
-import { getInventory, getLocations, updateInventoryItem, deleteInventoryItem, createInventoryItem } from '../../app/api/client';
 import { categorySubcategories } from '../../app/utils/constants';
+import {
+  useDeleteRetailInventoryMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailLocationsQuery,
+  useSaveRetailInventoryMutation,
+} from '../lib/retail';
 
 const categories = Object.keys(categorySubcategories);
 
@@ -35,9 +40,13 @@ export default function ProductManagementView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [items, setItems] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const itemsQuery = useRetailInventoryRecordsQuery();
+  const locationsQuery = useRetailLocationsQuery();
+  const saveInventoryMutation = useSaveRetailInventoryMutation();
+  const deleteInventoryMutation = useDeleteRetailInventoryMutation();
+  const items = itemsQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const loading = itemsQuery.isLoading || locationsQuery.isLoading;
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
@@ -48,24 +57,6 @@ export default function ProductManagementView({
   const [newItemForm, setNewItemForm] = useState(blankNewItem());
 
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [itemsData, locationsData] = await Promise.all([
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-        getLocations(),
-      ]);
-      setItems(itemsData);
-      setLocations(locationsData);
-    } catch (err) {
-      console.error('Failed to load product management data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   const openItem = (item: any) => {
     setSelectedItem(item);
@@ -90,21 +81,23 @@ export default function ProductManagementView({
     if (!selectedItem || !form.name.trim()) return;
     setSaving(true);
     try {
-      await updateInventoryItem(selectedItem.id, {
-        name: form.name.trim(),
-        sku: form.sku?.trim() || undefined,
-        category: form.category,
-        subcategory: form.subcategory,
-        targetCustomer: form.targetCustomer,
-        size: form.size,
-        condition: form.condition,
-        price: Number(form.price),
-        minStock: Number(form.minStock),
-        maxStock: Number(form.maxStock),
-        reorderPoint: Number(form.reorderPoint),
-        locationId: form.locationId || undefined,
+      await saveInventoryMutation.mutateAsync({
+        id: selectedItem.id,
+        data: {
+          name: form.name.trim(),
+          sku: form.sku?.trim() || undefined,
+          category: form.category,
+          subcategory: form.subcategory,
+          targetCustomer: form.targetCustomer,
+          size: form.size,
+          condition: form.condition,
+          price: Number(form.price),
+          minStock: Number(form.minStock),
+          maxStock: Number(form.maxStock),
+          reorderPoint: Number(form.reorderPoint),
+          locationId: form.locationId || undefined,
+        },
       });
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to save item');
     } finally {
@@ -116,10 +109,9 @@ export default function ProductManagementView({
     if (!selectedItem) return;
     setSaving(true);
     try {
-      await deleteInventoryItem(selectedItem.id);
+      await deleteInventoryMutation.mutateAsync(selectedItem.id);
       setSelectedItem(null);
       setShowDeleteConfirm(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to delete item');
     } finally {
@@ -134,26 +126,27 @@ export default function ProductManagementView({
     }
     setSaving(true);
     try {
-      await createInventoryItem({
-        name: newItemForm.name.trim(),
-        sku: newItemForm.sku?.trim() || undefined,
-        itemType: 'RETAIL_ITEM',
-        category: newItemForm.category,
-        subcategory: newItemForm.subcategory,
-        targetCustomer: newItemForm.targetCustomer,
-        size: newItemForm.size,
-        condition: newItemForm.condition,
-        quantity: 0,
-        price: Number(newItemForm.price),
-        unit: 'pcs',
-        minStock: Number(newItemForm.minStock),
-        maxStock: Number(newItemForm.maxStock),
-        reorderPoint: Number(newItemForm.reorderPoint),
-        locationId: newItemForm.locationId,
+      await saveInventoryMutation.mutateAsync({
+        data: {
+          name: newItemForm.name.trim(),
+          sku: newItemForm.sku?.trim() || undefined,
+          itemType: 'RETAIL_ITEM',
+          category: newItemForm.category,
+          subcategory: newItemForm.subcategory,
+          targetCustomer: newItemForm.targetCustomer,
+          size: newItemForm.size,
+          condition: newItemForm.condition,
+          quantity: 0,
+          price: Number(newItemForm.price),
+          unit: 'pcs',
+          minStock: Number(newItemForm.minStock),
+          maxStock: Number(newItemForm.maxStock),
+          reorderPoint: Number(newItemForm.reorderPoint),
+          locationId: newItemForm.locationId,
+        },
       });
       setNewItemForm(blankNewItem());
       setShowNewItemModal(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to create item');
     } finally {
@@ -246,8 +239,8 @@ export default function ProductManagementView({
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[13px] font-medium text-foreground truncate">{item.name}</p>
-                  <span className={`flex-shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${conditionBadgeClass(item.condition)}`}>
-                    {item.condition}
+                  <span className={`flex-shrink-0 text-[11px] px-2 py-0.5 rounded-full font-medium ${conditionBadgeClass(item.condition ?? 'Good')}`}>
+                    {item.condition ?? 'Good'}
                   </span>
                 </div>
                 <p className="text-[12px] text-muted-foreground mt-0.5">{item.category}{item.subcategory ? ` › ${item.subcategory}` : ''}</p>

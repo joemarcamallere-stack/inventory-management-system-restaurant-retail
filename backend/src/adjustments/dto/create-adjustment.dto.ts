@@ -1,5 +1,6 @@
 import { IsArray, IsEnum, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { BusinessModule } from '@prisma/client';
 
 export enum AdjustmentTypeEnum {
   ADD = 'ADD',
@@ -28,6 +29,10 @@ export class CreateAdjustmentItemDto {
 export class CreateAdjustmentDto {
   @IsEnum(AdjustmentTypeEnum)
   type: AdjustmentTypeEnum;
+
+  @IsEnum(BusinessModule)
+  @IsOptional()
+  module?: BusinessModule;
 
   @IsString()
   reason: string;
