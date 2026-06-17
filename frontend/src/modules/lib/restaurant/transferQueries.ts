@@ -17,24 +17,35 @@ const toDateInput = (value?: string | null) => {
   return Number.isNaN(date.getTime()) ? '' : date.toISOString().slice(0, 10);
 };
 
+type RestaurantTransferStatus = 'pending' | 'approved' | 'in-transit' | 'completed' | 'rejected';
+
 export function mapRestaurantTransfers(transfers: ApiTransfer[]) {
-  return transfers.map((transfer) => ({
-    id: transfer.id,
-    backendId: transfer.id,
-    item: transfer.items?.[0]?.inventoryItem?.name ?? 'Multiple items',
-    quantity: transfer.items?.[0]?.quantity ?? 0,
-    unit: transfer.items?.[0]?.inventoryItem?.unit ?? 'pcs',
-    from: transfer.fromLocation?.name ?? '',
-    to: transfer.toLocation?.name ?? '',
-    requestedBy: transfer.createdBy?.name ?? '',
-    requestDate: toDateInput(transfer.createdAt),
-    status:
+  return transfers.map((transfer) => {
+    const status: RestaurantTransferStatus =
       transfer.status === 'IN_TRANSIT'
         ? 'in-transit'
-        : transfer.status.toLowerCase(),
-    completedDate: toDateInput(transfer.completedAt),
-    notes: transfer.notes ?? '',
-  }));
+        : transfer.status === 'CANCELLED'
+          ? 'rejected'
+          : transfer.status === 'COMPLETED'
+            ? 'completed'
+            : 'pending';
+
+    return {
+      id: transfer.id,
+      backendId: transfer.id,
+      item: transfer.items?.[0]?.inventoryItem?.name ?? 'Multiple items',
+      quantity: transfer.items?.[0]?.quantity ?? 0,
+      unit: transfer.items?.[0]?.inventoryItem?.unit ?? 'pcs',
+      from: transfer.fromLocation?.name ?? '',
+      to: transfer.toLocation?.name ?? '',
+      requestedBy: transfer.createdBy?.name ?? transfer.createdBy?.email ?? '',
+      requestedByEmail: transfer.createdBy?.email ?? '',
+      requestDate: toDateInput(transfer.createdAt),
+      status,
+      completedDate: toDateInput(transfer.completedAt),
+      notes: transfer.notes ?? '',
+    };
+  });
 }
 
 export function useRestaurantTransfersQuery() {

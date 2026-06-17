@@ -1,15 +1,15 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, X, Search, Package, ArrowRightLeft, CheckCircle, RefreshCw, ChevronRight, ChevronDown, Trash2 } from 'lucide-react';
 import {
-  getTransfers,
-  createTransfer,
-  dispatchTransfer,
-  completeTransfer,
-  cancelTransfer,
-  getLocations,
-  getInventory,
-  createStockMovement,
-} from '../../app/api/client';
+  useCancelRetailTransferMutation,
+  useCompleteRetailTransferMutation,
+  useCreateRetailAdjustmentMutation,
+  useCreateRetailTransferMutation,
+  useDispatchRetailTransferMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailLocationsQuery,
+  useRetailTransferRecordsQuery,
+} from '../lib/retail';
 
 const TRANSFER_STATUS_LABEL: Record<string, string> = {
   PENDING: 'Pending',
@@ -30,10 +30,18 @@ export default function TransfersView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [transfers, setTransfers] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const transfersQuery = useRetailTransferRecordsQuery();
+  const locationsQuery = useRetailLocationsQuery();
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const createTransferMutation = useCreateRetailTransferMutation();
+  const dispatchTransferMutation = useDispatchRetailTransferMutation();
+  const completeTransferMutation = useCompleteRetailTransferMutation();
+  const cancelTransferMutation = useCancelRetailTransferMutation();
+  const createAdjustmentMutation = useCreateRetailAdjustmentMutation();
+  const transfers = transfersQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = transfersQuery.isLoading || locationsQuery.isLoading || inventoryQuery.isLoading;
   const [activeTab, setActiveTab] = useState<'transfers' | 'adjustments'>('transfers');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
@@ -56,26 +64,6 @@ export default function TransfersView({
     reason: '',
     items: [] as { inventoryItemId: string; name: string; quantityChange: number; locationId: string; currentQuantity: number }[],
   });
-
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [transfersData, locationsData, inventoryData] = await Promise.all([
-        getTransfers(),
-        getLocations(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setTransfers(transfersData);
-      setLocations(locationsData);
-      setInventory(inventoryData);
-    } catch (err) {
-      console.error('Failed to load transfers data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
 
   const availableItemsForTransfer = inventory.filter(
     (item: any) => item.locationId === transferForm.fromLocationId && item.quantity > 0
@@ -136,7 +124,7 @@ export default function TransfersView({
     }
     setSaving(true);
     try {
-      await createTransfer({
+      await createTransferMutation.mutateAsync({
         fromLocationId: transferForm.fromLocationId,
         toLocationId: transferForm.toLocationId,
         notes: transferForm.notes || undefined,
@@ -144,7 +132,6 @@ export default function TransfersView({
       });
       setTransferForm({ fromLocationId: '', toLocationId: '', notes: '', items: [] });
       setShowTransferModal(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to create transfer');
     } finally {
@@ -154,8 +141,7 @@ export default function TransfersView({
 
   const handleDispatch = async (id: string) => {
     try {
-      await dispatchTransfer(id);
-      await loadData();
+      await dispatchTransferMutation.mutateAsync(id);
     } catch (err: any) {
       alert(err.message ?? 'Failed to dispatch transfer');
     }
@@ -164,8 +150,7 @@ export default function TransfersView({
   const handleComplete = async (id: string) => {
     if (!confirm('Complete this transfer? Stock will be moved.')) return;
     try {
-      await completeTransfer(id);
-      await loadData();
+      await completeTransferMutation.mutateAsync(id);
     } catch (err: any) {
       alert(err.message ?? 'Failed to complete transfer');
     }
@@ -174,8 +159,7 @@ export default function TransfersView({
   const handleCancel = async (id: string) => {
     if (!confirm('Cancel this transfer?')) return;
     try {
-      await cancelTransfer(id);
-      await loadData();
+      await cancelTransferMutation.mutateAsync(id);
     } catch (err: any) {
       alert(err.message ?? 'Failed to cancel transfer');
     }
@@ -194,7 +178,7 @@ export default function TransfersView({
         const qty = Math.abs(adjItem.quantityChange);
         if (qty === 0) continue;
         const movType = adjItem.quantityChange >= 0 ? 'STOCK_IN' : 'STOCK_OUT';
-        await createStockMovement({
+        await createAdjustmentMutation.mutateAsync({
           type: 'ADJUSTMENT',
           quantity: qty,
           previousQuantity: invItem.quantity,
@@ -208,7 +192,6 @@ export default function TransfersView({
       }
       setAdjustmentForm({ type: 'Add', reason: '', items: [] });
       setShowAdjustmentModal(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to create adjustment');
     } finally {

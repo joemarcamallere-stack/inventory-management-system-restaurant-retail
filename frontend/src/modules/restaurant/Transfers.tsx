@@ -1,17 +1,16 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowLeftRight, Plus, Search, TrendingUp, TrendingDown, AlertCircle, CheckCircle, Clock, X, FileText, Trash2, PhilippinePeso, BarChart3, Calendar } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
 import {
-  cancelTransfer,
-  completeTransfer,
-  createStockMovement,
-  createTransfer,
-  dispatchTransfer,
-  getLocations,
-} from "../../app/api/client";
+  useCreateRestaurantStockMovementMutation,
+  useCreateRestaurantTransferMutation,
+  useRestaurantAdjustmentsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantLocationsQuery,
+  useRestaurantTransferActionMutation,
+  useRestaurantTransfersQuery,
+  useRestaurantWasteQuery,
+} from "../lib/restaurant";
 
 type TransferStatus = "pending" | "approved" | "in-transit" | "completed" | "rejected";
 type AdjustmentType = "damage" | "shrinkage" | "waste" | "found" | "correction";
@@ -72,11 +71,11 @@ export function Transfers() {
   const [selectedItem, setSelectedItem] = useState<Transfer | Adjustment | WasteLog | null>(null);
   const [dateRange, setDateRange] = useState({ start: "2026-05-01", end: "2026-05-31" });
 
-  const [transfers] = useRestaurantState<Transfer[]>("transfers.records", []);
+  const { data: transfers = [] } = useRestaurantTransfersQuery();
 
-  const [adjustments] = useRestaurantState<Adjustment[]>("transfers.adjustments", []);
+  const { data: adjustments = [] } = useRestaurantAdjustmentsQuery();
 
-  const [wasteLogs] = useRestaurantState<WasteLog[]>("transfers.wasteLogs", []);
+  const { data: wasteLogs = [] } = useRestaurantWasteQuery();
 
   const [newTransfer, setNewTransfer] = useState({
     item: "",
@@ -107,27 +106,13 @@ export function Transfers() {
     notes: "",
   });
 
-  const locationQuery = useQuery({ queryKey: ["locations"], queryFn: getLocations });
-  const locations = locationQuery.data ?? [];
-  const [inventoryItems] = useRestaurantState<(InventoryProduct & { backendId?: string; locationId?: string })[]>("inventory.products", getInventoryProducts());
-  const availableItems = inventoryItems.filter(item => item.stock > 0);
+  const { data: locations = [] } = useRestaurantLocationsQuery();
+  const { data: inventoryItems = [] } = useRestaurantInventoryQuery();
+  const availableItems = inventoryItems.filter(item => item.backendId && item.stock > 0);
   const units = ["kg", "g", "L", "ml", "pcs"];
-  const saveTransfer = useRestaurantMutation(
-    (data: unknown) => createTransfer(data),
-    ["transfers.records"],
-  );
-  const moveTransfer = useRestaurantMutation(
-    ({ id, action }: { id: string; action: "dispatch" | "complete" | "cancel" }) => {
-      if (action === "dispatch") return dispatchTransfer(id);
-      if (action === "complete") return completeTransfer(id);
-      return cancelTransfer(id);
-    },
-    ["transfers.records", "inventory.products", "inventory.movements"],
-  );
-  const saveMovement = useRestaurantMutation(
-    (data: unknown) => createStockMovement(data),
-    ["transfers.adjustments", "transfers.wasteLogs", "inventory.products", "inventory.movements"],
-  );
+  const saveTransfer = useCreateRestaurantTransferMutation();
+  const moveTransfer = useRestaurantTransferActionMutation();
+  const saveMovement = useCreateRestaurantStockMovementMutation();
 
   const filteredTransfers = transfers.filter(transfer => {
     const matchesSearch = (transfer.item || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -570,7 +555,7 @@ export function Transfers() {
                             </button>
                           </>
                         )}
-                        {transfer.status === "approved" && (
+                        {transfer.status === "in-transit" && (
                           <button
                             onClick={() => handleCompleteTransfer(transfer.id)}
                             className="text-blue-600 hover:text-blue-700 text-xs"

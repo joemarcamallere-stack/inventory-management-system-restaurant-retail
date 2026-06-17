@@ -1,8 +1,13 @@
 import { useState } from "react";
 import { Package, Search, TrendingDown, TrendingUp, AlertCircle, RefreshCw, Download, BarChart3, Calendar, Clock } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantState } from "../lib/restaurantData";
-import { formatQuantity, getDaysUntilExpiry, getInventoryProducts, getStockStatus, splitCategory, StockStatus } from "../lib/inventoryLogic";
+import {
+  useRestaurantAdjustmentsQuery,
+  useRestaurantInventoryMovementsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantWasteQuery,
+} from "../lib/restaurant";
+import { formatQuantity, getDaysUntilExpiry, getStockStatus, splitCategory, StockStatus } from "../lib/inventoryLogic";
 
 type StockItem = {
   id: string;
@@ -63,10 +68,10 @@ export function StockControl() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [wasteLogs] = useRestaurantState<WasteLogSummary[]>("transfers.wasteLogs", []);
-  const [adjustments] = useRestaurantState<AdjustmentSummary[]>("transfers.adjustments", []);
-  const [inventoryMovements] = useRestaurantState<InventoryMovementSummary[]>("inventory.movements", []);
+  const { data: products = [] } = useRestaurantInventoryQuery();
+  const { data: wasteLogs = [] } = useRestaurantWasteQuery();
+  const { data: adjustments = [] } = useRestaurantAdjustmentsQuery();
+  const { data: inventoryMovements = [] } = useRestaurantInventoryMovementsQuery();
 
   const getRecordedOutflowQuantity = (productName: string) => {
     const targetName = normalizeName(productName);

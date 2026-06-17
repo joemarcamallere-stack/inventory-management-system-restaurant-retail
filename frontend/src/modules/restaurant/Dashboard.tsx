@@ -1,8 +1,13 @@
 import { useState, useEffect } from "react";
 import { Apple, TrendingUp, AlertTriangle, PhilippinePeso, ShoppingCart, ArrowUp, ArrowDown, Calendar, Filter, Clock, ArrowRight } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
-import { useRestaurantState } from "../lib/restaurantData";
-import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
+import {
+  useRestaurantGoodsRecordsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantPurchaseOrdersQuery,
+} from "../lib/restaurant";
+import { useSession } from "../../app/hooks/useSession";
+import { defaultCategoryHierarchy, formatCurrency, getInventoryValue, isExpiringSoon, splitCategory, type InventoryProduct } from "../lib/inventoryLogic";
 
 type PendingOrder = {
   id: string;
@@ -37,21 +42,17 @@ const goToPurchaseOrders = () => {
 };
 
 export function Dashboard() {
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role === "Admin" ? "admin" : "staff";
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
   const [chartKey, setChartKey] = useState(0);
-  const [userRole, setUserRole] = useState<string>("staff");
 
   useEffect(() => {
     setChartKey(prev => prev + 1);
   }, [selectedMainCategory, selectedSubCategory]);
 
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
-
-  const [products] = useRestaurantState<InventoryProduct[]>("inventory.products", getInventoryProducts());
+  const { data: products = [] } = useRestaurantInventoryQuery<InventoryProduct[]>();
   const liveCategoryHierarchy = products.reduce<{ [key: string]: string[] }>((acc, product) => {
     const { main, sub } = splitCategory(product.category);
     if (!acc[main]) acc[main] = [];
@@ -70,7 +71,19 @@ export function Dashboard() {
     setSelectedSubCategory("all");
   };
 
-  const [pendingOrders] = useRestaurantState<PendingOrder[]>("dashboard.pendingOrders", []);
+  const { data: purchaseOrders = [] } = useRestaurantPurchaseOrdersQuery();
+  const { data: goodsRecords = [] } = useRestaurantGoodsRecordsQuery();
+  const pendingOrders: PendingOrder[] = purchaseOrders
+    .filter((order) => order.backendStatus === "SUBMITTED")
+    .map((order) => ({
+      id: order.id,
+      supplier: order.supplier,
+      createdBy: order.createdBy,
+      date: order.date,
+      items: order.items,
+      total: order.total,
+      expectedDelivery: order.expectedDelivery,
+    }));
 
   const stats = [
     {
@@ -107,9 +120,7 @@ export function Dashboard() {
     },
   ];
 
-  const [purchaseOrders] = useRestaurantState<PurchaseOrderSummary[]>("purchaseOrders.orders", []);
-  const [goodsRecords] = useRestaurantState<GoodsRecordSummary[]>("goodsReceived.records", []);
-  const receivedPurchaseOrders = purchaseOrders.filter(order => order.status === "received");
+  const receivedPurchaseOrders: PurchaseOrderSummary[] = purchaseOrders.filter(order => order.status === "received");
   const receiptTrendData = receivedPurchaseOrders.map((order) => ({
     month: order.date || order.id,
     value: order.total,

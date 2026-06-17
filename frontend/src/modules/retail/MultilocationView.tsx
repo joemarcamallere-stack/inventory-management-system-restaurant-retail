@@ -1,30 +1,24 @@
 ﻿import { useState, useMemo } from 'react';
 import { Plus, Edit2, X, Search, MapPin, Package, ArrowRightLeft, ShoppingCart, TrendingUp, TrendingDown, Trash2, Users } from 'lucide-react';
 import type { Location, InventoryItem, Transfer, PurchaseOrder } from '../../app/utils/generateSampleData';
-import { createLocation, deleteLocation, updateLocation } from '../../app/api/client';
+import {
+  useCreateRetailLocationMutation,
+  useDeleteRetailLocationMutation,
+  useRetailInventoryQuery,
+  useRetailLocationsQuery,
+  useRetailPurchaseOrdersQuery,
+  useRetailTransfersQuery,
+  useUpdateRetailLocationMutation,
+} from '../lib/retail';
 
-const mapApiLocation = (location: any): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
-
-export default function MultilocationView({
-  locations,
-  setLocations,
-  inventory,
-  transfers,
-  purchaseOrders
-}: {
-  locations: Location[];
-  setLocations: React.Dispatch<React.SetStateAction<Location[]>>;
-  inventory: InventoryItem[];
-  transfers: Transfer[];
-  purchaseOrders: PurchaseOrder[];
-}) {
+export default function MultilocationView() {
+  const { data: locations = [] } = useRetailLocationsQuery() as { data?: Location[] };
+  const { data: inventory = [] } = useRetailInventoryQuery() as { data?: InventoryItem[] };
+  const { data: transfers = [] } = useRetailTransfersQuery() as { data?: Transfer[] };
+  const { data: purchaseOrders = [] } = useRetailPurchaseOrdersQuery() as { data?: PurchaseOrder[] };
+  const createLocationMutation = useCreateRetailLocationMutation();
+  const updateLocationMutation = useUpdateRetailLocationMutation();
+  const deleteLocationMutation = useDeleteRetailLocationMutation();
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -52,8 +46,7 @@ export default function MultilocationView({
     }
 
     try {
-      const newLocation = await createLocation(locationForm);
-      setLocations([...locations, mapApiLocation(newLocation)]);
+      await createLocationMutation.mutateAsync(locationForm);
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setShowAddModal(false);
     } catch (error) {
@@ -68,11 +61,10 @@ export default function MultilocationView({
     }
 
     try {
-      const updatedLocation = await updateLocation(selectedLocation.id, locationForm);
-      setLocations(locations.map(loc =>
-        loc.id === selectedLocation.id ? mapApiLocation(updatedLocation) : loc
-      ));
-
+      await updateLocationMutation.mutateAsync({
+        id: selectedLocation.id,
+        data: locationForm,
+      });
       setLocationForm({ name: '', address: '', manager: '', phone: '' });
       setSelectedLocation(null);
       setShowEditModal(false);
@@ -92,8 +84,7 @@ export default function MultilocationView({
 
     if (confirm(`Delete ${location?.name}?`)) {
       try {
-        await deleteLocation(locationId);
-        setLocations(locations.filter(loc => loc.id !== locationId));
+        await deleteLocationMutation.mutateAsync(locationId);
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Failed to delete location');
       }

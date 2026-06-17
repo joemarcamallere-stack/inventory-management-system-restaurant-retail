@@ -1,8 +1,19 @@
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle, ClipboardList } from "lucide-react";
-import { useRestaurantState } from "../lib/restaurantData";
-import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
+import {
+  useRestaurantAdjustmentsQuery,
+  useRestaurantGoodsRecordsQuery,
+  useRestaurantInventoryMovementsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantKitchenOrdersQuery,
+  useRestaurantPurchaseOrdersQuery,
+  useRestaurantTransfersQuery,
+  useRestaurantUsersQuery,
+  useRestaurantWasteQuery,
+} from "../lib/restaurant";
+import { useSession } from "../../app/hooks/useSession";
+import { defaultCategoryHierarchy, formatCurrency, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
 
 type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'audit' | 'financial' | 'confidential';
 
@@ -42,34 +53,28 @@ const formatAuditDate = (value?: string) => {
 };
 
 const csvValue = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-const normalizeAuditActor = (value?: string) => (value || '').trim().toLowerCase();
+const normalizeAuditActor = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
 export function Reports() {
+  const { currentUser } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [dateRange, setDateRange] = useState("30days");
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
-  const userRole = useMemo(
-    () => (localStorage.getItem("userRole") || "staff").toLowerCase(),
-    [],
-  );
-  const currentUserEmail = useMemo(
-    () => localStorage.getItem("userEmail") || "",
-    [],
-  );
-  const isAdmin = userRole === "admin";
-  const hasFullAuditTrailAccess = userRole === "admin" || userRole === "manager";
+  const isAdmin = currentUser?.role === "Admin";
+  const hasFullAuditTrailAccess = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const currentUserEmail = currentUser?.email ?? "";
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [purchaseOrders] = useRestaurantState<any[]>("purchaseOrders.orders", []);
-  const [transfers] = useRestaurantState<any[]>("transfers.records", []);
-  const [adjustments] = useRestaurantState<any[]>("transfers.adjustments", []);
-  const [wasteLogs] = useRestaurantState<any[]>("transfers.wasteLogs", []);
-  const [goodsReceived] = useRestaurantState<any[]>("goodsReceived.records", []);
-  const [inventoryMovements] = useRestaurantState<any[]>("inventory.movements", []);
-  const [posOrders] = useRestaurantState<any[]>("pos.orders", []);
-  const [users] = useRestaurantState<any[]>("users.records", []);
+  const { data: products = [] } = useRestaurantInventoryQuery();
+  const { data: purchaseOrders = [] } = useRestaurantPurchaseOrdersQuery();
+  const { data: transfers = [] } = useRestaurantTransfersQuery();
+  const { data: adjustments = [] } = useRestaurantAdjustmentsQuery();
+  const { data: wasteLogs = [] } = useRestaurantWasteQuery();
+  const { data: goodsReceived = [] } = useRestaurantGoodsRecordsQuery();
+  const { data: inventoryMovements = [] } = useRestaurantInventoryMovementsQuery();
+  const { data: posOrders = [] } = useRestaurantKitchenOrdersQuery();
+  const { data: users = [] } = useRestaurantUsersQuery(isAdmin);
 
   const inventoryValue = getInventoryValue(products);
 
@@ -266,7 +271,7 @@ export function Reports() {
         action: `Transfer ${transfer.status || 'requested'}`,
         item: transfer.item || 'Multiple items',
         quantity: transfer.quantity ? `${transfer.quantity} ${transfer.unit || ''}`.trim() : '',
-        performedBy: transfer.requestedBy || '',
+        performedBy: transfer.requestedByEmail || transfer.requestedBy || '',
         reference: transfer.id,
         details: `${transfer.from || 'Source'} to ${transfer.to || 'Destination'}`,
         status: transfer.status || 'recorded',
@@ -308,13 +313,12 @@ export function Reports() {
 
   const visibleAuditTrail = useMemo(() => {
     if (hasFullAuditTrailAccess) return auditTrail;
-    const currentActor = normalizeAuditActor(currentUserEmail);
-    if (!currentActor) return [];
+    if (!currentUserEmail) return [];
 
-    return auditTrail.filter((entry) => {
-      const performedBy = normalizeAuditActor(entry.performedBy);
-      return performedBy === currentActor;
-    });
+    const normalizedEmail = normalizeAuditActor(currentUserEmail);
+    return auditTrail.filter(
+      entry => normalizeAuditActor(entry.performedBy) === normalizedEmail,
+    );
   }, [auditTrail, currentUserEmail, hasFullAuditTrailAccess]);
 
   const auditSummary = useMemo(() => {
@@ -831,8 +835,8 @@ export function Reports() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-foreground">Audit Trail</h3>
-            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
-              {hasFullAuditTrailAccess ? "Full operation view" : "Your activity only"}
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+              {hasFullAuditTrailAccess ? 'Full operation view' : 'Your activity only'}
             </span>
           </div>
 

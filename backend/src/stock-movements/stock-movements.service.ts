@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BusinessModule } from '@prisma/client';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import {
   CreateStockMovementDto,
@@ -18,10 +19,17 @@ export class StockMovementsService {
   async create(
     createStockMovementDto: CreateStockMovementDto,
     businessId: string,
+    module: BusinessModule,
     createdById?: string,
     modules: string[] = [],
   ) {
-    if (createStockMovementDto.quantity <= 0) {
+    if (createStockMovementDto.quantity < 0) {
+      throw new BadRequestException('Movement quantity cannot be negative');
+    }
+    if (
+      createStockMovementDto.type !== StockMovementType.Adjustment &&
+      createStockMovementDto.quantity === 0
+    ) {
       throw new BadRequestException('Movement quantity must be greater than zero');
     }
     this.assertCanUseMovementType(createStockMovementDto.type, modules);
@@ -31,6 +39,7 @@ export class StockMovementsService {
         where: { id: createStockMovementDto.itemId, businessId },
         select: {
           id: true,
+          itemType: true,
           quantity: true,
           unit: true,
           locationId: true,
@@ -40,6 +49,17 @@ export class StockMovementsService {
       if (!item) {
         throw new NotFoundException(
           `Inventory item #${createStockMovementDto.itemId} not found`,
+        );
+      }
+      const isRestaurantItem = ['INGREDIENT', 'MENU_ITEM', 'SUPPLY'].includes(
+        item.itemType,
+      );
+      if (
+        (module === BusinessModule.RESTAURANT && !isRestaurantItem) ||
+        (module === BusinessModule.RETAIL && isRestaurantItem)
+      ) {
+        throw new BadRequestException(
+          `Inventory item is not owned by the ${module.toLowerCase()} module`,
         );
       }
 
@@ -86,6 +106,7 @@ export class StockMovementsService {
           itemId: item.id,
           locationId,
           businessId,
+          module,
           createdById,
         },
         include: {
@@ -100,19 +121,22 @@ export class StockMovementsService {
   async findAll(
     businessId: string,
     filters: {
+      module: BusinessModule;
       itemId?: string;
       locationId?: string;
       type?: string;
       referenceType?: string;
       referenceId?: string;
-    } = {},
+    },
     modules: string[] = [],
     page = 1,
     limit = 50,
   ): Promise<PaginatedResult<any>> {
     this.assertCanUseMovementType(filters.type, modules);
+    const module = filters.module;
     const where = {
       businessId,
+      module,
       ...(filters.itemId ? { itemId: filters.itemId } : {}),
       ...(filters.locationId ? { locationId: filters.locationId } : {}),
       ...(this.isStockMovementType(filters.type) ? { type: filters.type } : {}),
@@ -132,9 +156,13 @@ export class StockMovementsService {
     return paginate(data, total, page, limit);
   }
 
-  async findOne(id: string, businessId: string) {
+  async findOne(
+    id: string,
+    businessId: string,
+    module: BusinessModule,
+  ) {
     const movement = await this.prisma.stockMovement.findFirst({
-      where: { id, businessId },
+      where: { id, businessId, module },
       include: {
         item: true,
         location: true,

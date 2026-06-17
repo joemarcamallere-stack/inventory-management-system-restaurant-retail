@@ -30,16 +30,28 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
 
+  const applyUser = (user: AuthUser) => {
+    setCurrentUser(user);
+    window.localStorage.setItem('userRole', user.role.toLowerCase());
+    window.localStorage.setItem('userEmail', user.email);
+  };
+
+  const clearUser = () => {
+    setCurrentUser(null);
+    window.localStorage.removeItem('userRole');
+    window.localStorage.removeItem('userEmail');
+  };
+
   useEffect(() => {
     let active = true;
     getCurrentSession()
       .then(({ user }) => {
         if (!active) return;
-        setCurrentUser(user);
+        applyUser(user);
       })
       .catch(() => {
         if (!active) return;
-        setCurrentUser(null);
+        clearUser();
       })
       .finally(() => {
         if (active) setIsRestoringSession(false);
@@ -52,7 +64,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
   const login = async (email: string, password: string) => {
     try {
       const response = await loginUser(email, password);
-      setCurrentUser(response.user);
+      applyUser(response.user);
       toast.success('Signed in successfully');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Invalid credentials');
@@ -64,7 +76,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
       await logoutUser();
     } finally {
       queryClient.clear();
-      setCurrentUser(null);
+      clearUser();
     }
   };
 

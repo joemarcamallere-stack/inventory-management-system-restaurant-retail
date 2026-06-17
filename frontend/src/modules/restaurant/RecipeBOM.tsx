@@ -1,14 +1,19 @@
 import { useState } from "react";
 import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { getInventoryProducts, InventoryProduct } from "../lib/inventoryLogic";
-import { createRecipe, deleteRecipe, updateRecipe } from "../../app/api/client";
+import { useSession } from "../../app/hooks/useSession";
+import { InventoryProduct } from "../lib/inventoryLogic";
+import {
+  useDeleteRestaurantRecipeMutation,
+  useRestaurantInventoryQuery,
+  useRestaurantRecipesQuery,
+  useSaveRestaurantRecipeMutation,
+} from "../lib/restaurant";
 
 type Ingredient = {
   id: string;
   itemBackendId?: string;
-  productId?: number;
+  productId?: number | string;
   productSku?: string;
   name: string;
   quantity: number;
@@ -25,7 +30,7 @@ type RecipeModifier = {
   type: "remove";
   itemId?: string;
   itemName?: string;
-  productId?: number;
+  productId?: number | string;
 };
 
 type Recipe = {
@@ -48,8 +53,7 @@ type Recipe = {
   instructions: string;
 };
 
-// Use the actual inventory product structure from inventory logic
-// The `inventoryItems` list is loaded from localStorage or defaults when needed.
+// Use the actual inventory product structure from the restaurant inventory query.
 type InventoryItem = InventoryProduct & { backendId?: string };
 
 const UNIT_OPTIONS = ["kg", "g", "L", "ml", "pcs", "piece", "liter", "bottle", "pack", "box", "dozen"];
@@ -86,8 +90,8 @@ const calculateRecipeGrossMarginPercent = (recipe: Recipe) => {
 };
 
 export function RecipeBOM() {
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
-  const isAdmin = userRole === "admin";
+  const { currentUser } = useSession();
+  const isAdmin = currentUser?.role === "Admin";
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -123,7 +127,7 @@ export function RecipeBOM() {
     unitCost: "",
   });
 
-  const [inventoryItems] = useRestaurantState<InventoryItem[]>("inventory.products", getInventoryProducts());
+  const { data: inventoryItems = [] } = useRestaurantInventoryQuery<InventoryItem[]>();
 
   // Only show products that are actually in stock.
   const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
@@ -131,16 +135,14 @@ export function RecipeBOM() {
   // Extract unique categories from inventory
   const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
 
-  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
-  const saveRecipe = useRestaurantMutation(
-    ({ id, data }: { id?: string; data: unknown }) =>
-      id ? updateRecipe(id, data) : createRecipe(data),
-    ["recipes.records"],
-  );
-  const removeRecipe = useRestaurantMutation(
-    (id: string) => deleteRecipe(id),
-    ["recipes.records"],
-  );
+  const { data: recipes = [] } = useRestaurantRecipesQuery();
+  const saveRecipe = useSaveRestaurantRecipeMutation();
+  const removeRecipe = useDeleteRestaurantRecipeMutation();
+  const findInventoryItem = (productId?: number | string) =>
+    inventoryItems.find((item) =>
+      String(item.id) === String(productId) ||
+      item.backendId === productId,
+    );
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
 
@@ -389,7 +391,7 @@ export function RecipeBOM() {
           sellingPrice: recipeToAdd.sellingPrice,
           isActive: recipeToAdd.isActive,
           modifiers: modifiers.map((modifier) => {
-            const inventoryItem = inventoryItems.find((item) => item.id === modifier.productId);
+            const inventoryItem = findInventoryItem(modifier.productId ?? modifier.itemId);
             if (!inventoryItem?.backendId) {
               throw new Error(`Inventory link is missing for modifier ${modifier.name}`);
             }
@@ -402,7 +404,7 @@ export function RecipeBOM() {
             };
           }),
           ingredients: recipeToAdd.ingredients.map((ingredient) => {
-            const inventoryItem = inventoryItems.find((item) => item.id === ingredient.productId);
+            const inventoryItem = findInventoryItem(ingredient.productId ?? ingredient.itemBackendId);
             if (!inventoryItem?.backendId) {
               throw new Error(`Inventory link is missing for ${ingredient.name}`);
             }

@@ -1,17 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw } from 'lucide-react';
-import { getInventory, getSales, createSale, refundSale, getLocations } from '../../app/api/client';
+import {
+  useCreateRetailSaleMutation,
+  useRefundRetailSaleMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailLocationsQuery,
+  useRetailSalesQuery,
+} from '../lib/retail';
 
 export default function POSView({
   currentUser,
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [sales, setSales] = useState<any[]>([]);
-  const [locations, setLocations] = useState<any[]>([]);
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const salesQuery = useRetailSalesQuery();
+  const locationsQuery = useRetailLocationsQuery();
+  const createSaleMutation = useCreateRetailSaleMutation();
+  const refundSaleMutation = useRefundRetailSaleMutation();
+  const inventory = inventoryQuery.data ?? [];
+  const sales = salesQuery.data ?? [];
+  const locations = locationsQuery.data ?? [];
+  const loading = inventoryQuery.isLoading || salesQuery.isLoading || locationsQuery.isLoading;
   const [selectedLocationId, setSelectedLocationId] = useState('');
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'returns'>('sales');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -35,28 +46,11 @@ export default function POSView({
   const [returnReason, setReturnReason] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [invData, salesData, locData] = await Promise.all([
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-        getSales(),
-        getLocations(),
-      ]);
-      setInventory(invData);
-      setSales(salesData);
-      setLocations(locData);
-      if (locData.length > 0 && !selectedLocationId) {
-        setSelectedLocationId(locData[0].id);
-      }
-    } catch (err) {
-      console.error('Failed to load POS data', err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (locations.length > 0 && !selectedLocationId) {
+      setSelectedLocationId(locations[0].id);
     }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+  }, [locations, selectedLocationId]);
 
   const availableItems = inventory.filter((item: any) => item.quantity > 0);
   const availableCategories = Array.from(new Set(availableItems.map((item: any) => item.category))).sort() as string[];
@@ -100,7 +94,7 @@ export default function POSView({
     if (paymentMethod === 'Cash' && amountPaid < total) { alert('Insufficient payment amount!'); return; }
     setSaving(true);
     try {
-      const sale = await createSale({
+      const sale = await createSaleMutation.mutateAsync({
         locationId: selectedLocationId,
         items: cart.map(i => ({ inventoryItemId: i.inventoryItemId, quantity: i.quantity, unitPrice: i.unitPrice })),
         discount: discount > 0 ? discount : undefined,
@@ -112,7 +106,6 @@ export default function POSView({
       handleClearCart();
       setShowPaymentModal(false);
       setShowReceiptModal(true);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to process sale');
     } finally {
@@ -124,10 +117,9 @@ export default function POSView({
     if (!returnReason.trim()) { alert('Please provide a reason for return'); return; }
     setSaving(true);
     try {
-      await refundSale(saleId, returnReason);
+      await refundSaleMutation.mutateAsync({ id: saleId, reason: returnReason });
       setSelectedSaleForReturn(null);
       setReturnReason('');
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to process return');
     } finally {

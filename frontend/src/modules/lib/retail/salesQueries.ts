@@ -20,10 +20,13 @@ export function useRetailSalesQuery<TData = ApiSale[]>(
 }
 
 export function useCreateRetailSaleMutation() {
-  return useRetailMutation(createSale, [
-    retailQueryKeys.inventory,
-    retailQueryKeys.sales,
-  ]);
+  return useRetailMutation(
+    (data: Record<string, unknown>) => createSale({ ...data, module: 'RETAIL' }),
+    [
+      retailQueryKeys.inventory,
+      retailQueryKeys.sales,
+    ],
+  );
 }
 
 export function useRefundRetailSaleMutation() {

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type {
   ApiGoodsReceipt,
+  ApiInventoryItem,
   ApiPurchaseOrder,
   ApiSupplier,
 } from '../../../app/api/domainTypes';
@@ -11,6 +12,7 @@ import {
   createPurchaseOrder,
   createSupplier,
   getGoodsReceipts,
+  getInventory,
   getPurchaseOrders,
   receivePurchaseOrder,
   rejectPurchaseOrder,
@@ -25,6 +27,37 @@ import {
   usePurchaseOrdersQuery,
   useSuppliersQuery,
 } from '../domainQueries';
+import { useRestaurantProductMergeMetadataQuery } from './shared';
+
+type RestaurantProductMergeMetadata = {
+  aliases?: Record<string, string>;
+  overrides?: Record<
+    string,
+    {
+      name?: string;
+      category?: string;
+      subCategory?: string;
+      unit?: string;
+      sku?: string;
+    }
+  >;
+};
+
+type ReceiptItemQualityMetadata = {
+  remarks?: string;
+  qualityScores?: Record<string, { passed: number; total: number; remarks?: string }>;
+};
+
+function parseReceiptItemNotes(notes?: string | null): ReceiptItemQualityMetadata {
+  if (!notes) return {};
+  try {
+    const parsed = JSON.parse(notes) as ReceiptItemQualityMetadata;
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    return { remarks: notes };
+  }
+  return { remarks: notes };
+}
 
 const toDateInput = (value?: string | null) => {
   if (!value) return '';
@@ -54,7 +87,7 @@ export function mapRestaurantPurchaseOrders(orders: ApiPurchaseOrder[]) {
     total: order.totalAmount,
     status:
       ({
-        DRAFT: 'draft',
+        DRAFT: 'pending',
         SUBMITTED: 'pending',
         APPROVED: 'approved',
         PARTIALLY_RECEIVED: 'partial',
@@ -63,7 +96,7 @@ export function mapRestaurantPurchaseOrders(orders: ApiPurchaseOrder[]) {
         CANCELLED: 'cancelled',
       } as Record<string, string>)[order.status] ?? order.status.toLowerCase(),
     expectedDelivery: toDateInput(order.expectedDelivery),
-    createdBy: order.createdBy?.name ?? order.createdBy?.email ?? '',
+    createdBy: order.createdBy?.email ?? order.createdBy?.name ?? '',
     createdAt: order.createdAt,
     rejectionNote: order.rejectionReason,
     backendStatus: order.status,
@@ -81,6 +114,61 @@ export function mapRestaurantSuppliers(suppliers: ApiSupplier[]) {
     address: supplier.address ?? '',
     products: [],
   }));
+}
+
+const normalizeCatalogKey = (value: string | undefined) =>
+  (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+const splitCatalogCategory = (value?: string | null) => {
+  const [category = 'Other', subCategory = 'General'] = (value || '').split(' > ');
+  return { category, subCategory };
+};
+
+export function mapRestaurantGlobalProducts(
+  inventory: ApiInventoryItem[],
+  metadata: RestaurantProductMergeMetadata = {},
+) {
+  const products = new Map<
+    string,
+    {
+      id: string;
+      backendId?: string;
+      inventoryId?: number;
+      name: string;
+      sku?: string;
+      category?: string;
+      subCategory?: string;
+      unit?: string;
+    }
+  >();
+
+  inventory.forEach((item, index) => {
+    const sourceKey = normalizeCatalogKey(item.name);
+    const canonicalKey = metadata.aliases?.[sourceKey] ?? sourceKey;
+    const override = metadata.overrides?.[canonicalKey];
+    const { category, subCategory } = splitCatalogCategory(
+      override?.category
+        ? `${override.category}${override.subCategory ? ` > ${override.subCategory}` : ''}`
+        : item.category,
+    );
+
+    if (!products.has(canonicalKey)) {
+      products.set(canonicalKey, {
+        id: item.id,
+        backendId: item.id,
+        inventoryId: index + 1,
+        name: override?.name ?? item.name,
+        sku: override?.sku ?? item.sku ?? undefined,
+        category,
+        subCategory,
+        unit: override?.unit ?? item.unit ?? 'pcs',
+      });
+    }
+  });
+
+  return Array.from(products.values()).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 }
 
 export function useRestaurantPurchaseOrdersQuery<
@@ -102,6 +190,30 @@ export function useRestaurantSuppliersQuery() {
     { module: 'RESTAURANT' },
     { select: mapRestaurantSuppliers },
   );
+}
+
+export function useRestaurantGlobalProductsQuery() {
+  const metadataQuery =
+    useRestaurantProductMergeMetadataQuery<RestaurantProductMergeMetadata>();
+
+  return useQuery({
+    queryKey: [
+      ...domainQueryKeys.inventory,
+      { module: 'RESTAURANT', view: 'global-products' },
+      metadataQuery.data ?? {},
+    ],
+    queryFn: async () => {
+      const groups = await Promise.all([
+        getInventory({ itemType: 'INGREDIENT' }),
+        getInventory({ itemType: 'MENU_ITEM' }),
+        getInventory({ itemType: 'SUPPLY' }),
+      ]);
+      return groups.flat();
+    },
+    enabled: metadataQuery.isSuccess,
+    select: (items) =>
+      mapRestaurantGlobalProducts(items, metadataQuery.data ?? {}),
+  });
 }
 
 export function useRestaurantGoodsReceiptsQuery<
@@ -131,20 +243,32 @@ export function useRestaurantGoodsRecordsQuery() {
         supplier: receipt.purchaseOrder?.supplier?.name ?? '',
         receivedDate: toDateInput(receipt.createdAt),
         items: receipt.items?.length ?? 0,
-        receivedItems: (receipt.items ?? []).map((line) => ({
-          backendItemId: line.id,
-          productName:
-            line.purchaseOrderItem?.name ??
-            line.inventoryItem?.name ??
-            'Item',
-          quantity: line.receivedQty + line.rejectedQty,
-          acceptedQuantity: line.receivedQty,
-          rejectedQuantity: line.rejectedQty,
-          unit: line.inventoryItem?.unit ?? 'pcs',
-          unitPrice: line.purchaseOrderItem?.unitPrice ?? 0,
-          condition: line.condition ?? 'Inspected',
-          qualityRemarks: line.notes ?? '',
-        })),
+        receivedItems: (receipt.items ?? []).map((line) => {
+          const quality = parseReceiptItemNotes(line.notes);
+          return {
+            backendItemId: line.id,
+            productName:
+              line.purchaseOrderItem?.name ??
+              line.inventoryItem?.name ??
+              'Item',
+            quantity: line.receivedQty + line.rejectedQty,
+            acceptedQuantity: line.receivedQty,
+            rejectedQuantity: line.rejectedQty,
+            unit: line.inventoryItem?.unit ?? 'pcs',
+            unitPrice: line.purchaseOrderItem?.unitPrice ?? 0,
+            expiryDate: toDateInput(line.inventoryItem?.expiryDate),
+            storageTemperature: line.inventoryItem?.storageTemperature ?? '',
+            condition: line.condition ?? 'Inspected',
+            qualityRemarks: quality.remarks ?? '',
+            qualityScores: quality.qualityScores,
+            qualityStatus:
+              line.receivedQty <= 0
+                ? 'rejected'
+                : line.rejectedQty > 0
+                  ? 'partial'
+                  : 'accepted',
+          };
+        }),
         totalValue: (receipt.items ?? []).reduce(
           (sum, line) =>
             sum +
@@ -152,7 +276,7 @@ export function useRestaurantGoodsRecordsQuery() {
           0,
         ),
         receivedBy:
-          receipt.receivedBy?.name ?? receipt.receivedBy?.email ?? '',
+          receipt.receivedBy?.email ?? receipt.receivedBy?.name ?? '',
         status: (receipt.items ?? []).some((line) => line.rejectedQty > 0)
           ? 'partial'
           : 'verified',
@@ -169,6 +293,7 @@ export function useRestaurantGoodsRecordsQuery() {
         )
         .map((order) => ({
           id: `GR-${order.orderNumber}`,
+          backendId: order.id,
           poId: order.id,
           supplier: order.supplier?.name ?? '',
           receivedDate: toDateInput(
