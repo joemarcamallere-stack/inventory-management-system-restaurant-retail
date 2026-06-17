@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users, ClipboardList } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
@@ -14,6 +14,16 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+
+const formatAuditDate = (value?: string) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-PH', {
+    year: 'numeric', month: 'short', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+};
 
 export function ReportsView({
   inventory,
@@ -34,11 +44,12 @@ export function ReportsView({
   users: User[];
   currentUser: { email: string; role: string } | null;
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'transfers' | 'financial' | 'operations' | 'confidential'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'transfers' | 'financial' | 'operations' | 'audit' | 'confidential'>('overview');
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | 'year' | 'all'>('30days');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
 
   const isAdmin = currentUser?.role === 'Admin';
+  const hasFullAuditTrailAccess = currentUser?.role === 'Admin' || currentUser?.role === 'Manager';
 
   // Overview Stats
   const overviewStats = useMemo(() => {
@@ -233,6 +244,81 @@ export function ReportsView({
     };
   }, [isAdmin, users, inventory, purchaseOrders, adjustments, transfers]);
 
+  const auditTrail = useMemo(() => {
+    const entries = [
+      ...purchaseOrders.map(po => ({
+        id: `po-${po.id}`,
+        date: po.date || '',
+        module: 'Purchase Order',
+        action: `PO ${po.status || 'created'}`,
+        item: po.supplier || 'Supplier',
+        quantity: `${po.items.length} item(s)`,
+        performedBy: po.createdBy || '',
+        reference: po.id,
+        details: `Total: ₱${po.totalAmount.toLocaleString()}`,
+      })),
+      ...transfers.map(transfer => ({
+        id: `transfer-${transfer.id}`,
+        date: transfer.date || '',
+        module: 'Transfer',
+        action: `Transfer ${transfer.status || 'requested'}`,
+        item: `${transfer.fromLocation} → ${transfer.toLocation}`,
+        quantity: `${transfer.items.reduce((s: number, i: any) => s + i.quantity, 0)} item(s)`,
+        performedBy: transfer.createdBy || '',
+        reference: transfer.transferNumber || transfer.id,
+        details: `${transfer.fromLocation} to ${transfer.toLocation}`,
+      })),
+      ...adjustments.map(adj => ({
+        id: `adjustment-${adj.id}`,
+        date: adj.date || '',
+        module: 'Adjustment',
+        action: adj.type || 'Correction',
+        item: adj.reason || 'Adjustment',
+        quantity: `${adj.items.reduce((s: number, i: any) => s + Math.abs(i.quantityChange), 0)} unit(s)`,
+        performedBy: adj.createdBy || '',
+        reference: adj.id,
+        details: adj.reason || '',
+      })),
+      ...productsReceived.map(pr => ({
+        id: `receipt-${pr.id}`,
+        date: pr.dateReceived || '',
+        module: 'Goods Received',
+        action: 'Receipt Verified',
+        item: `${pr.items.length} item(s)`,
+        quantity: `${pr.items.reduce((s: number, i: any) => s + i.receivedQty, 0)} received`,
+        performedBy: pr.receivedBy || '',
+        reference: pr.id,
+        details: `PO: ${pr.poNumber || 'N/A'} | ${pr.status}`,
+      })),
+    ];
+
+    return entries
+      .filter(entry => entry.date || entry.reference)
+      .sort((a, b) => {
+        const aTime = new Date(a.date).getTime();
+        const bTime = new Date(b.date).getTime();
+        return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+      });
+  }, [purchaseOrders, transfers, adjustments, productsReceived]);
+
+  const visibleAuditTrail = useMemo(() => {
+    if (hasFullAuditTrailAccess) return auditTrail;
+    const currentEmail = (currentUser?.email || '').trim().toLowerCase();
+    if (!currentEmail) return [];
+    return auditTrail.filter(entry =>
+      (entry.performedBy || '').trim().toLowerCase() === currentEmail
+    );
+  }, [auditTrail, currentUser, hasFullAuditTrailAccess]);
+
+  const auditSummary = useMemo(() => {
+    const byModule = visibleAuditTrail.reduce<Record<string, number>>((acc, entry) => {
+      acc[entry.module] = (acc[entry.module] || 0) + 1;
+      return acc;
+    }, {});
+    const latest = visibleAuditTrail[0]?.date ? formatAuditDate(visibleAuditTrail[0].date) : 'No activity';
+    return { byModule, latest };
+  }, [visibleAuditTrail]);
+
   const handleExportReport = (reportType: string) => {
     let csvContent = '';
     const timestamp = new Date().toISOString().split('T')[0];
@@ -241,9 +327,9 @@ export function ReportsView({
     switch (reportType) {
       case 'Overview':
         csvContent = 'Metric,Value\n';
-        csvContent += `Total Inventory Value,â‚±${overviewStats.totalValue.toLocaleString()}\n`;
+        csvContent += `Total Inventory Value,₱${overviewStats.totalValue.toLocaleString()}\n`;
         csvContent += `Total Items,${overviewStats.totalItems}\n`;
-        csvContent += `Average Price,â‚±${overviewStats.avgPrice.toFixed(2)}\n`;
+        csvContent += `Average Price,₱${overviewStats.avgPrice.toFixed(2)}\n`;
         csvContent += `Total Transfers,${overviewStats.totalTransfers}\n`;
         csvContent += `Completed Transfers,${overviewStats.completedTransfers}\n`;
         csvContent += `Total Adjustments,${overviewStats.totalAdjustments}\n`;
@@ -254,7 +340,7 @@ export function ReportsView({
       case 'Inventory':
         csvContent = 'Category,Quantity,Value,Items\n';
         Object.entries(inventoryReportData.categoryStats).forEach(([category, stats]) => {
-          csvContent += `${category},${stats.quantity},â‚±${stats.value.toLocaleString()},${stats.items}\n`;
+          csvContent += `${category},${stats.quantity},₱${stats.value.toLocaleString()},${stats.items}\n`;
         });
         csvContent += '\nCondition,Quantity\n';
         Object.entries(inventoryReportData.conditionStats).forEach(([condition, quantity]) => {
@@ -262,7 +348,7 @@ export function ReportsView({
         });
         csvContent += '\nLocation,Quantity,Value,Items\n';
         Object.entries(inventoryReportData.locationStats).forEach(([location, stats]) => {
-          csvContent += `${location},${stats.quantity},â‚±${stats.value.toLocaleString()},${stats.items}\n`;
+          csvContent += `${location},${stats.quantity},₱${stats.value.toLocaleString()},${stats.items}\n`;
         });
         break;
 
@@ -283,13 +369,13 @@ export function ReportsView({
 
       case 'Financial':
         csvContent = 'Metric,Value\n';
-        csvContent += `Total Inventory Value,â‚±${financialReportData.totalInventoryValue.toLocaleString()}\n`;
-        csvContent += `Total PO Investment,â‚±${financialReportData.poValue.toLocaleString()}\n`;
-        csvContent += `Pending PO Value,â‚±${financialReportData.pendingPOValue.toLocaleString()}\n`;
-        csvContent += `Loss from Damage,â‚±${financialReportData.damagedValue.toLocaleString()}\n`;
+        csvContent += `Total Inventory Value,₱${financialReportData.totalInventoryValue.toLocaleString()}\n`;
+        csvContent += `Total PO Investment,₱${financialReportData.poValue.toLocaleString()}\n`;
+        csvContent += `Pending PO Value,₱${financialReportData.pendingPOValue.toLocaleString()}\n`;
+        csvContent += `Loss from Damage,₱${financialReportData.damagedValue.toLocaleString()}\n`;
         csvContent += '\nCategory,Value\n';
         Object.entries(financialReportData.categoryValue).forEach(([category, value]) => {
-          csvContent += `${category},â‚±${value.toLocaleString()}\n`;
+          csvContent += `${category},₱${value.toLocaleString()}\n`;
         });
         break;
 
@@ -304,6 +390,23 @@ export function ReportsView({
         Object.entries(operationsReportData.adjustmentsByType).forEach(([type, count]) => {
           csvContent += `${type},${count}\n`;
         });
+        break;
+
+      case 'Audit':
+        csvContent = 'Date,Module,Action,Item,Quantity,Performed By,Reference,Details\n';
+        visibleAuditTrail.forEach(entry => {
+          csvContent += [
+            formatAuditDate(entry.date),
+            entry.module,
+            entry.action,
+            entry.item,
+            entry.quantity,
+            entry.performedBy,
+            entry.reference,
+            entry.details,
+          ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',') + '\n';
+        });
+        filename = `Audit_Trail_${timestamp}.csv`;
         break;
 
       case 'Confidential':
@@ -322,10 +425,10 @@ export function ReportsView({
         csvContent += `Staff Users,${confidentialReportData.systemAudit.staffUsers}\n`;
         csvContent += '\nFinancial Summary\n';
         csvContent += 'Metric,Value\n';
-        csvContent += `Total Asset Value,â‚±${confidentialReportData.financialSummary.totalAssetValue.toLocaleString()}\n`;
-        csvContent += `Total Purchase Value,â‚±${confidentialReportData.financialSummary.totalPurchaseValue.toLocaleString()}\n`;
-        csvContent += `Damaged Loss,â‚±${confidentialReportData.financialSummary.damagedLoss.toLocaleString()}\n`;
-        csvContent += `Adjustment Impact,â‚±${confidentialReportData.financialSummary.adjustmentImpact.toLocaleString()}\n`;
+        csvContent += `Total Asset Value,₱${confidentialReportData.financialSummary.totalAssetValue.toLocaleString()}\n`;
+        csvContent += `Total Purchase Value,₱${confidentialReportData.financialSummary.totalPurchaseValue.toLocaleString()}\n`;
+        csvContent += `Damaged Loss,₱${confidentialReportData.financialSummary.damagedLoss.toLocaleString()}\n`;
+        csvContent += `Adjustment Impact,₱${confidentialReportData.financialSummary.adjustmentImpact.toLocaleString()}\n`;
         csvContent += '\nUser Activity Log\n';
         csvContent += 'Name,Email,Role,Status,Last Login\n';
         confidentialReportData.userActivityLog.forEach(user => {
@@ -360,14 +463,14 @@ export function ReportsView({
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-[30px] font-bold text-[#323B42]">Reports & Analytics</h2>
-          <p className="text-[14px] text-[#6b7280] mt-1">Comprehensive system reports and insights</p>
+          <h2 className="text-[30px] font-bold text-foreground">Reports & Analytics</h2>
+          <p className="text-[14px] text-muted-foreground mt-1">Comprehensive system reports and insights</p>
         </div>
         <div className="flex gap-3">
           <select
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value as any)}
-            className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] px-4 py-2 text-[14px] text-[#323B42]"
+            className="bg-white border border-border rounded-[8px] px-4 py-2 text-[14px] text-foreground"
           >
             <option value="7days">Last 7 Days</option>
             <option value="30days">Last 30 Days</option>
@@ -378,7 +481,7 @@ export function ReportsView({
           <select
             value={selectedLocation}
             onChange={(e) => setSelectedLocation(e.target.value)}
-            className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] px-4 py-2 text-[14px] text-[#323B42]"
+            className="bg-white border border-border rounded-[8px] px-4 py-2 text-[14px] text-foreground"
           >
             <option value="all">All Locations</option>
             {locations.map(loc => (
@@ -389,13 +492,13 @@ export function ReportsView({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-[rgba(0,0,0,0.1)]">
+      <div className="flex gap-2 mb-6 border-b border-border">
         <button
           onClick={() => setActiveTab('overview')}
           className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${
             activeTab === 'overview'
-              ? 'text-[#007A5E] border-[#007A5E]'
-              : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+              ? 'text-secondary border-secondary'
+              : 'text-muted-foreground border-transparent hover:text-foreground'
           }`}
         >
           Overview
@@ -404,8 +507,8 @@ export function ReportsView({
           onClick={() => setActiveTab('inventory')}
           className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${
             activeTab === 'inventory'
-              ? 'text-[#007A5E] border-[#007A5E]'
-              : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+              ? 'text-secondary border-secondary'
+              : 'text-muted-foreground border-transparent hover:text-foreground'
           }`}
         >
           Inventory Report
@@ -414,8 +517,8 @@ export function ReportsView({
           onClick={() => setActiveTab('transfers')}
           className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${
             activeTab === 'transfers'
-              ? 'text-[#007A5E] border-[#007A5E]'
-              : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+              ? 'text-secondary border-secondary'
+              : 'text-muted-foreground border-transparent hover:text-foreground'
           }`}
         >
           Transfer Report
@@ -425,8 +528,8 @@ export function ReportsView({
             onClick={() => setActiveTab('financial')}
             className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${
               activeTab === 'financial'
-                ? 'text-[#007A5E] border-[#007A5E]'
-                : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+                ? 'text-secondary border-secondary'
+                : 'text-muted-foreground border-transparent hover:text-foreground'
             }`}
           >
             Financial Report
@@ -436,19 +539,30 @@ export function ReportsView({
           onClick={() => setActiveTab('operations')}
           className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors ${
             activeTab === 'operations'
-              ? 'text-[#007A5E] border-[#007A5E]'
-              : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+              ? 'text-secondary border-secondary'
+              : 'text-muted-foreground border-transparent hover:text-foreground'
           }`}
         >
           Operations Report
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'audit'
+              ? 'text-secondary border-secondary'
+              : 'text-muted-foreground border-transparent hover:text-foreground'
+          }`}
+        >
+          <ClipboardList className="size-4" />
+          Audit Trail
         </button>
         {isAdmin && (
           <button
             onClick={() => setActiveTab('confidential')}
             className={`px-6 py-3 text-[14px] font-medium border-b-2 transition-colors flex items-center gap-2 ${
               activeTab === 'confidential'
-                ? 'text-[#E7000B] border-[#E7000B]'
-                : 'text-[#6b7280] border-transparent hover:text-[#323B42]'
+                ? 'text-destructive border-destructive'
+                : 'text-muted-foreground border-transparent hover:text-foreground'
             }`}
           >
             <Eye className="size-4" />
@@ -461,10 +575,10 @@ export function ReportsView({
       {activeTab === 'overview' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[20px] font-semibold text-[#323B42]">System Overview</h3>
+            <h3 className="text-[20px] font-semibold text-foreground">System Overview</h3>
             <button
               onClick={() => handleExportReport('Overview')}
-              className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+              className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
             >
               Export Report
             </button>
@@ -472,44 +586,44 @@ export function ReportsView({
 
           {/* Overview Stats */}
           <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Inventory Value</p>
-              <p className="text-[#323B42] text-[24px] font-bold">â‚±{overviewStats.totalValue.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Inventory Value</p>
+              <p className="text-foreground text-[24px] font-bold">₱{overviewStats.totalValue.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Items</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{overviewStats.totalItems.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Items</p>
+              <p className="text-foreground text-[24px] font-bold">{overviewStats.totalItems.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Unique Items</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{overviewStats.uniqueItems}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Unique Items</p>
+              <p className="text-foreground text-[24px] font-bold">{overviewStats.uniqueItems}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Active Locations</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{overviewStats.totalLocations}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Active Locations</p>
+              <p className="text-foreground text-[24px] font-bold">{overviewStats.totalLocations}</p>
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4 mb-6">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Transfers</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{overviewStats.totalTransfers}</p>
-              <p className="text-[#00a63e] text-[12px] mt-1">{overviewStats.completedTransfers} completed</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Transfers</p>
+              <p className="text-foreground text-[24px] font-bold">{overviewStats.totalTransfers}</p>
+              <p className="text-success text-[12px] mt-1">{overviewStats.completedTransfers} completed</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Adjustments</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{overviewStats.totalAdjustments}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Adjustments</p>
+              <p className="text-foreground text-[24px] font-bold">{overviewStats.totalAdjustments}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Average Item Price</p>
-              <p className="text-[#323B42] text-[24px] font-bold">â‚±{Math.round(overviewStats.avgPrice)}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Average Item Price</p>
+              <p className="text-foreground text-[24px] font-bold">₱{Math.round(overviewStats.avgPrice)}</p>
             </div>
           </div>
 
           {/* Charts */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Inventory by Category</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Inventory by Category</h4>
               {Object.keys(inventoryReportData.categoryStats).length > 0 ? (
                 <div className="flex items-center gap-4">
                   <PieChart width={200} height={200}>
@@ -540,11 +654,11 @@ export function ReportsView({
                               className="size-3 rounded-full"
                               style={{ backgroundColor: ['#007A5E', '#155DFC', '#FFA500', '#E7000B', '#8B5CF6', '#EC4899', '#10b981'][index % 7] }}
                             />
-                            <span className="text-[13px] text-[#323B42]">{name}</span>
+                            <span className="text-[13px] text-foreground">{name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-[12px] text-[#6b7280]">{data.quantity}</span>
-                            <span className="text-[13px] font-semibold text-[#323B42]">{percentage}%</span>
+                            <span className="text-[12px] text-muted-foreground">{data.quantity}</span>
+                            <span className="text-[13px] font-semibold text-foreground">{percentage}%</span>
                           </div>
                         </div>
                       );
@@ -552,18 +666,18 @@ export function ReportsView({
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-[250px] text-[#6b7280]">No data available</div>
+                <div className="flex items-center justify-center h-[250px] text-muted-foreground">No data available</div>
               )}
             </div>
 
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Items by Condition</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Items by Condition</h4>
               <BarChart width={400} height={250} data={Object.entries(inventoryReportData.conditionStats).map(([name, value]) => ({ condition: name, count: value }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" key="inventory-condition-grid" />
-                <XAxis dataKey="condition" stroke="#6b7280" style={{ fontSize: '12px' }} key="inventory-condition-xaxis" />
-                <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} key="inventory-condition-yaxis" />
-                <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }} key="inventory-condition-tooltip" />
-                <Bar dataKey="count" fill="#007A5E" radius={[8, 8, 0, 0]} key="inventory-condition-bar" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" key="inventory-condition-grid" />
+                <XAxis dataKey="condition" stroke="var(--muted-foreground)" style={{ fontSize: '12px' }} key="inventory-condition-xaxis" />
+                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: '12px' }} key="inventory-condition-yaxis" />
+                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px' }} key="inventory-condition-tooltip" />
+                <Bar dataKey="count" fill="var(--secondary)" radius={[8, 8, 0, 0]} key="inventory-condition-bar" />
               </BarChart>
             </div>
           </div>
@@ -573,34 +687,34 @@ export function ReportsView({
       {activeTab === 'inventory' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[20px] font-semibold text-[#323B42]">Detailed Inventory Report</h3>
+            <h3 className="text-[20px] font-semibold text-foreground">Detailed Inventory Report</h3>
             <button
               onClick={() => handleExportReport('Inventory')}
-              className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+              className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
             >
               Export Report
             </button>
           </div>
 
           {/* Category Breakdown */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Inventory by Category</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Inventory by Category</h4>
             <div className="space-y-3">
               {Object.entries(inventoryReportData.categoryStats)
                 .sort((a, b) => b[1].value - a[1].value)
                 .map(([category, data]) => (
-                  <div key={category} className="flex items-center justify-between p-3 bg-[#F8FAFB] rounded-[8px]">
+                  <div key={category} className="flex items-center justify-between p-3 bg-muted rounded-[8px]">
                     <div className="flex-1">
-                      <p className="text-[14px] font-medium text-[#323B42]">{category}</p>
+                      <p className="text-[14px] font-medium text-foreground">{category}</p>
                       <div className="flex gap-4 mt-1">
-                        <span className="text-[12px] text-[#6b7280]">{data.quantity} items</span>
-                        <span className="text-[12px] text-[#6b7280]">â€¢</span>
-                        <span className="text-[12px] text-[#6b7280]">{data.items} unique products</span>
+                        <span className="text-[12px] text-muted-foreground">{data.quantity} items</span>
+                        <span className="text-[12px] text-muted-foreground">•</span>
+                        <span className="text-[12px] text-muted-foreground">{data.items} unique products</span>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-[16px] font-bold text-[#007A5E]">â‚±{data.value.toLocaleString()}</p>
-                      <p className="text-[12px] text-[#6b7280]">
+                      <p className="text-[16px] font-bold text-secondary">₱{data.value.toLocaleString()}</p>
+                      <p className="text-[12px] text-muted-foreground">
                         {overviewStats.totalValue > 0 ? ((data.value / overviewStats.totalValue) * 100).toFixed(1) : '0'}% of total
                       </p>
                     </div>
@@ -610,24 +724,24 @@ export function ReportsView({
           </div>
 
           {/* Location Breakdown */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Inventory by Location</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Inventory by Location</h4>
             <div className="space-y-3">
               {Object.entries(inventoryReportData.locationStats)
                 .sort((a, b) => b[1].value - a[1].value)
                 .map(([location, data]) => (
-                  <div key={location} className="flex items-center justify-between p-3 bg-[#F8FAFB] rounded-[8px]">
+                  <div key={location} className="flex items-center justify-between p-3 bg-muted rounded-[8px]">
                     <div className="flex-1">
-                      <p className="text-[14px] font-medium text-[#323B42]">{location}</p>
+                      <p className="text-[14px] font-medium text-foreground">{location}</p>
                       <div className="flex gap-4 mt-1">
-                        <span className="text-[12px] text-[#6b7280]">{data.quantity} items</span>
-                        <span className="text-[12px] text-[#6b7280]">â€¢</span>
-                        <span className="text-[12px] text-[#6b7280]">{data.items} unique products</span>
+                        <span className="text-[12px] text-muted-foreground">{data.quantity} items</span>
+                        <span className="text-[12px] text-muted-foreground">•</span>
+                        <span className="text-[12px] text-muted-foreground">{data.items} unique products</span>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-[16px] font-bold text-[#008967]">â‚±{data.value.toLocaleString()}</p>
-                      <p className="text-[12px] text-[#6b7280]">
+                      <p className="text-[16px] font-bold text-secondary">₱{data.value.toLocaleString()}</p>
+                      <p className="text-[12px] text-muted-foreground">
                         {overviewStats.totalValue > 0 ? ((data.value / overviewStats.totalValue) * 100).toFixed(1) : '0'}% of total
                       </p>
                     </div>
@@ -637,14 +751,14 @@ export function ReportsView({
           </div>
 
           {/* Condition Analysis */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Stock Condition Analysis</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Stock Condition Analysis</h4>
             <div className="grid grid-cols-4 gap-4">
               {Object.entries(inventoryReportData.conditionStats).map(([condition, count]) => (
-                <div key={condition} className="p-4 bg-[#F8FAFB] rounded-[8px]">
-                  <p className="text-[12px] text-[#6b7280] mb-1">{condition}</p>
-                  <p className="text-[20px] font-bold text-[#323B42]">{count}</p>
-                  <p className="text-[12px] text-[#6b7280] mt-1">
+                <div key={condition} className="p-4 bg-muted rounded-[8px]">
+                  <p className="text-[12px] text-muted-foreground mb-1">{condition}</p>
+                  <p className="text-[20px] font-bold text-foreground">{count}</p>
+                  <p className="text-[12px] text-muted-foreground mt-1">
                     {overviewStats.totalItems > 0 ? ((count / overviewStats.totalItems) * 100).toFixed(1) : '0'}%
                   </p>
                 </div>
@@ -657,10 +771,10 @@ export function ReportsView({
       {activeTab === 'transfers' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[20px] font-semibold text-[#323B42]">Transfer Activity Report</h3>
+            <h3 className="text-[20px] font-semibold text-foreground">Transfer Activity Report</h3>
             <button
               onClick={() => handleExportReport('Transfers')}
-              className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+              className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
             >
               Export Report
             </button>
@@ -669,10 +783,10 @@ export function ReportsView({
           {/* Transfer Stats */}
           <div className="grid grid-cols-4 gap-4 mb-4">
             {Object.entries(transferReportData.statusBreakdown).map(([status, count]) => (
-              <div key={status} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-                <p className="text-[#6b7280] text-[12px] mb-2">{status}</p>
-                <p className="text-[#323B42] text-[24px] font-bold">{count}</p>
-                <p className="text-[#6b7280] text-[12px] mt-1">
+              <div key={status} className="bg-white border border-border rounded-[14px] p-6">
+                <p className="text-muted-foreground text-[12px] mb-2">{status}</p>
+                <p className="text-foreground text-[24px] font-bold">{count}</p>
+                <p className="text-muted-foreground text-[12px] mt-1">
                   {overviewStats.totalTransfers > 0 ? ((count / overviewStats.totalTransfers) * 100).toFixed(0) : '0'}%
                 </p>
               </div>
@@ -680,16 +794,16 @@ export function ReportsView({
           </div>
 
           {/* Route Analysis */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Transfer Routes Analysis</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Transfer Routes Analysis</h4>
             <div className="space-y-3">
               {Object.entries(transferReportData.routeStats)
                 .sort((a, b) => b[1] - a[1])
                 .map(([route, count]) => (
-                  <div key={route} className="flex items-center justify-between p-3 bg-[#F8FAFB] rounded-[8px]">
-                    <p className="text-[14px] font-medium text-[#323B42]">{route}</p>
+                  <div key={route} className="flex items-center justify-between p-3 bg-muted rounded-[8px]">
+                    <p className="text-[14px] font-medium text-foreground">{route}</p>
                     <div className="text-right">
-                      <p className="text-[16px] font-bold text-[#007A5E]">{count} transfers</p>
+                      <p className="text-[16px] font-bold text-secondary">{count} transfers</p>
                     </div>
                   </div>
                 ))}
@@ -697,24 +811,24 @@ export function ReportsView({
           </div>
 
           {/* Transfer Summary */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Transfer Summary</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Transfer Summary</h4>
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 bg-[#E0F5F1] rounded-[8px]">
-                <p className="text-[12px] text-[#007A5E] mb-1">Total Items Transferred</p>
-                <p className="text-[24px] font-bold text-[#007A5E]">{transferReportData.totalItemsTransferred}</p>
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Total Items Transferred</p>
+                <p className="text-[24px] font-bold text-secondary">{transferReportData.totalItemsTransferred}</p>
               </div>
-              <div className="p-4 bg-[#E0F2F2] rounded-[8px]">
-                <p className="text-[12px] text-[#008967] mb-1">Completion Rate</p>
-                <p className="text-[24px] font-bold text-[#008967]">
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Completion Rate</p>
+                <p className="text-[24px] font-bold text-secondary">
                   {overviewStats.totalTransfers > 0
                     ? ((overviewStats.completedTransfers / overviewStats.totalTransfers) * 100).toFixed(0)
                     : 0}%
                 </p>
               </div>
-              <div className="p-4 bg-[#fff4e6] rounded-[8px]">
-                <p className="text-[12px] text-[#FFA500] mb-1">Active Routes</p>
-                <p className="text-[24px] font-bold text-[#FFA500]">{Object.keys(transferReportData.routeStats).length}</p>
+              <div className="p-4 bg-warning/10 rounded-[8px]">
+                <p className="text-[12px] text-warning mb-1">Active Routes</p>
+                <p className="text-[24px] font-bold text-warning">{Object.keys(transferReportData.routeStats).length}</p>
               </div>
             </div>
           </div>
@@ -722,12 +836,12 @@ export function ReportsView({
       )}
 
       {activeTab === 'financial' && !isAdmin && (
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-12 text-center">
-          <div className="bg-[#ffe2e2] size-20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Eye className="size-10 text-[#E7000B]" />
+        <div className="bg-white border border-border rounded-[14px] p-12 text-center">
+          <div className="bg-destructive/10 size-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Eye className="size-10 text-destructive" />
           </div>
-          <h3 className="text-[20px] font-bold text-[#323B42] mb-2">Access Denied</h3>
-          <p className="text-[14px] text-[#6b7280]">
+          <h3 className="text-[20px] font-bold text-foreground mb-2">Access Denied</h3>
+          <p className="text-[14px] text-muted-foreground">
             You do not have permission to view financial reports.<br />
             This section is restricted to administrators only.
           </p>
@@ -737,10 +851,10 @@ export function ReportsView({
       {activeTab === 'financial' && isAdmin && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[20px] font-semibold text-[#323B42]">Financial Report</h3>
+            <h3 className="text-[20px] font-semibold text-foreground">Financial Report</h3>
             <button
               onClick={() => handleExportReport('Financial')}
-              className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+              className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
             >
               Export Report
             </button>
@@ -748,39 +862,39 @@ export function ReportsView({
 
           {/* Financial Overview */}
           <div className="grid grid-cols-4 gap-4 mb-4">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Asset Value</p>
-              <p className="text-[#323B42] text-[24px] font-bold">â‚±{financialReportData.totalInventoryValue.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Asset Value</p>
+              <p className="text-foreground text-[24px] font-bold">₱{financialReportData.totalInventoryValue.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Purchase Orders Value</p>
-              <p className="text-[#323B42] text-[24px] font-bold">â‚±{financialReportData.poValue.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Purchase Orders Value</p>
+              <p className="text-foreground text-[24px] font-bold">₱{financialReportData.poValue.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Pending PO Value</p>
-              <p className="text-[#FFA500] text-[24px] font-bold">â‚±{financialReportData.pendingPOValue.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Pending PO Value</p>
+              <p className="text-warning text-[24px] font-bold">₱{financialReportData.pendingPOValue.toLocaleString()}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Damaged Stock Value</p>
-              <p className="text-[#E7000B] text-[24px] font-bold">â‚±{financialReportData.damagedValue.toLocaleString()}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Damaged Stock Value</p>
+              <p className="text-destructive text-[24px] font-bold">₱{financialReportData.damagedValue.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Value by Category */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Value by Category</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Value by Category</h4>
             <div className="space-y-3">
               {Object.entries(financialReportData.categoryValue)
                 .sort((a, b) => b[1] - a[1])
                 .map(([category, value]) => (
                   <div key={category}>
                     <div className="flex justify-between text-[14px] mb-1">
-                      <span className="text-[#323B42] font-medium">{category}</span>
-                      <span className="text-[#007A5E] font-bold">â‚±{value.toLocaleString()}</span>
+                      <span className="text-foreground font-medium">{category}</span>
+                      <span className="text-secondary font-bold">₱{value.toLocaleString()}</span>
                     </div>
-                    <div className="h-2 bg-[#F8FAFB] rounded-full overflow-hidden">
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-[#007A5E] rounded-full"
+                        className="h-full bg-secondary rounded-full"
                         style={{ width: `${financialReportData.totalInventoryValue > 0 ? (value / financialReportData.totalInventoryValue) * 100 : 0}%` }}
                       />
                     </div>
@@ -791,8 +905,8 @@ export function ReportsView({
 
           {/* Financial Charts */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Value Distribution</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Value Distribution</h4>
               {Object.keys(financialReportData.categoryValue).length > 0 ? (
                 <PieChart width={400} height={250}>
                   <Pie
@@ -812,33 +926,33 @@ export function ReportsView({
                   <Tooltip key="financial-category-tooltip" />
                 </PieChart>
               ) : (
-                <div className="flex items-center justify-center h-[250px] text-[#6b7280]">No data available</div>
+                <div className="flex items-center justify-center h-[250px] text-muted-foreground">No data available</div>
               )}
             </div>
 
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Financial Health Indicators</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Financial Health Indicators</h4>
               <div className="space-y-4">
-                <div className="p-4 bg-[#E0F5F1] rounded-[8px]">
-                  <p className="text-[12px] text-[#007A5E] mb-1">Asset Health Score</p>
-                  <p className="text-[24px] font-bold text-[#007A5E]">
+                <div className="p-4 bg-secondary/10 rounded-[8px]">
+                  <p className="text-[12px] text-secondary mb-1">Asset Health Score</p>
+                  <p className="text-[24px] font-bold text-secondary">
                     {financialReportData.totalInventoryValue > 0
                       ? (((financialReportData.totalInventoryValue - financialReportData.damagedValue) / financialReportData.totalInventoryValue) * 100).toFixed(1)
                       : '0'}%
                   </p>
                 </div>
-                <div className="p-4 bg-[#E0F2F2] rounded-[8px]">
-                  <p className="text-[12px] text-[#008967] mb-1">Investment Return Potential</p>
-                  <p className="text-[24px] font-bold text-[#008967]">
+                <div className="p-4 bg-secondary/10 rounded-[8px]">
+                  <p className="text-[12px] text-secondary mb-1">Investment Return Potential</p>
+                  <p className="text-[24px] font-bold text-secondary">
                     {financialReportData.poValue > 0
                       ? ((financialReportData.totalInventoryValue / financialReportData.poValue) * 100).toFixed(0)
                       : 0}%
                   </p>
                 </div>
-                <div className="p-4 bg-[#ffe2e2] rounded-[8px]">
-                  <p className="text-[12px] text-[#E7000B] mb-1">Loss from Damage</p>
-                  <p className="text-[24px] font-bold text-[#E7000B]">
-                    â‚±{financialReportData.damagedValue.toLocaleString()}
+                <div className="p-4 bg-destructive/10 rounded-[8px]">
+                  <p className="text-[12px] text-destructive mb-1">Loss from Damage</p>
+                  <p className="text-[24px] font-bold text-destructive">
+                    ₱{financialReportData.damagedValue.toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -850,10 +964,10 @@ export function ReportsView({
       {activeTab === 'operations' && (
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[20px] font-semibold text-[#323B42]">Operations Report</h3>
+            <h3 className="text-[20px] font-semibold text-foreground">Operations Report</h3>
             <button
               onClick={() => handleExportReport('Operations')}
-              className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+              className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
             >
               Export Report
             </button>
@@ -861,41 +975,41 @@ export function ReportsView({
 
           {/* Operations Overview */}
           <div className="grid grid-cols-4 gap-4 mb-4">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Total Receipts</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{operationsReportData.totalReceipts}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Receipts</p>
+              <p className="text-foreground text-[24px] font-bold">{operationsReportData.totalReceipts}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Items Received</p>
-              <p className="text-[#323B42] text-[24px] font-bold">{operationsReportData.receivedItems}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Items Received</p>
+              <p className="text-foreground text-[24px] font-bold">{operationsReportData.receivedItems}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Approved Adjustments</p>
-              <p className="text-[#00a63e] text-[24px] font-bold">{operationsReportData.approvedAdjustments}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Approved Adjustments</p>
+              <p className="text-success text-[24px] font-bold">{operationsReportData.approvedAdjustments}</p>
             </div>
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <p className="text-[#6b7280] text-[12px] mb-2">Low Stock Alerts</p>
-              <p className="text-[#E7000B] text-[24px] font-bold">{operationsReportData.lowStockItems}</p>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Low Stock Alerts</p>
+              <p className="text-destructive text-[24px] font-bold">{operationsReportData.lowStockItems}</p>
             </div>
           </div>
 
           {/* Adjustment Analysis */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Adjustments by Type</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Adjustments by Type</h4>
             <div className="space-y-3">
               {Object.entries(operationsReportData.adjustmentsByType)
                 .sort((a, b) => b[1] - a[1])
                 .map(([type, count]) => (
-                  <div key={type} className="flex items-center justify-between p-3 bg-[#F8FAFB] rounded-[8px]">
+                  <div key={type} className="flex items-center justify-between p-3 bg-muted rounded-[8px]">
                     <div>
-                      <p className="text-[14px] font-medium text-[#323B42]">{type}</p>
-                      <p className="text-[12px] text-[#6b7280]">
+                      <p className="text-[14px] font-medium text-foreground">{type}</p>
+                      <p className="text-[12px] text-muted-foreground">
                         {overviewStats.totalAdjustments > 0
                           ? ((count / overviewStats.totalAdjustments) * 100).toFixed(0)
                           : 0}% of total
                       </p>
                     </div>
-                    <p className="text-[18px] font-bold text-[#007A5E]">{count}</p>
+                    <p className="text-[18px] font-bold text-secondary">{count}</p>
                   </div>
                 ))}
             </div>
@@ -903,8 +1017,8 @@ export function ReportsView({
 
           {/* Operational Metrics */}
           <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Adjustment Status</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Adjustment Status</h4>
               <BarChart
                 width={400}
                 height={250}
@@ -914,32 +1028,124 @@ export function ReportsView({
                   { status: 'Total', count: overviewStats.totalAdjustments }
                 ]}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" key="adjustment-status-grid" />
-                <XAxis dataKey="status" stroke="#6b7280" style={{ fontSize: '12px' }} key="adjustment-status-xaxis" />
-                <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} key="adjustment-status-yaxis" />
-                <Tooltip contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }} key="adjustment-status-tooltip" />
-                <Bar dataKey="count" fill="#007A5E" radius={[8, 8, 0, 0]} key="adjustment-status-bar" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" key="adjustment-status-grid" />
+                <XAxis dataKey="status" stroke="var(--muted-foreground)" style={{ fontSize: '12px' }} key="adjustment-status-xaxis" />
+                <YAxis stroke="var(--muted-foreground)" style={{ fontSize: '12px' }} key="adjustment-status-yaxis" />
+                <Tooltip contentStyle={{ backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: '8px' }} key="adjustment-status-tooltip" />
+                <Bar dataKey="count" fill="var(--secondary)" radius={[8, 8, 0, 0]} key="adjustment-status-bar" />
               </BarChart>
             </div>
 
-            <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-              <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Stock Health</h4>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <h4 className="text-[16px] font-semibold text-foreground mb-4">Stock Health</h4>
               <div className="space-y-4 mt-6">
-                <div className="p-4 bg-[#E0F5F1] rounded-[8px]">
-                  <p className="text-[12px] text-[#007A5E] mb-1">Healthy Stock Items</p>
-                  <p className="text-[24px] font-bold text-[#007A5E]">
+                <div className="p-4 bg-secondary/10 rounded-[8px]">
+                  <p className="text-[12px] text-secondary mb-1">Healthy Stock Items</p>
+                  <p className="text-[24px] font-bold text-secondary">
                     {overviewStats.totalItems - operationsReportData.lowStockItems}
                   </p>
                 </div>
-                <div className="p-4 bg-[#ffe2e2] rounded-[8px]">
-                  <p className="text-[12px] text-[#E7000B] mb-1">Low Stock Items</p>
-                  <p className="text-[24px] font-bold text-[#E7000B]">{operationsReportData.lowStockItems}</p>
+                <div className="p-4 bg-destructive/10 rounded-[8px]">
+                  <p className="text-[12px] text-destructive mb-1">Low Stock Items</p>
+                  <p className="text-[24px] font-bold text-destructive">{operationsReportData.lowStockItems}</p>
                 </div>
-                <div className="p-4 bg-[#fff4e6] rounded-[8px]">
-                  <p className="text-[12px] text-[#FFA500] mb-1">Pending Adjustments</p>
-                  <p className="text-[24px] font-bold text-[#FFA500]">{operationsReportData.pendingAdjustments}</p>
+                <div className="p-4 bg-warning/10 rounded-[8px]">
+                  <p className="text-[12px] text-warning mb-1">Pending Adjustments</p>
+                  <p className="text-[24px] font-bold text-warning">{operationsReportData.pendingAdjustments}</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'audit' && (
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-[20px] font-semibold text-foreground">Audit Trail</h3>
+            <div className="flex items-center gap-3">
+              <span className="bg-muted border border-border px-3 py-1 rounded-[6px] text-[12px] text-muted-foreground">
+                {hasFullAuditTrailAccess ? 'Full operation view' : 'Your activity only'}
+              </span>
+              <button
+                onClick={() => handleExportReport('Audit')}
+                className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
+              >
+                Export Report
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-4 gap-4 mb-4">
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Total Events</p>
+              <p className="text-foreground text-[24px] font-bold">{visibleAuditTrail.length}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Purchase Orders</p>
+              <p className="text-secondary text-[24px] font-bold">{auditSummary.byModule['Purchase Order'] || 0}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Goods Received</p>
+              <p className="text-success text-[24px] font-bold">{auditSummary.byModule['Goods Received'] || 0}</p>
+            </div>
+            <div className="bg-white border border-border rounded-[14px] p-6">
+              <p className="text-muted-foreground text-[12px] mb-2">Latest Activity</p>
+              <p className="text-[12px] font-semibold text-foreground break-words">{auditSummary.latest}</p>
+            </div>
+          </div>
+
+          <div className="bg-white border border-border rounded-[14px] p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h4 className="text-[16px] font-semibold text-foreground">Recent Activity</h4>
+              <p className="text-[12px] text-muted-foreground">{visibleAuditTrail.length} record{visibleAuditTrail.length !== 1 ? 's' : ''}</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[900px]">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Module</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Action</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Item</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Qty</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">By</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Reference</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {visibleAuditTrail.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-[14px] text-muted-foreground">
+                        No audit trail records found
+                      </td>
+                    </tr>
+                  ) : (
+                    visibleAuditTrail.slice(0, 100).map(entry => (
+                      <tr key={entry.id} className="hover:bg-muted transition-colors">
+                        <td className="px-4 py-3 text-[12px] text-muted-foreground whitespace-nowrap">{formatAuditDate(entry.date)}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-1 rounded-[6px] text-[11px] font-medium ${
+                            entry.module === 'Purchase Order' ? 'bg-secondary/10 text-secondary' :
+                            entry.module === 'Transfer' ? 'bg-warning/10 text-warning' :
+                            entry.module === 'Adjustment' ? 'bg-destructive/10 text-destructive' :
+                            'bg-secondary/10 text-secondary'
+                          }`}>
+                            {entry.module}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-[13px] font-medium text-foreground capitalize">{entry.action.toLowerCase()}</td>
+                        <td className="px-4 py-3 text-[13px] text-foreground">{entry.item}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground whitespace-nowrap">{entry.quantity || '-'}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">{entry.performedBy || 'System'}</td>
+                        <td className="px-4 py-3 text-[12px] text-secondary font-medium whitespace-nowrap">{entry.reference}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground max-w-[260px] truncate">{entry.details || '-'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
@@ -948,50 +1154,50 @@ export function ReportsView({
       {activeTab === 'confidential' && isAdmin && confidentialReportData && (
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <div className="bg-[#E7000B] text-white px-3 py-1 rounded-[6px] text-[12px] font-bold flex items-center gap-2">
+            <div className="bg-destructive text-white px-3 py-1 rounded-[6px] text-[12px] font-bold flex items-center gap-2">
               <Eye className="size-4" />
               CONFIDENTIAL - ADMIN ONLY
             </div>
             <div className="flex-1" />
             <button
               onClick={() => handleExportReport('Confidential')}
-              className="bg-[#E7000B] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#c40009] transition-colors"
+              className="bg-destructive text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-destructive transition-colors"
             >
               Export Confidential Report
             </button>
           </div>
 
-          <div className="bg-[#ffe2e2] border-2 border-[#E7000B] rounded-[14px] p-4 mb-6">
-            <p className="text-[14px] text-[#E7000B] font-semibold">âš ï¸ Warning</p>
-            <p className="text-[12px] text-[#323B42] mt-1">
+          <div className="bg-destructive/10 border-2 border-destructive rounded-[14px] p-4 mb-6">
+            <p className="text-[14px] text-destructive font-semibold">âš ï¸ Warning</p>
+            <p className="text-[12px] text-foreground mt-1">
               This report contains sensitive financial and operational data. Access is restricted to administrators only.
               Do not share this information with unauthorized personnel.
             </p>
           </div>
 
           {/* System Audit */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">System Audit Summary</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">System Audit Summary</h4>
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 bg-[#F8FAFB] rounded-[8px]">
-                <p className="text-[12px] text-[#6b7280] mb-1">Total Users</p>
-                <p className="text-[24px] font-bold text-[#323B42]">{confidentialReportData.systemAudit.totalUsers}</p>
+              <div className="p-4 bg-muted rounded-[8px]">
+                <p className="text-[12px] text-muted-foreground mb-1">Total Users</p>
+                <p className="text-[24px] font-bold text-foreground">{confidentialReportData.systemAudit.totalUsers}</p>
                 <div className="flex gap-2 mt-2">
-                  <span className="text-[11px] text-[#00a63e]">
+                  <span className="text-[11px] text-success">
                     Active: {confidentialReportData.systemAudit.activeUsers}
                   </span>
-                  <span className="text-[11px] text-[#E7000B]">
+                  <span className="text-[11px] text-destructive">
                     Inactive: {confidentialReportData.systemAudit.inactiveUsers}
                   </span>
                 </div>
               </div>
-              <div className="p-4 bg-[#E0F5F1] rounded-[8px]">
-                <p className="text-[12px] text-[#007A5E] mb-1">Admin Users</p>
-                <p className="text-[24px] font-bold text-[#007A5E]">{confidentialReportData.systemAudit.adminUsers}</p>
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Admin Users</p>
+                <p className="text-[24px] font-bold text-secondary">{confidentialReportData.systemAudit.adminUsers}</p>
               </div>
-              <div className="p-4 bg-[#E0F2F2] rounded-[8px]">
-                <p className="text-[12px] text-[#008967] mb-1">Staff Users</p>
-                <p className="text-[24px] font-bold text-[#008967]">
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Staff Users</p>
+                <p className="text-[24px] font-bold text-secondary">
                   {confidentialReportData.systemAudit.staffUsers + confidentialReportData.systemAudit.managerUsers}
                 </p>
               </div>
@@ -999,73 +1205,73 @@ export function ReportsView({
           </div>
 
           {/* Financial Summary */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Confidential Financial Summary</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Confidential Financial Summary</h4>
             <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-[#E0F5F1] rounded-[8px]">
-                <p className="text-[12px] text-[#007A5E] mb-1">Total Asset Value</p>
-                <p className="text-[28px] font-bold text-[#007A5E]">
-                  â‚±{confidentialReportData.financialSummary.totalAssetValue.toLocaleString()}
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Total Asset Value</p>
+                <p className="text-[28px] font-bold text-secondary">
+                  ₱{confidentialReportData.financialSummary.totalAssetValue.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-[#6b7280] mt-1">Current inventory valuation</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Current inventory valuation</p>
               </div>
-              <div className="p-4 bg-[#fff4e6] rounded-[8px]">
-                <p className="text-[12px] text-[#FFA500] mb-1">Total Purchase Investment</p>
-                <p className="text-[28px] font-bold text-[#FFA500]">
-                  â‚±{confidentialReportData.financialSummary.totalPurchaseValue.toLocaleString()}
+              <div className="p-4 bg-warning/10 rounded-[8px]">
+                <p className="text-[12px] text-warning mb-1">Total Purchase Investment</p>
+                <p className="text-[28px] font-bold text-warning">
+                  ₱{confidentialReportData.financialSummary.totalPurchaseValue.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-[#6b7280] mt-1">All purchase orders</p>
+                <p className="text-[11px] text-muted-foreground mt-1">All purchase orders</p>
               </div>
-              <div className="p-4 bg-[#ffe2e2] rounded-[8px]">
-                <p className="text-[12px] text-[#E7000B] mb-1">Loss from Damaged Stock</p>
-                <p className="text-[28px] font-bold text-[#E7000B]">
-                  â‚±{confidentialReportData.financialSummary.damagedLoss.toLocaleString()}
+              <div className="p-4 bg-destructive/10 rounded-[8px]">
+                <p className="text-[12px] text-destructive mb-1">Loss from Damaged Stock</p>
+                <p className="text-[28px] font-bold text-destructive">
+                  ₱{confidentialReportData.financialSummary.damagedLoss.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-[#6b7280] mt-1">Non-recoverable items</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Non-recoverable items</p>
               </div>
-              <div className="p-4 bg-[#E0F2F2] rounded-[8px]">
-                <p className="text-[12px] text-[#008967] mb-1">Adjustment Impact Value</p>
-                <p className="text-[28px] font-bold text-[#008967]">
-                  â‚±{confidentialReportData.financialSummary.adjustmentImpact.toLocaleString()}
+              <div className="p-4 bg-secondary/10 rounded-[8px]">
+                <p className="text-[12px] text-secondary mb-1">Adjustment Impact Value</p>
+                <p className="text-[28px] font-bold text-secondary">
+                  ₱{confidentialReportData.financialSummary.adjustmentImpact.toLocaleString()}
                 </p>
-                <p className="text-[11px] text-[#6b7280] mt-1">Approved adjustments</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Approved adjustments</p>
               </div>
             </div>
           </div>
 
           {/* User Activity Log */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">User Activity Log</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">User Activity Log</h4>
             <div className="space-y-2">
               {confidentialReportData.userActivityLog.map(user => (
-                <div key={user.email} className="flex items-center justify-between p-3 bg-[#F8FAFB] rounded-[8px]">
+                <div key={user.email} className="flex items-center justify-between p-3 bg-muted rounded-[8px]">
                   <div className="flex items-center gap-4">
                     <div className={`size-8 rounded-full flex items-center justify-center text-white text-[14px] font-bold ${
-                      user.role === 'Admin' ? 'bg-[#E7000B]' :
-                      user.role === 'Manager' ? 'bg-[#007A5E]' :
-                      'bg-[#008967]'
+                      user.role === 'Admin' ? 'bg-destructive' :
+                      user.role === 'Manager' ? 'bg-secondary' :
+                      'bg-secondary'
                     }`}>
                       {user.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="text-[14px] font-medium text-[#323B42]">{user.name}</p>
-                      <p className="text-[12px] text-[#6b7280]">{user.email}</p>
+                      <p className="text-[14px] font-medium text-foreground">{user.name}</p>
+                      <p className="text-[12px] text-muted-foreground">{user.email}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-4">
                     <span className={`px-3 py-1 rounded-[6px] text-[12px] font-medium ${
-                      user.role === 'Admin' ? 'bg-[#ffe2e2] text-[#E7000B]' :
-                      user.role === 'Manager' ? 'bg-[#E0F5F1] text-[#007A5E]' :
-                      'bg-[#E0F2F2] text-[#008967]'
+                      user.role === 'Admin' ? 'bg-destructive/10 text-destructive' :
+                      user.role === 'Manager' ? 'bg-secondary/10 text-secondary' :
+                      'bg-secondary/10 text-secondary'
                     }`}>
                       {user.role}
                     </span>
                     <span className={`px-3 py-1 rounded-[6px] text-[12px] font-medium ${
-                      user.status === 'Active' ? 'bg-[#E0F5F1] text-[#00a63e]' : 'bg-[#F8FAFB] text-[#6b7280]'
+                      user.status === 'Active' ? 'bg-secondary/10 text-success' : 'bg-muted text-muted-foreground'
                     }`}>
                       {user.status}
                     </span>
-                    <p className="text-[12px] text-[#6b7280] w-32 text-right">{user.lastLogin}</p>
+                    <p className="text-[12px] text-muted-foreground w-32 text-right">{user.lastLogin}</p>
                   </div>
                 </div>
               ))}
@@ -1073,29 +1279,29 @@ export function ReportsView({
           </div>
 
           {/* Critical Events */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Critical Events & Incidents</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Critical Events & Incidents</h4>
             <div className="space-y-2">
               {confidentialReportData.criticalEvents.length === 0 ? (
-                <p className="text-[14px] text-[#6b7280] text-center py-4">No critical events recorded</p>
+                <p className="text-[14px] text-muted-foreground text-center py-4">No critical events recorded</p>
               ) : (
                 confidentialReportData.criticalEvents.slice(0, 10).map((event, index) => (
-                  <div key={index} className="flex items-start justify-between p-3 bg-[#ffe2e2] rounded-[8px] border border-[#E7000B]">
+                  <div key={index} className="flex items-start justify-between p-3 bg-destructive/10 rounded-[8px] border border-destructive">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="bg-[#E7000B] text-white px-2 py-1 rounded text-[11px] font-bold">
+                        <span className="bg-destructive text-white px-2 py-1 rounded text-[11px] font-bold">
                           {event.type}
                         </span>
-                        <p className="text-[14px] font-medium text-[#323B42]">{event.description}</p>
+                        <p className="text-[14px] font-medium text-foreground">{event.description}</p>
                       </div>
-                      <p className="text-[12px] text-[#6b7280]">Created by: {event.createdBy}</p>
+                      <p className="text-[12px] text-muted-foreground">Created by: {event.createdBy}</p>
                     </div>
                     <div className="text-right">
-                      <p className="text-[12px] text-[#323B42]">{event.date}</p>
+                      <p className="text-[12px] text-foreground">{event.date}</p>
                       <span className={`text-[11px] font-medium ${
-                        event.status === 'Approved' ? 'text-[#00a63e]' :
-                        event.status === 'Pending' ? 'text-[#FFA500]' :
-                        'text-[#E7000B]'
+                        event.status === 'Approved' ? 'text-success' :
+                        event.status === 'Pending' ? 'text-warning' :
+                        'text-destructive'
                       }`}>
                         {event.status}
                       </span>
@@ -1107,47 +1313,47 @@ export function ReportsView({
           </div>
 
           {/* Purchase Orders History */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6 mb-4">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Purchase Orders History</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6 mb-4">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Purchase Orders History</h4>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-[#F8F9FA]">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">PO ID</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Supplier</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Created By</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Date</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Total Amount</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Items</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">PO ID</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Supplier</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Created By</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Date</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Total Amount</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Items</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[rgba(0,0,0,0.1)]">
+                <tbody className="divide-y divide-border">
                   {purchaseOrders.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-8 text-center">
-                        <p className="text-[14px] text-[#6b7280]">No purchase orders found</p>
+                        <p className="text-[14px] text-muted-foreground">No purchase orders found</p>
                       </td>
                     </tr>
                   ) : (
                     purchaseOrders.map(po => (
-                      <tr key={po.id} className="hover:bg-[#F8F9FA] transition-colors">
-                        <td className="px-4 py-3 text-[13px] text-[#323B42] font-medium">{po.id}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#323B42]">{po.supplier}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{po.createdBy || 'Admin User'}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{po.date}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#323B42] font-medium">â‚±{po.totalAmount.toFixed(2)}</td>
+                      <tr key={po.id} className="hover:bg-muted transition-colors">
+                        <td className="px-4 py-3 text-[13px] text-foreground font-medium">{po.id}</td>
+                        <td className="px-4 py-3 text-[13px] text-foreground">{po.supplier}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">{po.createdBy || 'Admin User'}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">{po.date}</td>
+                        <td className="px-4 py-3 text-[13px] text-foreground font-medium">₱{po.totalAmount.toFixed(2)}</td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 text-[11px] font-medium rounded-full ${
-                            po.status === 'Approved' ? 'bg-[#d1f4e8] text-[#00a63e]' :
-                            po.status === 'Pending' ? 'bg-[#fff3cd] text-[#856404]' :
-                            po.status === 'Rejected' ? 'bg-[#ffe2e2] text-[#E7000B]' :
-                            'bg-[#e2e8f0] text-[#475569]'
+                            po.status === 'Approved' ? 'bg-success/15 text-success' :
+                            po.status === 'Pending' ? 'bg-warning/15 text-warning' :
+                            po.status === 'Rejected' ? 'bg-destructive/10 text-destructive' :
+                            'bg-muted text-muted-foreground'
                           }`}>
                             {po.status}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{po.items.length} items</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">{po.items.length} items</td>
                       </tr>
                     ))
                   )}
@@ -1157,49 +1363,49 @@ export function ReportsView({
           </div>
 
           {/* Products Received History */}
-          <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-            <h4 className="text-[16px] font-semibold text-[#323B42] mb-4">Products Received History</h4>
+          <div className="bg-white border border-border rounded-[14px] p-6">
+            <h4 className="text-[16px] font-semibold text-foreground mb-4">Products Received History</h4>
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-[#F8F9FA]">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Receipt ID</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">PO ID</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Received Date</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Received By</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Total Items</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Accepted</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Rejected</th>
-                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-[#323B42] uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Receipt ID</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">PO ID</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Received Date</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Received By</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Total Items</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Accepted</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Rejected</th>
+                    <th className="px-4 py-3 text-left text-[12px] font-semibold text-foreground uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[rgba(0,0,0,0.1)]">
+                <tbody className="divide-y divide-border">
                   {productsReceived.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center">
-                        <p className="text-[14px] text-[#6b7280]">No products received found</p>
+                        <p className="text-[14px] text-muted-foreground">No products received found</p>
                       </td>
                     </tr>
                   ) : (
                     productsReceived.map(pr => (
-                      <tr key={pr.id} className="hover:bg-[#F8F9FA] transition-colors">
-                        <td className="px-4 py-3 text-[13px] text-[#323B42] font-medium">{pr.id}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#007A5E] font-medium">{pr.poNumber}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">{pr.dateReceived}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#323B42]">{pr.receivedBy}</td>
-                        <td className="px-4 py-3 text-[13px] text-[#6b7280]">
+                      <tr key={pr.id} className="hover:bg-muted transition-colors">
+                        <td className="px-4 py-3 text-[13px] text-foreground font-medium">{pr.id}</td>
+                        <td className="px-4 py-3 text-[13px] text-secondary font-medium">{pr.poNumber}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">{pr.dateReceived}</td>
+                        <td className="px-4 py-3 text-[13px] text-foreground">{pr.receivedBy}</td>
+                        <td className="px-4 py-3 text-[13px] text-muted-foreground">
                           {pr.items.reduce((sum, item) => sum + item.receivedQty, 0)}
                         </td>
-                        <td className="px-4 py-3 text-[13px] text-[#00a63e] font-medium">
+                        <td className="px-4 py-3 text-[13px] text-success font-medium">
                           {pr.items.reduce((sum, item) => sum + (item.acceptedQty || item.receivedQty), 0)}
                         </td>
-                        <td className="px-4 py-3 text-[13px] text-[#E7000B] font-medium">
+                        <td className="px-4 py-3 text-[13px] text-destructive font-medium">
                           {pr.items.reduce((sum, item) => sum + (item.rejectedQty || 0), 0)}
                         </td>
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 text-[11px] font-medium rounded-full ${
-                            pr.status === 'Fully Accepted' ? 'bg-[#d1f4e8] text-[#00a63e]' :
-                            'bg-[#fff3cd] text-[#856404]'
+                            pr.status === 'Fully Accepted' ? 'bg-success/15 text-success' :
+                            'bg-warning/15 text-warning'
                           }`}>
                             {pr.status}
                           </span>
@@ -1215,12 +1421,12 @@ export function ReportsView({
       )}
 
       {activeTab === 'confidential' && !isAdmin && (
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-12 text-center">
-          <div className="bg-[#ffe2e2] size-20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Eye className="size-10 text-[#E7000B]" />
+        <div className="bg-white border border-border rounded-[14px] p-12 text-center">
+          <div className="bg-destructive/10 size-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Eye className="size-10 text-destructive" />
           </div>
-          <h3 className="text-[20px] font-bold text-[#323B42] mb-2">Access Denied</h3>
-          <p className="text-[14px] text-[#6b7280]">
+          <h3 className="text-[20px] font-bold text-foreground mb-2">Access Denied</h3>
+          <p className="text-[14px] text-muted-foreground">
             You do not have permission to view confidential reports.<br />
             This section is restricted to administrators only.
           </p>

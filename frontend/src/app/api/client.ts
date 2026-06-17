@@ -371,12 +371,14 @@ export function cancelTransfer(id: string) {
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
 
-export function getSales(params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string }) {
+export function getSales(params?: { locationId?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }) {
   const query = new URLSearchParams();
   if (params?.locationId) query.set('locationId', params.locationId);
   if (params?.status) query.set('status', params.status);
   if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params?.dateTo) query.set('dateTo', params.dateTo);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return request<PagedResponse<any>>(`/api/sales${suffix}`).then((r) => r.data);
 }
@@ -432,4 +434,25 @@ export function deactivateBundle(id: string) {
 
 export function deleteBundle(id: string) {
   return request<any>(`/api/bundles/${id}`, { method: 'DELETE' });
+}
+
+// ─── Adjustments ─────────────────────────────────────────────────────────────
+
+export function getAdjustments(params?: { status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<any>>(`/api/adjustments${suffix}`).then((r) => r.data);
+}
+
+export function createAdjustment(data: unknown) {
+  return request<any>('/api/adjustments', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function approveAdjustment(id: string) {
+  return request<any>(`/api/adjustments/${id}/approve`, { method: 'PATCH' });
+}
+
+export function rejectAdjustment(id: string, reason: string) {
+  return request<any>(`/api/adjustments/${id}/reject`, { method: 'PATCH', body: JSON.stringify({ reason }) });
 }

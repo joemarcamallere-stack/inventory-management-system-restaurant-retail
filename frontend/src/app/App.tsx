@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
+import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed, Settings2, Receipt } from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
@@ -8,8 +8,12 @@ import {
   clearStoredToken,
   createInventoryItem,
   deleteInventoryItem,
+  getAdjustments,
   getInventory,
+  getGoodsReceipts,
   getLocations,
+  getPurchaseOrders,
+  getTransfers,
   getUsers,
   loginUser,
   storeToken,
@@ -19,7 +23,9 @@ import {
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
 const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
+const ProductManagementView = lazy(() => import('../modules/retail/ProductManagementView'));
 const POSView = lazy(() => import('../modules/retail/POSView'));
+const SalesHistoryView = lazy(() => import('../modules/retail/SalesHistoryView'));
 const DashboardView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.DashboardView })));
 const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.StockAlertsView })));
 const InventoryView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.InventoryView })));
@@ -114,6 +120,130 @@ const mapApiUser = (user: any): User => ({
   lastLogin: formatDate(user.lastLogin)
 });
 
+const mapPoStatus = (status: string): PurchaseOrder['status'] => {
+  switch (status) {
+    case 'APPROVED': return 'Approved';
+    case 'RECEIVED':
+    case 'PARTIALLY_RECEIVED': return 'Received';
+    case 'REJECTED': return 'Rejected';
+    case 'CANCELLED': return 'Cancelled';
+    default: return 'Pending'; // DRAFT, SUBMITTED
+  }
+};
+
+const mapApiPurchaseOrder = (po: any): PurchaseOrder => ({
+  id: po.id,
+  orderNumber: po.orderNumber,
+  supplier: po.supplier?.name ?? '',
+  date: formatDate(po.createdAt),
+  status: mapPoStatus(po.status),
+  items: (po.items ?? []).map((item: any) => ({
+    name: item.name,
+    quantity: item.quantity,
+    price: item.unitPrice,
+  })),
+  totalAmount: po.totalAmount,
+  paymentMethod: po.paymentMethod,
+  createdBy: po.createdBy?.name,
+});
+
+const mapTransferStatus = (status: string): Transfer['status'] => {
+  switch (status) {
+    case 'IN_TRANSIT': return 'In Transit';
+    case 'COMPLETED': return 'Completed';
+    case 'CANCELLED': return 'Cancelled';
+    default: return 'Pending';
+  }
+};
+
+const mapApiTransfer = (transfer: any): Transfer => ({
+  id: transfer.id,
+  transferNumber: transfer.transferNumber ?? `TR-${transfer.id.slice(0, 8)}`,
+  fromLocation: transfer.fromLocation?.name ?? '',
+  toLocation: transfer.toLocation?.name ?? '',
+  date: formatDate(transfer.createdAt),
+  status: mapTransferStatus(transfer.status),
+  items: (transfer.items ?? []).map((item: any) => ({
+    itemId: item.inventoryItemId ?? '',
+    name: item.inventoryItem?.name ?? '',
+    quantity: item.quantity,
+  })),
+  createdBy: transfer.createdBy?.name ?? '',
+  notes: transfer.notes,
+});
+
+const mapAdjustmentType = (type: string): Adjustment['type'] => {
+  const map: Record<string, Adjustment['type']> = {
+    ADD: 'Add',
+    REMOVE: 'Remove',
+    DAMAGE: 'Damage',
+    LOST: 'Lost',
+    FOUND: 'Found',
+    RECOUNT: 'Recount',
+  };
+  return map[type] ?? 'Add';
+};
+
+const mapAdjustmentStatus = (status: string): Adjustment['status'] => {
+  const map: Record<string, Adjustment['status']> = {
+    PENDING: 'Pending',
+    APPROVED: 'Approved',
+    REJECTED: 'Rejected',
+  };
+  return map[status] ?? 'Pending';
+};
+
+const mapApiAdjustment = (adj: any): Adjustment => ({
+  id: adj.id,
+  adjustmentNumber: adj.adjustmentNumber,
+  date: formatDate(adj.createdAt),
+  type: mapAdjustmentType(adj.type),
+  reason: adj.reason,
+  items: (adj.items ?? []).map((item: any) => ({
+    itemId: item.inventoryItemId ?? '',
+    name: item.inventoryItem?.name ?? '',
+    quantityChange: item.quantityChange,
+    location: item.location?.name ?? '',
+  })),
+  createdBy: adj.createdBy?.name ?? '',
+  status: mapAdjustmentStatus(adj.status),
+});
+
+const mapApiProductReceived = (receipt: any): ProductReceived => {
+  const items = (receipt.items ?? []).map((item: any) => {
+    const receivedQty: number = item.receivedQty ?? 0;
+    const rejectedQty: number = item.rejectedQty ?? 0;
+    return {
+      name: item.purchaseOrderItem?.name ?? item.inventoryItem?.name ?? 'Unknown',
+      orderedQty: item.purchaseOrderItem?.quantity ?? receivedQty + rejectedQty,
+      receivedQty: receivedQty + rejectedQty,
+      acceptedQty: receivedQty,
+      rejectedQty,
+      category: item.inventoryItem?.category ?? '',
+      condition: (item.condition ?? 'Good') as ProductReceived['items'][0]['condition'],
+      inspectionNotes: item.notes,
+      price: item.purchaseOrderItem?.unitPrice ?? 0,
+    };
+  });
+  const totalOrdered = items.reduce((s: number, i: typeof items[0]) => s + i.orderedQty, 0);
+  const totalAccepted = items.reduce((s: number, i: typeof items[0]) => s + i.acceptedQty, 0);
+  const totalRejected = items.reduce((s: number, i: typeof items[0]) => s + i.rejectedQty, 0);
+  return {
+    id: receipt.id,
+    receiptNumber: receipt.receiptNumber,
+    poNumber: receipt.purchaseOrder?.orderNumber ?? '',
+    poId: receipt.purchaseOrderId,
+    supplier: receipt.purchaseOrder?.supplier?.name ?? '',
+    dateReceived: formatDate(receipt.createdAt),
+    items,
+    receivedBy: receipt.receivedBy?.name ?? '',
+    status: totalRejected === 0 ? 'Fully Accepted' : 'Partially Accepted',
+    totalOrdered,
+    totalAccepted,
+    totalRejected,
+  };
+};
+
 
 export default function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -176,16 +306,25 @@ export default function App() {
 
     const loadPhaseOneData = async () => {
       try {
-        const inventoryRequest = hasRetailModule
-          ? getInventory({ itemType: 'RETAIL_ITEM' })
-          : Promise.resolve([]);
-        const [inventoryData, locationData] = await Promise.all([
-          inventoryRequest,
-          getLocations()
-        ]);
-
-        setInventory(inventoryData.map(mapApiInventoryItem));
-        setLocations(locationData.map(mapApiLocation));
+        if (hasRetailModule) {
+          const [inventoryData, locationData, poData, receiptsData, transfersData, adjData] = await Promise.all([
+            getInventory({ itemType: 'RETAIL_ITEM' }),
+            getLocations(),
+            getPurchaseOrders(),
+            getGoodsReceipts(),
+            getTransfers(),
+            getAdjustments(),
+          ]);
+          setInventory(inventoryData.map(mapApiInventoryItem));
+          setLocations(locationData.map(mapApiLocation));
+          setPurchaseOrders(poData.map(mapApiPurchaseOrder));
+          setProductsReceived(receiptsData.map(mapApiProductReceived));
+          setTransfers(transfersData.map(mapApiTransfer));
+          setAdjustments(adjData.map(mapApiAdjustment));
+        } else {
+          const locationData = await getLocations();
+          setLocations(locationData.map(mapApiLocation));
+        }
 
         if (currentUser?.role === 'Admin') {
           const userData = await getUsers();
@@ -224,19 +363,11 @@ export default function App() {
     const damagedItems = inventory.filter(item => item.condition === 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
     const stockMovements = inventory.length;
 
-    const lastMonthItems = 15; // Mock data
-    const itemsChange = ((totalItems - lastMonthItems) / lastMonthItems * 100).toFixed(1);
-
-    const lastMonthAvailable = 12;
-    const availableChange = ((availableStock - lastMonthAvailable) / lastMonthAvailable * 100).toFixed(1);
-
     return {
       totalItems,
       availableStock,
       damagedItems,
       stockMovements,
-      itemsChange: parseFloat(itemsChange),
-      availableChange: parseFloat(availableChange)
     };
   }, [inventory]);
 
@@ -558,6 +689,10 @@ export default function App() {
                   </span>
                 )}
               </NavButton>
+              <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
+                <ProductManagementIcon />
+                Product Management
+              </NavButton>
               <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
                 <PurchaseOrdersIcon />
                 Purchase Orders
@@ -569,6 +704,10 @@ export default function App() {
               <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
                 <ItemBundlingIcon />
                 Item Bundling
+              </NavButton>
+              <NavButton active={currentView === 'sales-history'} onClick={() => navigateToView('sales-history')}>
+                <SalesHistoryIcon />
+                Sales History
               </NavButton>
               <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
                 <TransfersIcon />
@@ -665,7 +804,9 @@ export default function App() {
               locations={locations}
             />
           )}
+          {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
           {currentView === 'pos' && <POSView currentUser={currentUser} />}
+          {currentView === 'sales-history' && <SalesHistoryView currentUser={currentUser} />}
           {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
           {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
           {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
@@ -714,7 +855,7 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[16px] transition-colors ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[14px] whitespace-nowrap overflow-hidden transition-colors ${
         active
           ? 'bg-[#009BA5] text-white font-medium'
           : 'text-[#e5e7eb] hover:bg-[rgba(255,255,255,0.05)] font-normal'
@@ -730,12 +871,14 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
 const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
+const ProductManagementIcon = () => <Settings2 className="size-5" />;
 const PurchaseOrdersIcon = () => <ShoppingCart className="size-5" />;
 const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;
 const TransfersIcon = () => <ArrowRightLeft className="size-5" />;
 const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;
+const SalesHistoryIcon = () => <Receipt className="size-5" />;
 const UserManagementIcon = () => <Users className="size-5" />;
 const LogoutIcon = () => <LogOut className="size-4" />;
 

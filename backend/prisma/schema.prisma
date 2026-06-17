@@ -63,6 +63,7 @@ model Business {
   transfers      Transfer[]
   sales          Sale[]
   bundles        BundlePackage[]
+  stockAdjustments StockAdjustment[]
   diningTables   DiningTable[]
   notifications  Notification[]
   categories     Category[]
@@ -102,6 +103,8 @@ model User {
   sales                  Sale[]
   createdBundles         BundlePackage[]  @relation("BundleCreatedBy")
   approvedBundles        BundlePackage[]  @relation("BundleApprovedBy")
+  createdAdjustments     StockAdjustment[] @relation("AdjustmentCreatedBy")
+  reviewedAdjustments    StockAdjustment[] @relation("AdjustmentReviewedBy")
   notifications  Notification[]
   lastLogin DateTime @default(now())
   createdAt DateTime @default(now())
@@ -123,6 +126,7 @@ model Location {
   transfersTo    Transfer[] @relation("TransferTo")
   sales          Sale[]
   bundles        BundlePackage[]
+  adjustmentItems StockAdjustmentItem[]
   kitchenOrders  KitchenOrder[]
   diningTables   DiningTable[]
   createdAt DateTime @default(now())
@@ -223,6 +227,7 @@ model InventoryItem {
   transferItems      TransferItem[]
   saleItems          SaleItem[]
   bundleItems        BundleItem[]
+  adjustmentItems    StockAdjustmentItem[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -583,6 +588,61 @@ model SaleItem {
   createdAt       DateTime      @default(now())
 
   @@index([saleId])
+}
+
+// ─── Stock Adjustments ───────────────────────────────────────────────────────
+
+enum AdjustmentType {
+  ADD
+  REMOVE
+  DAMAGE
+  LOST
+  FOUND
+  RECOUNT
+}
+
+enum AdjustmentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model StockAdjustment {
+  id               String           @id @default(uuid())
+  adjustmentNumber String
+  type             AdjustmentType
+  reason           String
+  status           AdjustmentStatus @default(PENDING)
+  rejectionReason  String?
+  businessId       String
+  business         Business         @relation(fields: [businessId], references: [id])
+  createdById      String?
+  createdBy        User?            @relation("AdjustmentCreatedBy", fields: [createdById], references: [id])
+  reviewedById     String?
+  reviewedBy       User?            @relation("AdjustmentReviewedBy", fields: [reviewedById], references: [id])
+  reviewedAt       DateTime?
+  items            StockAdjustmentItem[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([businessId, adjustmentNumber])
+  @@index([businessId, status])
+  @@index([businessId, createdAt])
+}
+
+model StockAdjustmentItem {
+  id              String          @id @default(uuid())
+  adjustmentId    String
+  adjustment      StockAdjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  inventoryItemId String
+  inventoryItem   InventoryItem   @relation(fields: [inventoryItemId], references: [id])
+  quantityChange  Float
+  locationId      String
+  location        Location        @relation(fields: [locationId], references: [id])
+  createdAt       DateTime        @default(now())
+
+  @@index([adjustmentId])
+  @@index([inventoryItemId])
 }
 
 // ─── Bundles ─────────────────────────────────────────────────────────────────

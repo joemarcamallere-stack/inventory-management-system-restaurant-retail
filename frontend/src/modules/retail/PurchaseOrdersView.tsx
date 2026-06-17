@@ -5,6 +5,7 @@ import {
   createPurchaseOrder,
   submitPurchaseOrder,
   approvePurchaseOrder,
+  rejectPurchaseOrder,
   cancelPurchaseOrder,
   getSuppliers,
   createSupplier,
@@ -21,11 +22,11 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  DRAFT: 'bg-[#f3f4f6] text-[#6b7280]',
-  SUBMITTED: 'bg-[#fff4e6] text-[#FFA500]',
-  APPROVED: 'bg-[#E0F2F2] text-[#007A5E]',
-  RECEIVED: 'bg-[#E0F5F1] text-[#008967]',
-  CANCELLED: 'bg-[#ffe2e2] text-[#E7000B]',
+  DRAFT: 'bg-muted text-muted-foreground',
+  SUBMITTED: 'bg-warning/10 text-warning',
+  APPROVED: 'bg-secondary/10 text-secondary',
+  RECEIVED: 'bg-secondary/10 text-secondary',
+  CANCELLED: 'bg-destructive/10 text-destructive',
 };
 
 export default function PurchaseOrdersView({
@@ -200,7 +201,7 @@ export default function PurchaseOrdersView({
       return;
     }
     try {
-      await cancelPurchaseOrder(id);
+      await rejectPurchaseOrder(id, rejectionRemarks.trim());
       setRejectionRemarks('');
       setSelectedPOForAction(null);
       await loadData();
@@ -240,39 +241,41 @@ export default function PurchaseOrdersView({
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-[#6b7280]">Loading purchase orders…</div>;
+    return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading purchase orders…</div>;
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-[30px] font-bold text-[#323B42]">Purchase Orders</h2>
-          <p className="text-[#323B42] text-[14px] mt-1">Create POs and register new items</p>
+          <h2 className="text-[30px] font-bold text-foreground">Purchase Orders</h2>
+          <p className="text-foreground text-[14px] mt-1">Create POs and register new items</p>
         </div>
         <div className="flex gap-3">
           <button
             onClick={() => setShowSuppliersModal(true)}
-            className="bg-white border border-[rgba(0,0,0,0.1)] text-[#323B42] px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#F8FAFB] transition-colors"
+            className="bg-white border border-border text-foreground px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-muted transition-colors"
           >
             <Users className="size-4" />
             View Suppliers
           </button>
-          {isAdmin && submittedPOs.length > 0 && (
+          {isAdmin && (
             <button
               onClick={() => setShowPendingApprovalsModal(true)}
-              className="bg-[#FFA500] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#FF8C00] transition-colors relative"
+              className="bg-warning text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-warning transition-colors relative"
             >
               <Clock className="size-4" />
               Pending Approvals
-              <span className="absolute -top-2 -right-2 bg-[#E7000B] text-white size-6 rounded-full flex items-center justify-center text-[12px] font-bold">
-                {submittedPOs.length}
-              </span>
+              {submittedPOs.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-destructive text-white size-6 rounded-full flex items-center justify-center text-[12px] font-bold">
+                  {submittedPOs.length}
+                </span>
+              )}
             </button>
           )}
           <button
             onClick={() => setShowNewPOModal(true)}
-            className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#008967] transition-colors"
+            className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-secondary transition-colors"
           >
             <Plus className="size-4" />
             New Purchase Order
@@ -283,39 +286,39 @@ export default function PurchaseOrdersView({
       {/* New PO Modal */}
       {showNewPOModal && (
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-[#f8fafb] rounded-[12px] p-6 max-w-[512px] w-full max-h-[90vh] overflow-y-auto border border-[rgba(50,59,66,0.15)] shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
+          <div className="bg-muted rounded-[12px] p-6 max-w-[512px] w-full max-h-[90vh] overflow-y-auto border border-foreground/15 shadow-[0px_10px_15px_-3px_rgba(0,0,0,0.1),0px_4px_6px_-4px_rgba(0,0,0,0.1)]">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <h3 className="text-[18px] font-semibold text-[#003534]">Create Purchase Order</h3>
-                <p className="text-[14px] text-[#323b42] mt-1">Create a new purchase order for product deliveries</p>
+                <h3 className="text-[18px] font-semibold text-primary">Create Purchase Order</h3>
+                <p className="text-[14px] text-foreground mt-1">Create a new purchase order for product deliveries</p>
               </div>
-              <button onClick={() => setShowNewPOModal(false)} className="p-2 hover:bg-[rgba(0,0,0,0.05)] rounded-[6px] transition-colors opacity-70">
-                <X className="size-4 text-[#323B42]" />
+              <button onClick={() => setShowNewPOModal(false)} className="p-2 hover:bg-border/50 rounded-[6px] transition-colors opacity-70">
+                <X className="size-4 text-foreground" />
               </button>
             </div>
 
             <div className="space-y-4 mt-6">
               <div className="relative">
-                <label className="block text-[12px] font-medium text-[#323b42] mb-2">Supplier (optional)</label>
+                <label className="block text-[12px] font-medium text-foreground mb-2">Supplier (optional)</label>
                 <input
                   type="text"
                   value={poForm.supplierName}
                   onChange={(e) => { setPOForm({ ...poForm, supplierName: e.target.value, supplierId: undefined }); setShowSupplierDropdown(true); }}
                   onFocus={() => setShowSupplierDropdown(true)}
                   onBlur={() => setTimeout(() => setShowSupplierDropdown(false), 300)}
-                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-secondary"
                   placeholder="Select supplier"
                 />
                 {showSupplierDropdown && filteredSuppliers.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-[rgba(50,59,66,0.15)] rounded-[10px] shadow-lg max-h-[240px] overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-foreground/15 rounded-[10px] shadow-lg max-h-[240px] overflow-y-auto">
                     {filteredSuppliers.map((s: any) => (
                       <div
                         key={s.id}
                         onMouseDown={(e) => { e.preventDefault(); setPOForm({ ...poForm, supplierId: s.id, supplierName: s.name }); setShowSupplierDropdown(false); }}
-                        className="px-4 py-3 hover:bg-[#f8fafb] cursor-pointer border-b border-[rgba(50,59,66,0.1)] last:border-b-0"
+                        className="px-4 py-3 hover:bg-muted cursor-pointer border-b border-foreground/10 last:border-b-0"
                       >
-                        <p className="text-[14px] font-medium text-[#323b42]">{s.name}</p>
-                        <p className="text-[12px] text-[#6b7280] mt-0.5">{s.category} • {s.contactPerson}</p>
+                        <p className="text-[14px] font-medium text-foreground">{s.name}</p>
+                        <p className="text-[12px] text-muted-foreground mt-0.5">{s.category} • {s.contactPerson}</p>
                       </div>
                     ))}
                   </div>
@@ -323,11 +326,11 @@ export default function PurchaseOrdersView({
               </div>
 
               <div>
-                <label className="block text-[12px] font-medium text-[#323b42] mb-2">Payment Method *</label>
+                <label className="block text-[12px] font-medium text-foreground mb-2">Payment Method *</label>
                 <select
                   value={poForm.paymentMethod}
                   onChange={(e) => setPOForm({ ...poForm, paymentMethod: e.target.value })}
-                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-secondary"
                 >
                   <option value="Cash">Cash</option>
                   <option value="Bank Transfer">Bank Transfer</option>
@@ -338,24 +341,24 @@ export default function PurchaseOrdersView({
 
               {poForm.paymentMethod === 'Credit Terms' && (
                 <div>
-                  <label className="block text-[12px] font-medium text-[#323b42] mb-2">Payment Terms</label>
+                  <label className="block text-[12px] font-medium text-foreground mb-2">Payment Terms</label>
                   <input
                     type="text"
                     value={poForm.paymentTerms}
                     onChange={(e) => setPOForm({ ...poForm, paymentTerms: e.target.value })}
-                    className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="e.g., Net 30 days"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-[12px] font-medium text-[#323b42] mb-2">Notes</label>
+                <label className="block text-[12px] font-medium text-foreground mb-2">Notes</label>
                 <input
                   type="text"
                   value={poForm.notes}
                   onChange={(e) => setPOForm({ ...poForm, notes: e.target.value })}
-                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                  className="w-full px-[12.8px] py-[8.8px] bg-white border-[0.8px] border-transparent rounded-[10px] text-[14px] focus:outline-none focus:border-secondary"
                   placeholder="Additional notes or requirements"
                 />
               </div>
@@ -363,36 +366,36 @@ export default function PurchaseOrdersView({
 
             <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
-                <label className="text-[16px] font-semibold text-[#323b42]">Order Items</label>
-                <button onClick={() => setShowNewItemModal(true)} className="px-[10.8px] py-[0.8px] h-[32px] bg-[#f8fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] text-[#323b42] rounded-[10px] text-[14px] font-medium flex items-center gap-[6px] hover:bg-[#e9ecef] transition-colors">
+                <label className="text-[16px] font-semibold text-foreground">Order Items</label>
+                <button onClick={() => setShowNewItemModal(true)} className="px-[10.8px] py-[0.8px] h-[32px] bg-muted border-[0.8px] border-foreground/15 text-foreground rounded-[10px] text-[14px] font-medium flex items-center gap-[6px] hover:bg-muted transition-colors">
                   <Plus className="size-4" />
                   Add Item
                 </button>
               </div>
 
               {poForm.items.length === 0 ? (
-                <div className="bg-[#f9fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] rounded-[12px] p-6 text-center">
-                  <p className="text-[14px] text-[#323B42]">No items added yet</p>
+                <div className="bg-muted border-[0.8px] border-foreground/15 rounded-[12px] p-6 text-center">
+                  <p className="text-[14px] text-foreground">No items added yet</p>
                 </div>
               ) : (
                 <div className="space-y-3">
                   {poForm.items.map((item, idx) => (
-                    <div key={idx} className="bg-[#f9fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] rounded-[12px] p-4">
+                    <div key={idx} className="bg-muted border-[0.8px] border-foreground/15 rounded-[12px] p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex-1">
-                          <p className="text-[14px] font-semibold text-[#364153]">{item.name}</p>
+                          <p className="text-[14px] font-semibold text-foreground">{item.name}</p>
                           {item.estimatedWeight && item.estimatedWeight > 0 && (
-                            <p className="text-[12px] text-[#6b7280] mt-1">Est. Weight: {item.estimatedWeight} kg</p>
+                            <p className="text-[12px] text-muted-foreground mt-1">Est. Weight: {item.estimatedWeight} kg</p>
                           )}
                         </div>
-                        <button onClick={() => setPOForm({ ...poForm, items: poForm.items.filter((_, i) => i !== idx) })} className="text-[#E7000B] hover:bg-[#ffe2e2] p-1 rounded">
+                        <button onClick={() => setPOForm({ ...poForm, items: poForm.items.filter((_, i) => i !== idx) })} className="text-destructive hover:bg-destructive/10 p-1 rounded">
                           <Trash2 className="size-4" />
                         </button>
                       </div>
-                      <div className="border-t border-[rgba(50,59,66,0.15)] pt-3">
+                      <div className="border-t border-foreground/15 pt-3">
                         <div className="flex items-center justify-between">
-                          <span className="text-[12px] text-[#6b7280]">{item.quantity} qty × ₱{item.unitPrice.toLocaleString()}</span>
-                          <span className="text-[14px] font-semibold text-[#007a5e]">₱{(item.quantity * item.unitPrice).toLocaleString()}</span>
+                          <span className="text-[12px] text-muted-foreground">{item.quantity} qty × ₱{item.unitPrice.toLocaleString()}</span>
+                          <span className="text-[14px] font-semibold text-secondary">₱{(item.quantity * item.unitPrice).toLocaleString()}</span>
                         </div>
                       </div>
                     </div>
@@ -401,18 +404,18 @@ export default function PurchaseOrdersView({
               )}
             </div>
 
-            <div className="mt-3 bg-[#f3f4f6] rounded-[12px] p-3 flex justify-between items-center">
-              <span className="text-[16px] font-semibold text-[#323b42]">Total Order Cost:</span>
-              <span className="text-[20px] font-bold text-[#007a5e]">
+            <div className="mt-3 bg-muted rounded-[12px] p-3 flex justify-between items-center">
+              <span className="text-[16px] font-semibold text-foreground">Total Order Cost:</span>
+              <span className="text-[20px] font-bold text-secondary">
                 ₱{poForm.items.reduce((sum, i) => sum + i.quantity * i.unitPrice, 0).toLocaleString()}
               </span>
             </div>
 
             <div className="flex gap-2 justify-end mt-4">
-              <button onClick={() => setShowNewPOModal(false)} className="px-[16.8px] py-[8.8px] h-[36px] bg-[#f8fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] rounded-[10px] text-[14px] font-medium text-[#323b42] hover:bg-[#e9ecef] transition-colors">
+              <button onClick={() => setShowNewPOModal(false)} className="px-[16.8px] py-[8.8px] h-[36px] bg-muted border-[0.8px] border-foreground/15 rounded-[10px] text-[14px] font-medium text-foreground hover:bg-muted transition-colors">
                 Cancel
               </button>
-              <button onClick={handleCreatePO} disabled={saving} className="px-4 py-2 h-[36px] bg-[#007a5e] text-white rounded-[10px] text-[14px] font-medium hover:bg-[#008967] transition-colors disabled:opacity-60">
+              <button onClick={handleCreatePO} disabled={saving} className="px-4 py-2 h-[36px] bg-secondary text-white rounded-[10px] text-[14px] font-medium hover:bg-secondary transition-colors disabled:opacity-60">
                 {saving ? 'Creating…' : 'Create Order'}
               </button>
             </div>
@@ -424,24 +427,24 @@ export default function PurchaseOrdersView({
       {showNewItemModal && (
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-[14px] p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <h3 className="text-[24px] font-bold text-[#323B42] mb-6">Add Item to Purchase Order</h3>
+            <h3 className="text-[24px] font-bold text-foreground mb-6">Add Item to Purchase Order</h3>
             <div className="space-y-4">
               <div className="relative">
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">Item / Product Name *</label>
+                <label className="block text-[14px] font-medium text-foreground mb-2">Item / Product Name *</label>
                 <input
                   type="text"
                   value={newItemForm.baleType}
                   onChange={(e) => { setNewItemForm({ ...newItemForm, baleType: e.target.value }); setShowBaleTypeDropdown(true); }}
                   onFocus={() => setShowBaleTypeDropdown(true)}
                   onBlur={() => setTimeout(() => setShowBaleTypeDropdown(false), 300)}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                  className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                   placeholder="e.g., Mixed Clothing, Premium Denim, Ladies Tops"
                 />
                 {showBaleTypeDropdown && filteredBaleTypes.length > 0 && newItemForm.baleType && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-[rgba(0,0,0,0.1)] rounded-[8px] shadow-lg max-h-[240px] overflow-y-auto">
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-border rounded-[8px] shadow-lg max-h-[240px] overflow-y-auto">
                     {filteredBaleTypes.map((type, index) => (
-                      <div key={index} onMouseDown={(e) => { e.preventDefault(); setNewItemForm({ ...newItemForm, baleType: type }); setShowBaleTypeDropdown(false); }} className="px-4 py-2.5 hover:bg-[#F8FAFB] cursor-pointer border-b border-[rgba(0,0,0,0.05)] last:border-b-0">
-                        <p className="text-[14px] text-[#323B42]">{type}</p>
+                      <div key={index} onMouseDown={(e) => { e.preventDefault(); setNewItemForm({ ...newItemForm, baleType: type }); setShowBaleTypeDropdown(false); }} className="px-4 py-2.5 hover:bg-muted cursor-pointer border-b border-border/50 last:border-b-0">
+                        <p className="text-[14px] text-foreground">{type}</p>
                       </div>
                     ))}
                   </div>
@@ -449,11 +452,11 @@ export default function PurchaseOrdersView({
               </div>
 
               <div>
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">Link to Existing Inventory Item (optional)</label>
+                <label className="block text-[14px] font-medium text-foreground mb-2">Link to Existing Inventory Item (optional)</label>
                 <select
                   value={newItemForm.inventoryItemId}
                   onChange={(e) => setNewItemForm({ ...newItemForm, inventoryItemId: e.target.value })}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                  className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                 >
                   <option value="">— No link (new item) —</option>
                   {inventory.map((item: any) => (
@@ -464,12 +467,12 @@ export default function PurchaseOrdersView({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Estimated Weight (kg)</label>
-                  <input type="number" min="0" step="0.1" value={newItemForm.estimatedWeight} onChange={(e) => setNewItemForm({ ...newItemForm, estimatedWeight: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="Weight in kg" />
+                  <label className="block text-[14px] font-medium text-foreground mb-2">Estimated Weight (kg)</label>
+                  <input type="number" min="0" step="0.1" value={newItemForm.estimatedWeight} onChange={(e) => setNewItemForm({ ...newItemForm, estimatedWeight: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" placeholder="Weight in kg" />
                 </div>
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Condition</label>
-                  <select value={newItemForm.condition} onChange={(e) => setNewItemForm({ ...newItemForm, condition: e.target.value })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]">
+                  <label className="block text-[14px] font-medium text-foreground mb-2">Condition</label>
+                  <select value={newItemForm.condition} onChange={(e) => setNewItemForm({ ...newItemForm, condition: e.target.value })} className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary">
                     <option value="Excellent">Excellent</option>
                     <option value="Good">Good</option>
                     <option value="Fair">Fair</option>
@@ -480,18 +483,18 @@ export default function PurchaseOrdersView({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Quantity *</label>
-                  <input type="number" min="1" value={newItemForm.quantity} onChange={(e) => setNewItemForm({ ...newItemForm, quantity: parseInt(e.target.value) || 1 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
+                  <label className="block text-[14px] font-medium text-foreground mb-2">Quantity *</label>
+                  <input type="number" min="1" value={newItemForm.quantity} onChange={(e) => setNewItemForm({ ...newItemForm, quantity: parseInt(e.target.value) || 1 })} className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
                 </div>
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost (₱) *</label>
-                  <input type="number" min="0" step="0.01" value={newItemForm.unitPrice} onChange={(e) => setNewItemForm({ ...newItemForm, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
+                  <label className="block text-[14px] font-medium text-foreground mb-2">Unit Cost (₱) *</label>
+                  <input type="number" min="0" step="0.01" value={newItemForm.unitPrice} onChange={(e) => setNewItemForm({ ...newItemForm, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
                 </div>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowNewItemModal(false)} className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors">Cancel</button>
-              <button onClick={handleAddItemToPO} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors">Add to Order</button>
+              <button onClick={() => setShowNewItemModal(false)} className="flex-1 px-4 py-2 border border-border rounded-[8px] text-[14px] font-medium text-foreground hover:bg-muted transition-colors">Cancel</button>
+              <button onClick={handleAddItemToPO} className="flex-1 px-4 py-2 bg-secondary text-white rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors">Add to Order</button>
             </div>
           </div>
         </div>
@@ -502,43 +505,43 @@ export default function PurchaseOrdersView({
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-[14px] p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[24px] font-bold text-[#323B42]">Suppliers Directory</h3>
+              <h3 className="text-[24px] font-bold text-foreground">Suppliers Directory</h3>
               <div className="flex gap-2">
-                <button onClick={() => setShowNewSupplierModal(true)} className="px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#008967]">
+                <button onClick={() => setShowNewSupplierModal(true)} className="px-4 py-2 bg-secondary text-white rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-secondary">
                   <Plus className="size-4" /> Add Supplier
                 </button>
-                <button onClick={() => setShowSuppliersModal(false)} className="p-2 hover:bg-[#F8FAFB] rounded-[6px] transition-colors">
-                  <X className="size-5 text-[#323B42]" />
+                <button onClick={() => setShowSuppliersModal(false)} className="p-2 hover:bg-muted rounded-[6px] transition-colors">
+                  <X className="size-5 text-foreground" />
                 </button>
               </div>
             </div>
             {suppliers.length === 0 ? (
-              <p className="text-center text-[#6b7280] py-8">No suppliers yet. Add one above.</p>
+              <p className="text-center text-muted-foreground py-8">No suppliers yet. Add one above.</p>
             ) : (
               <div className="space-y-3">
                 {suppliers.map((s: any) => (
-                  <div key={s.id} className="bg-[#F8FAFB] border border-[rgba(0,0,0,0.1)] rounded-[12px] p-5">
+                  <div key={s.id} className="bg-muted border border-border rounded-[12px] p-5">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h4 className="text-[18px] font-semibold text-[#323B42] mb-1">{s.name}</h4>
-                        {s.category && <span className="text-[12px] bg-[#E0F5F1] text-[#008967] px-2 py-1 rounded font-medium">{s.category}</span>}
+                        <h4 className="text-[18px] font-semibold text-foreground mb-1">{s.name}</h4>
+                        {s.category && <span className="text-[12px] bg-secondary/10 text-secondary px-2 py-1 rounded font-medium">{s.category}</span>}
                       </div>
-                      <button onClick={() => { setPOForm({ ...poForm, supplierId: s.id, supplierName: s.name }); setShowSuppliersModal(false); setShowNewPOModal(true); }} className="px-3 py-1.5 bg-[#007A5E] text-white rounded-[6px] text-[13px] font-medium hover:bg-[#008967]">
+                      <button onClick={() => { setPOForm({ ...poForm, supplierId: s.id, supplierName: s.name }); setShowSuppliersModal(false); setShowNewPOModal(true); }} className="px-3 py-1.5 bg-secondary text-white rounded-[6px] text-[13px] font-medium hover:bg-secondary">
                         Create PO
                       </button>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {s.contactPerson && <div><p className="text-[12px] text-[#323B42] mb-1">Contact Person</p><p className="text-[14px] font-medium text-[#323B42]">{s.contactPerson}</p></div>}
-                      {s.phone && <div><p className="text-[12px] text-[#323B42] mb-1">Phone</p><p className="text-[14px] font-medium text-[#323B42]">{s.phone}</p></div>}
-                      {s.email && <div><p className="text-[12px] text-[#323B42] mb-1">Email</p><p className="text-[14px] font-medium text-[#323B42]">{s.email}</p></div>}
-                      {s.address && <div><p className="text-[12px] text-[#323B42] mb-1">Address</p><p className="text-[14px] font-medium text-[#323B42]">{s.address}</p></div>}
+                      {s.contactPerson && <div><p className="text-[12px] text-foreground mb-1">Contact Person</p><p className="text-[14px] font-medium text-foreground">{s.contactPerson}</p></div>}
+                      {s.phone && <div><p className="text-[12px] text-foreground mb-1">Phone</p><p className="text-[14px] font-medium text-foreground">{s.phone}</p></div>}
+                      {s.email && <div><p className="text-[12px] text-foreground mb-1">Email</p><p className="text-[14px] font-medium text-foreground">{s.email}</p></div>}
+                      {s.address && <div><p className="text-[12px] text-foreground mb-1">Address</p><p className="text-[14px] font-medium text-foreground">{s.address}</p></div>}
                     </div>
                   </div>
                 ))}
               </div>
             )}
             <div className="mt-6">
-              <button onClick={() => setShowSuppliersModal(false)} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB]">Close</button>
+              <button onClick={() => setShowSuppliersModal(false)} className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] font-medium text-foreground hover:bg-muted">Close</button>
             </div>
           </div>
         </div>
@@ -548,7 +551,7 @@ export default function PurchaseOrdersView({
       {showNewSupplierModal && (
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-[60]">
           <div className="bg-white rounded-[14px] p-6 max-w-md w-full">
-            <h3 className="text-[20px] font-bold text-[#323B42] mb-4">Add New Supplier</h3>
+            <h3 className="text-[20px] font-bold text-foreground mb-4">Add New Supplier</h3>
             <div className="space-y-3">
               {[
                 { label: 'Name *', key: 'name', placeholder: 'Supplier name' },
@@ -559,14 +562,14 @@ export default function PurchaseOrdersView({
                 { label: 'Category', key: 'category', placeholder: 'e.g. Clothing, Footwear' },
               ].map(({ label, key, placeholder }) => (
                 <div key={key}>
-                  <label className="block text-[12px] font-medium text-[#323B42] mb-1">{label}</label>
-                  <input type="text" value={(newSupplierForm as any)[key]} onChange={(e) => setNewSupplierForm({ ...newSupplierForm, [key]: e.target.value })} placeholder={placeholder} className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
+                  <label className="block text-[12px] font-medium text-foreground mb-1">{label}</label>
+                  <input type="text" value={(newSupplierForm as any)[key]} onChange={(e) => setNewSupplierForm({ ...newSupplierForm, [key]: e.target.value })} placeholder={placeholder} className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary" />
                 </div>
               ))}
             </div>
             <div className="flex gap-2 mt-4">
-              <button onClick={() => setShowNewSupplierModal(false)} className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] text-[#323B42] hover:bg-[#F8FAFB]">Cancel</button>
-              <button onClick={handleCreateSupplier} disabled={saving} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] disabled:opacity-60">{saving ? 'Saving…' : 'Add Supplier'}</button>
+              <button onClick={() => setShowNewSupplierModal(false)} className="flex-1 px-4 py-2 border border-border rounded-[8px] text-[14px] text-foreground hover:bg-muted">Cancel</button>
+              <button onClick={handleCreateSupplier} disabled={saving} className="flex-1 px-4 py-2 bg-secondary text-white rounded-[8px] text-[14px] font-medium hover:bg-secondary disabled:opacity-60">{saving ? 'Saving…' : 'Add Supplier'}</button>
             </div>
           </div>
         </div>
@@ -574,17 +577,17 @@ export default function PurchaseOrdersView({
 
       {/* Stats */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Total Orders</p><p className="text-[#323B42] text-[24px] font-bold">{stats.total}</p></div>
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Pending</p><p className="text-[#FFA500] text-[24px] font-bold">{stats.pending}</p></div>
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Approved</p><p className="text-[#007A5E] text-[24px] font-bold">{stats.approved}</p></div>
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Received</p><p className="text-[#008967] text-[24px] font-bold">{stats.received}</p></div>
+        <div className="bg-white border border-border rounded-[14px] p-4"><p className="text-foreground text-[12px] mb-1">Total Orders</p><p className="text-foreground text-[24px] font-bold">{stats.total}</p></div>
+        <div className="bg-white border border-border rounded-[14px] p-4"><p className="text-foreground text-[12px] mb-1">Pending</p><p className="text-warning text-[24px] font-bold">{stats.pending}</p></div>
+        <div className="bg-white border border-border rounded-[14px] p-4"><p className="text-foreground text-[12px] mb-1">Approved</p><p className="text-secondary text-[24px] font-bold">{stats.approved}</p></div>
+        <div className="bg-white border border-border rounded-[14px] p-4"><p className="text-foreground text-[12px] mb-1">Received</p><p className="text-secondary text-[24px] font-bold">{stats.received}</p></div>
       </div>
 
       {/* Filter */}
-      <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] mb-4 p-4">
+      <div className="bg-white border border-border rounded-[14px] mb-4 p-4">
         <div className="flex items-center gap-2">
-          <label className="text-[14px] text-[#323B42] font-medium">Status:</label>
-          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-[6px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]">
+          <label className="text-[14px] text-foreground font-medium">Status:</label>
+          <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-border rounded-[6px] text-[14px] bg-white focus:outline-none focus:border-secondary">
             <option value="all">All Orders</option>
             <option value="DRAFT">Draft</option>
             <option value="SUBMITTED">Submitted</option>
@@ -598,35 +601,35 @@ export default function PurchaseOrdersView({
       {/* Orders List */}
       <div className="space-y-4">
         {filteredOrders.length === 0 && (
-          <div className="text-center py-12 text-[#6b7280]">No purchase orders found.</div>
+          <div className="text-center py-12 text-muted-foreground">No purchase orders found.</div>
         )}
         {filteredOrders.map((order: any) => (
-          <div key={order.id} className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
+          <div key={order.id} className="bg-white border border-border rounded-[14px] p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
                 <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-[18px] font-semibold text-[#323B42]">{order.orderNumber}</h3>
-                  <span className={`px-2 py-1 rounded text-[12px] font-semibold ${STATUS_CLASS[order.status] ?? 'bg-[#f3f4f6] text-[#6b7280]'}`}>
+                  <h3 className="text-[18px] font-semibold text-foreground">{order.orderNumber}</h3>
+                  <span className={`px-2 py-1 rounded text-[12px] font-semibold ${STATUS_CLASS[order.status] ?? 'bg-muted text-muted-foreground'}`}>
                     {STATUS_LABEL[order.status] ?? order.status}
                   </span>
                 </div>
-                <p className="text-[14px] text-[#323B42]">Supplier: <span className="font-medium">{order.supplier?.name ?? '—'}</span></p>
-                <p className="text-[14px] text-[#323B42]">Date: {new Date(order.createdAt).toLocaleDateString()}</p>
-                {order.paymentMethod && <p className="text-[14px] text-[#323B42]">Payment: {order.paymentMethod}</p>}
+                <p className="text-[14px] text-foreground">Supplier: <span className="font-medium">{order.supplier?.name ?? '—'}</span></p>
+                <p className="text-[14px] text-foreground">Date: {new Date(order.createdAt).toLocaleDateString()}</p>
+                {order.paymentMethod && <p className="text-[14px] text-foreground">Payment: {order.paymentMethod}</p>}
               </div>
               <div className="text-right">
-                <p className="text-[24px] font-bold text-[#323B42]">₱{order.totalAmount.toLocaleString()}</p>
-                <p className="text-[12px] text-[#323B42]">Total Amount</p>
+                <p className="text-[24px] font-bold text-foreground">₱{order.totalAmount.toLocaleString()}</p>
+                <p className="text-[12px] text-foreground">Total Amount</p>
               </div>
             </div>
 
-            <div className="border-t border-[rgba(0,0,0,0.1)] pt-4 mb-4">
-              <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
+            <div className="border-t border-border pt-4 mb-4">
+              <p className="text-[14px] font-medium text-foreground mb-2">Items:</p>
               <div className="space-y-2">
                 {order.items?.map((item: any) => (
                   <div key={item.id} className="flex items-center justify-between text-[13px]">
-                    <span className="text-[#323B42]">{item.name}</span>
-                    <span className="text-[#323B42]">
+                    <span className="text-foreground">{item.name}</span>
+                    <span className="text-foreground">
                       {item.quantity} × ₱{item.unitPrice} = <span className="font-medium">₱{item.totalPrice.toLocaleString()}</span>
                     </span>
                   </div>
@@ -635,24 +638,24 @@ export default function PurchaseOrdersView({
             </div>
 
             {/* Action buttons */}
-            <div className="flex gap-2 border-t border-[rgba(0,0,0,0.1)] pt-4">
+            <div className="flex gap-2 border-t border-border pt-4">
               {order.status === 'DRAFT' && (
-                <button onClick={() => handleSubmitPO(order.id)} className="px-4 py-1.5 bg-[#007A5E] text-white rounded-[6px] text-[13px] font-medium hover:bg-[#008967]">
+                <button onClick={() => handleSubmitPO(order.id)} className="px-4 py-1.5 bg-secondary text-white rounded-[6px] text-[13px] font-medium hover:bg-secondary">
                   Submit for Approval
                 </button>
               )}
               {order.status === 'SUBMITTED' && isAdmin && (
                 <>
-                  <button onClick={() => handleApprovePO(order.id)} className="px-4 py-1.5 bg-[#00A63E] text-white rounded-[6px] text-[13px] font-medium hover:bg-[#008F35] flex items-center gap-1">
+                  <button onClick={() => handleApprovePO(order.id)} className="px-4 py-1.5 bg-success text-white rounded-[6px] text-[13px] font-medium hover:bg-success flex items-center gap-1">
                     <CheckCircle className="size-3.5" /> Approve
                   </button>
-                  <button onClick={() => setSelectedPOForAction(order.id)} className="px-4 py-1.5 border border-[#E7000B] text-[#E7000B] rounded-[6px] text-[13px] font-medium hover:bg-[#ffe2e2] flex items-center gap-1">
+                  <button onClick={() => setSelectedPOForAction(order.id)} className="px-4 py-1.5 border border-destructive text-destructive rounded-[6px] text-[13px] font-medium hover:bg-destructive/10 flex items-center gap-1">
                     <XCircle className="size-3.5" /> Reject
                   </button>
                 </>
               )}
               {['DRAFT', 'SUBMITTED', 'APPROVED'].includes(order.status) && (
-                <button onClick={() => cancelPurchaseOrder(order.id).then(loadData)} className="px-4 py-1.5 bg-[#f3f4f6] text-[#6b7280] rounded-[6px] text-[13px] font-medium hover:bg-[#e5e7eb]">
+                <button onClick={() => cancelPurchaseOrder(order.id).then(loadData)} className="px-4 py-1.5 bg-muted text-muted-foreground rounded-[6px] text-[13px] font-medium hover:bg-muted">
                   Cancel
                 </button>
               )}
@@ -660,12 +663,12 @@ export default function PurchaseOrdersView({
 
             {/* Rejection form inline */}
             {selectedPOForAction === order.id && (
-              <div className="mt-4 border-t border-[rgba(0,0,0,0.1)] pt-4">
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">Rejection Remarks <span className="text-[#E7000B]">*</span></label>
-                <textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} placeholder="Provide reason for rejection..." className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] mb-3 resize-none" rows={2} />
+              <div className="mt-4 border-t border-border pt-4">
+                <label className="block text-[14px] font-medium text-foreground mb-2">Rejection Remarks <span className="text-destructive">*</span></label>
+                <textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} placeholder="Provide reason for rejection..." className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary mb-3 resize-none" rows={2} />
                 <div className="flex gap-2">
-                  <button onClick={() => handleRejectPO(order.id)} className="flex-1 bg-[#E7000B] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#D10000]">Confirm Rejection</button>
-                  <button onClick={() => { setSelectedPOForAction(null); setRejectionRemarks(''); }} className="flex-1 bg-[#F8FAFB] text-[#323B42] px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#E5E7EB]">Cancel</button>
+                  <button onClick={() => handleRejectPO(order.id)} className="flex-1 bg-destructive text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-destructive">Confirm Rejection</button>
+                  <button onClick={() => { setSelectedPOForAction(null); setRejectionRemarks(''); }} className="flex-1 bg-muted text-foreground px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-muted">Cancel</button>
                 </div>
               </div>
             )}
@@ -679,54 +682,54 @@ export default function PurchaseOrdersView({
           <div className="bg-white rounded-[14px] p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <div>
-                <h3 className="text-[24px] font-bold text-[#323B42]">Pending Purchase Order Approvals</h3>
-                <p className="text-[14px] text-[#6b7280] mt-1">Review and approve or reject submitted POs</p>
+                <h3 className="text-[24px] font-bold text-foreground">Pending Purchase Order Approvals</h3>
+                <p className="text-[14px] text-muted-foreground mt-1">Review and approve or reject submitted POs</p>
               </div>
-              <button onClick={() => { setShowPendingApprovalsModal(false); setSelectedPOForAction(null); setRejectionRemarks(''); }} className="text-[#6b7280] hover:text-[#323B42]"><X className="size-6" /></button>
+              <button onClick={() => { setShowPendingApprovalsModal(false); setSelectedPOForAction(null); setRejectionRemarks(''); }} className="text-muted-foreground hover:text-foreground"><X className="size-6" /></button>
             </div>
             {submittedPOs.length === 0 ? (
-              <div className="text-center py-12"><CheckCircle className="size-16 text-[#00A63E] mx-auto mb-4" /><p className="text-[#323B42] text-[16px] font-medium">No pending approvals</p></div>
+              <div className="text-center py-12"><CheckCircle className="size-16 text-success mx-auto mb-4" /><p className="text-foreground text-[16px] font-medium">No pending approvals</p></div>
             ) : (
               <div className="space-y-4">
                 {submittedPOs.map((po: any) => (
-                  <div key={po.id} className="border border-[rgba(0,0,0,0.1)] rounded-[12px] p-4">
+                  <div key={po.id} className="border border-border rounded-[12px] p-4">
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h4 className="text-[18px] font-semibold text-[#323B42]">{po.orderNumber}</h4>
-                        <p className="text-[14px] text-[#6b7280]">Supplier: {po.supplier?.name ?? '—'}</p>
-                        <p className="text-[14px] text-[#6b7280]">Date: {new Date(po.createdAt).toLocaleDateString()}</p>
+                        <h4 className="text-[18px] font-semibold text-foreground">{po.orderNumber}</h4>
+                        <p className="text-[14px] text-muted-foreground">Supplier: {po.supplier?.name ?? '—'}</p>
+                        <p className="text-[14px] text-muted-foreground">Date: {new Date(po.createdAt).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[20px] font-bold text-[#007A5E]">₱{po.totalAmount.toLocaleString()}</p>
-                        <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-[#fff4e6] text-[#FFA500]">Submitted</span>
+                        <p className="text-[20px] font-bold text-secondary">₱{po.totalAmount.toLocaleString()}</p>
+                        <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-warning/10 text-warning">Submitted</span>
                       </div>
                     </div>
                     <div className="mb-3">
-                      <p className="text-[14px] font-medium text-[#323B42] mb-2">Items:</p>
+                      <p className="text-[14px] font-medium text-foreground mb-2">Items:</p>
                       <div className="space-y-1">
                         {po.items?.map((item: any) => (
-                          <div key={item.id} className="flex items-center justify-between text-[13px] bg-[#F8FAFB] px-3 py-2 rounded-[6px]">
-                            <span className="text-[#323B42]">{item.name}</span>
-                            <span className="text-[#323B42]">{item.quantity} × ₱{item.unitPrice} = <span className="font-medium">₱{item.totalPrice.toLocaleString()}</span></span>
+                          <div key={item.id} className="flex items-center justify-between text-[13px] bg-muted px-3 py-2 rounded-[6px]">
+                            <span className="text-foreground">{item.name}</span>
+                            <span className="text-foreground">{item.quantity} × ₱{item.unitPrice} = <span className="font-medium">₱{item.totalPrice.toLocaleString()}</span></span>
                           </div>
                         ))}
                       </div>
                     </div>
                     {selectedPOForAction === po.id ? (
-                      <div className="mt-4 border-t border-[rgba(0,0,0,0.1)] pt-4">
-                        <label className="block text-[14px] font-medium text-[#323B42] mb-2">Rejection Remarks <span className="text-[#E7000B]">*</span></label>
-                        <textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} placeholder="Provide reason for rejection..." className="w-full px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] mb-3 resize-none" rows={3} />
+                      <div className="mt-4 border-t border-border pt-4">
+                        <label className="block text-[14px] font-medium text-foreground mb-2">Rejection Remarks <span className="text-destructive">*</span></label>
+                        <textarea value={rejectionRemarks} onChange={(e) => setRejectionRemarks(e.target.value)} placeholder="Provide reason for rejection..." className="w-full px-3 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary mb-3 resize-none" rows={3} />
                         <div className="flex gap-2">
-                          <button onClick={() => handleRejectPO(po.id)} className="flex-1 bg-[#E7000B] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#D10000]">Confirm Rejection</button>
-                          <button onClick={() => { setSelectedPOForAction(null); setRejectionRemarks(''); }} className="flex-1 bg-[#F8FAFB] text-[#323B42] px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#E5E7EB]">Cancel</button>
+                          <button onClick={() => handleRejectPO(po.id)} className="flex-1 bg-destructive text-white px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-destructive">Confirm Rejection</button>
+                          <button onClick={() => { setSelectedPOForAction(null); setRejectionRemarks(''); }} className="flex-1 bg-muted text-foreground px-4 py-2 rounded-[8px] text-[14px] font-medium hover:bg-muted">Cancel</button>
                         </div>
                       </div>
                     ) : (
                       <div className="flex gap-2 mt-3">
-                        <button onClick={() => handleApprovePO(po.id)} className="flex-1 bg-[#00A63E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center justify-center gap-2 hover:bg-[#008F35]">
+                        <button onClick={() => handleApprovePO(po.id)} className="flex-1 bg-success text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center justify-center gap-2 hover:bg-success">
                           <CheckCircle className="size-4" /> Approve
                         </button>
-                        <button onClick={() => setSelectedPOForAction(po.id)} className="flex-1 bg-white border border-[#E7000B] text-[#E7000B] px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center justify-center gap-2 hover:bg-[#ffe2e2]">
+                        <button onClick={() => setSelectedPOForAction(po.id)} className="flex-1 bg-white border border-destructive text-destructive px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center justify-center gap-2 hover:bg-destructive/10">
                           <XCircle className="size-4" /> Reject
                         </button>
                       </div>

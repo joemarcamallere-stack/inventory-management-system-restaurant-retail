@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { DiningTablesModule } from './dining-tables/dining-tables.module';
 import { CategoriesModule } from './categories/categories.module';
 import { RestaurantSettingsModule } from './restaurant-settings/restaurant-settings.module';
+import { AdjustmentsModule } from './adjustments/adjustments.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { RestaurantSettingsModule } from './restaurant-settings/restaurant-setti
     TransfersModule,
     SalesModule,
     BundlesModule,
+    AdjustmentsModule,
     NotificationsModule,
     DiningTablesModule,
     CategoriesModule,
