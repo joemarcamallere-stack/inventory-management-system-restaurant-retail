@@ -53,7 +53,6 @@ const formatAuditDate = (value?: string) => {
 };
 
 const csvValue = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-
 const normalizeAuditActor = (value: unknown) => String(value ?? '').trim().toLowerCase();
 
 export function Reports() {
