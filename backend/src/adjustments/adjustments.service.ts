@@ -104,11 +104,24 @@ export class AdjustmentsService {
         throw new BadRequestException('Only PENDING adjustments can be approved');
       }
 
+      const applicationPlan: {
+        adjItem: (typeof adj.items)[number];
+        item: NonNullable<
+          Awaited<ReturnType<typeof tx.inventoryItem.findFirst>>
+        >;
+        previousQuantity: number;
+        newQuantity: number;
+      }[] = [];
+
       for (const adjItem of adj.items) {
         const item = await tx.inventoryItem.findFirst({
           where: { id: adjItem.inventoryItemId, businessId },
         });
-        if (!item) continue;
+        if (!item) {
+          throw new NotFoundException(
+            `Inventory item ${adjItem.inventoryItemId} is no longer available`,
+          );
+        }
 
         const previousQuantity = item.quantity;
         const newQuantity = previousQuantity + adjItem.quantityChange;
@@ -118,6 +131,15 @@ export class AdjustmentsService {
           );
         }
 
+        applicationPlan.push({
+          adjItem,
+          item,
+          previousQuantity,
+          newQuantity,
+        });
+      }
+
+      for (const { adjItem, item, previousQuantity, newQuantity } of applicationPlan) {
         await tx.inventoryItem.update({
           where: { id: item.id },
           data: { quantity: newQuantity },
