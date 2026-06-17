@@ -13,6 +13,7 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { useRetailWorkspace } from '../lib/retail';
 
 
 export interface StockAlert {
@@ -23,19 +24,18 @@ export interface StockAlert {
   severity: 'low' | 'critical';
 }
 
-export function DashboardView({
-  stats,
-  stockAlerts,
-  inventory,
-  purchaseOrders,
-  productsReceived
-}: {
-  stats: any;
-  stockAlerts: StockAlert[];
-  inventory: InventoryItem[];
-  purchaseOrders: PurchaseOrder[];
-  productsReceived: ProductReceived[];
-}) {
+export function DashboardView() {
+  const {
+    stats,
+    stockAlerts,
+    inventory,
+    purchaseOrders,
+    productsReceived,
+  } = useRetailWorkspace({
+    enabled: true,
+    loadSharedData: true,
+    loadUsers: false,
+  });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(new Date());
 

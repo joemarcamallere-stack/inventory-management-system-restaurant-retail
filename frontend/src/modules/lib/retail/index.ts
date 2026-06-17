@@ -5,3 +5,4 @@ export * from './purchaseOrderQueries';
 export * from './transferQueries';
 export * from './salesQueries';
 export * from './bundleQueries';
+export * from './workspace';

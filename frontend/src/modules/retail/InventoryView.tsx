@@ -13,25 +13,31 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { useRetailWorkspace } from '../lib/retail';
 
-export function InventoryView({
-  inventory,
-  searchTerm,
-  setSearchTerm,
-  onEdit,
-  onDelete,
-  expandedCategories,
-  expandedSubcategories,
-  toggleCategory,
-  toggleSubcategory,
-  showEditModal,
-  editingId,
-  formData,
-  setFormData,
-  onSaveEdit,
-  onCancelEdit,
-  locations
-}: any) {
+export function InventoryView() {
+  const {
+    filteredInventory: inventory,
+    searchTerm,
+    setSearchTerm,
+    handleEdit: onEdit,
+    handleDelete: onDelete,
+    expandedCategories,
+    expandedSubcategories,
+    toggleCategory,
+    toggleSubcategory,
+    showEditModal,
+    editingId,
+    formData,
+    setFormData,
+    handleSaveEdit: onSaveEdit,
+    handleCancelEdit: onCancelEdit,
+    locations,
+  } = useRetailWorkspace({
+    enabled: true,
+    loadSharedData: true,
+    loadUsers: false,
+  });
   const [expandedTargetCustomers, setExpandedTargetCustomers] = useState<Set<string>>(new Set());
   const [expandedConditions, setExpandedConditions] = useState<Set<string>>(new Set());
 
@@ -378,7 +384,7 @@ export function InventoryView({
                 </label>
                 <select
                   value={formData.targetCustomer}
-                  onChange={(e) => setFormData({ ...formData, targetCustomer: e.target.value })}
+                  onChange={(e) => setFormData({ ...formData, targetCustomer: e.target.value as 'Male' | 'Female' | 'Unisex' })}
                   className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                 >
                   <option value="Male">Male</option>
@@ -406,7 +412,7 @@ export function InventoryView({
                   </label>
                   <select
                     value={formData.condition}
-                    onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, condition: e.target.value as 'Excellent' | 'Good' | 'Fair' | 'Damaged' })}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
                   >
                     <option value="Excellent">Excellent</option>

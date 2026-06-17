@@ -13,26 +13,24 @@ import type {
 import type { User } from '../../models/domain';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import { useRetailWorkspace } from '../lib/retail';
+import { useSession } from '../../app/hooks/useSession';
 
-export function ReportsView({
-  inventory,
-  transfers,
-  adjustments,
-  purchaseOrders,
-  productsReceived,
-  locations,
-  users,
-  currentUser
-}: {
-  inventory: InventoryItem[];
-  transfers: Transfer[];
-  adjustments: Adjustment[];
-  purchaseOrders: PurchaseOrder[];
-  productsReceived: ProductReceived[];
-  locations: Location[];
-  users: User[];
-  currentUser: { email: string; role: string } | null;
-}) {
+export function ReportsView() {
+  const { currentUser } = useSession();
+  const {
+    inventory,
+    transfers,
+    adjustments,
+    purchaseOrders,
+    productsReceived,
+    locations,
+    users,
+  } = useRetailWorkspace({
+    enabled: true,
+    loadSharedData: true,
+    loadUsers: currentUser?.role === 'Admin',
+  });
   const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'transfers' | 'financial' | 'operations' | 'confidential'>('overview');
   const [dateRange, setDateRange] = useState<'7days' | '30days' | '3months' | 'year' | 'all'>('30days');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');

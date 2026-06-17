@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -17,17 +17,9 @@ import {
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
-import { useRetailWorkspace } from './hooks/useRetailWorkspace';
 import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
-import type {
-  Adjustment,
-  InventoryItem,
-  Location,
-  ProductReceived,
-  PurchaseOrder,
-  Transfer,
-} from './utils/generateSampleData';
+import { useRetailInventoryQuery } from '../modules/lib/retail';
 
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
@@ -62,45 +54,26 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
   const resolvedActiveModule = hasRestaurantModule && !hasRetailModule ? 'RESTAURANT' : activeModule;
 
-  const {
-    inventory: workspaceInventory,
-    locations: workspaceLocations,
-    users: workspaceUsers,
-    purchaseOrders: workspacePurchaseOrders,
-    productsReceived: workspaceProductsReceived,
-    transfers: workspaceTransfers,
-    adjustments: workspaceAdjustments,
-    stats,
-    stockAlerts,
-    filteredInventory: workspaceFilteredInventory,
-    formData,
-    setFormData,
-    searchTerm,
-    setSearchTerm,
-    editingId,
-    showEditModal,
-    expandedCategories,
-    expandedSubcategories,
-    handleEdit,
-    handleSaveEdit,
-    handleCancelEdit,
-    handleDelete,
-    toggleCategory,
-    toggleSubcategory,
-  } = useRetailWorkspace({
-    enabled: isLoggedIn && hasRetailModule,
-    loadSharedData: isLoggedIn,
-    loadUsers: isLoggedIn && currentUser?.role === 'Admin',
-  });
-
-  const inventory = workspaceInventory as InventoryItem[];
-  const purchaseOrders = workspacePurchaseOrders as PurchaseOrder[];
-  const productsReceived = workspaceProductsReceived as ProductReceived[];
-  const transfers = workspaceTransfers as Transfer[];
-  const adjustments = workspaceAdjustments as Adjustment[];
-  const filteredInventory = workspaceFilteredInventory as InventoryItem[];
-  const locations = workspaceLocations as Location[];
-  const users = workspaceUsers;
+  const { data: navInventory = [] } = useRetailInventoryQuery(isLoggedIn && hasRetailModule);
+  const retailNavStats = useMemo(
+    () => ({
+      totalItems: navInventory.reduce((sum, item) => sum + item.quantity, 0),
+    }),
+    [navInventory],
+  );
+  const retailNavStockAlerts = useMemo(
+    () =>
+      navInventory
+        .filter((item) => item.quantity <= 3 && item.condition !== 'Damaged')
+        .map((item) => ({
+          id: item.id,
+          itemName: item.name,
+          currentStock: item.quantity,
+          threshold: 5,
+          severity: item.quantity <= 1 ? 'critical' : 'low',
+        })),
+    [navInventory],
+  );
 
   // When user logs in and has only RESTAURANT module, switch to it automatically.
   useEffect(() => {
@@ -254,18 +227,18 @@ export default function App() {
               <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
                 <StockAlertsIcon />
                 Stock Alerts
-                {stockAlerts.length > 0 && (
+                {retailNavStockAlerts.length > 0 && (
                   <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
-                    {stockAlerts.length}
+                    {retailNavStockAlerts.length}
                   </span>
                 )}
               </NavButton>
               <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
                 <InventoryIcon />
                 Inventory
-                {stats.totalItems > 0 && (
+                {retailNavStats.totalItems > 0 && (
                   <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
-                    {stats.totalItems}
+                    {retailNavStats.totalItems}
                   </span>
                 )}
               </NavButton>
@@ -341,36 +314,13 @@ export default function App() {
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
             {currentView === 'dashboard' && (
-              <DashboardView
-                stats={stats}
-                stockAlerts={stockAlerts}
-                inventory={inventory}
-                purchaseOrders={purchaseOrders}
-                productsReceived={productsReceived}
-              />
+              <DashboardView />
             )}
             {currentView === 'stock-alerts' && (
-              <StockAlertsView alerts={stockAlerts} inventory={inventory} />
+              <StockAlertsView />
             )}
             {currentView === 'inventory' && (
-              <InventoryView
-                inventory={filteredInventory}
-                searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-                expandedCategories={expandedCategories}
-                expandedSubcategories={expandedSubcategories}
-                toggleCategory={toggleCategory}
-                toggleSubcategory={toggleSubcategory}
-                showEditModal={showEditModal}
-                editingId={editingId}
-                formData={formData}
-                setFormData={setFormData}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={handleCancelEdit}
-                locations={locations}
-              />
+              <InventoryView />
             )}
             {currentView === 'pos' && <POSView currentUser={currentUser} />}
             {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
@@ -379,16 +329,7 @@ export default function App() {
             {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
             {currentView === 'multilocation' && <MultilocationView />}
             {currentView === 'reports' && (
-              <ReportsView
-                inventory={inventory}
-                transfers={transfers}
-                adjustments={adjustments}
-                purchaseOrders={purchaseOrders}
-                productsReceived={productsReceived}
-                locations={locations}
-                users={users}
-                currentUser={currentUser}
-              />
+              <ReportsView />
             )}
             {currentView === 'user-management' && (
               <UserManagementView
