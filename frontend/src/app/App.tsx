@@ -1,22 +1,33 @@
-import { lazy, Suspense, useState, useMemo, useEffect } from 'react';
-import { LayoutDashboard, AlertTriangle, Package, ShoppingCart, PackageCheck, Layers, ArrowRightLeft, MapPin, FileText, Users, LogOut, Store, UtensilsCrossed } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  FileText,
+  Layers,
+  LayoutDashboard,
+  LogOut,
+  MapPin,
+  Package,
+  PackageCheck,
+  ShoppingCart,
+  Store,
+  Users,
+  UtensilsCrossed,
+} from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
+import { useRetailWorkspace } from './hooks/useRetailWorkspace';
+import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
-import {
-  clearStoredToken,
-  createInventoryItem,
-  deleteInventoryItem,
-  getInventory,
-  getCurrentUser,
-  getLocations,
-  getUsers,
-  loginUser,
-  storeToken,
-  updateInventoryItem,
-} from './api/client';
-import type { AuthUser } from './api/client';
+import type {
+  Adjustment,
+  InventoryItem,
+  Location,
+  ProductReceived,
+  PurchaseOrder,
+  Transfer,
+} from './utils/generateSampleData';
 
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
@@ -42,99 +53,56 @@ const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').the
 const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then(m => ({ default: m.MultiLocation })));
 const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then(m => ({ default: m.UserManagement })));
 
-// Import types and sample data generation
-import type {
-  InventoryItem,
-  PurchaseOrder,
-  ProductReceived,
-  Transfer,
-  Adjustment,
-  Location,
-  User,
-} from './utils/generateSampleData';
-
-// Types
-interface StockAlert {
-  id: string;
-  itemName: string;
-  currentStock: number;
-  threshold: number;
-  severity: 'low' | 'critical';
-}
-
-type ApiLocation = Location & { _count?: { items: number } };
-type ApiInventoryItem = Omit<InventoryItem, 'dateAdded' | 'location' | 'targetCustomer' | 'subcategory' | 'size' | 'condition'> & {
-  dateAdded: string;
-  locationId: string;
-  location?: ApiLocation;
-  itemType?: string;
-  sku?: string | null;
-  targetCustomer?: InventoryItem['targetCustomer'] | null;
-  subcategory?: string | null;
-  size?: string | null;
-  condition?: InventoryItem['condition'] | null;
-  unit?: string | null;
-  minStock?: number | null;
-  maxStock?: number | null;
-  reorderPoint?: number | null;
-  expiryDate?: string | null;
-  storageTemperature?: string | null;
-};
-
-const formatDate = (value: string) => value ? new Date(value).toISOString().split('T')[0] : '';
-
-const mapApiLocation = (location: ApiLocation): Location => ({
-  id: location.id,
-  name: location.name,
-  address: location.address,
-  manager: location.manager,
-  phone: location.phone,
-  itemCount: location.itemCount ?? location._count?.items ?? 0
-});
-
-const mapApiInventoryItem = (item: ApiInventoryItem): InventoryItem & { locationId?: string } => ({
-  id: item.id,
-  name: item.name,
-  category: item.category,
-  targetCustomer: item.targetCustomer ?? 'Unisex',
-  subcategory: item.subcategory ?? 'General',
-  size: item.size ?? 'N/A',
-  condition: item.condition ?? 'Good',
-  quantity: item.quantity,
-  price: item.price,
-  dateAdded: formatDate(item.dateAdded),
-  location: item.location?.name ?? 'Unknown Location',
-  locationId: item.locationId
-});
-
-const mapApiUser = (user: any): User => ({
-  id: user.id,
-  name: user.name,
-  email: user.email,
-  role: user.role,
-  status: user.status,
-  lastLogin: formatDate(user.lastLogin)
-});
-
-
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [sessionChecked, setSessionChecked] = useState(false);
-  const [currentUser, setCurrentUser] = useState<{ id?: string; name?: string; email: string; role: string; businessId?: string; modules?: string[] } | null>(null);
+  const { currentUser, isLoggedIn, isRestoringSession, login, logout } = useSession();
   const { currentView, navigateToView } = useViewNavigation();
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
-  const [productsReceived, setProductsReceived] = useState<ProductReceived[]>([]);
-  const [transfers, setTransfers] = useState<Transfer[]>([]);
-  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const hasRestaurantModule = currentUser?.modules?.includes('RESTAURANT') ?? false;
   const hasRetailModule = currentUser?.modules?.includes('RETAIL') ?? false;
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
+  const resolvedActiveModule = hasRestaurantModule && !hasRetailModule ? 'RESTAURANT' : activeModule;
 
-  // When user logs in and has only RESTAURANT module, switch to it automatically
+  const {
+    inventory: workspaceInventory,
+    locations: workspaceLocations,
+    users: workspaceUsers,
+    purchaseOrders: workspacePurchaseOrders,
+    productsReceived: workspaceProductsReceived,
+    transfers: workspaceTransfers,
+    adjustments: workspaceAdjustments,
+    stats,
+    stockAlerts,
+    filteredInventory: workspaceFilteredInventory,
+    formData,
+    setFormData,
+    searchTerm,
+    setSearchTerm,
+    editingId,
+    showEditModal,
+    expandedCategories,
+    expandedSubcategories,
+    handleEdit,
+    handleSaveEdit,
+    handleCancelEdit,
+    handleDelete,
+    toggleCategory,
+    toggleSubcategory,
+  } = useRetailWorkspace({
+    enabled: isLoggedIn && hasRetailModule,
+    loadSharedData: isLoggedIn,
+    loadUsers: isLoggedIn && currentUser?.role === 'Admin',
+  });
+
+  const inventory = workspaceInventory as InventoryItem[];
+  const purchaseOrders = workspacePurchaseOrders as PurchaseOrder[];
+  const productsReceived = workspaceProductsReceived as ProductReceived[];
+  const transfers = workspaceTransfers as Transfer[];
+  const adjustments = workspaceAdjustments as Adjustment[];
+  const filteredInventory = workspaceFilteredInventory as InventoryItem[];
+  const locations = workspaceLocations as Location[];
+  const users = workspaceUsers;
+
+  // When user logs in and has only RESTAURANT module, switch to it automatically.
   useEffect(() => {
     if (hasRestaurantModule && currentView.startsWith('restaurant-')) {
       setActiveModule('RESTAURANT');
@@ -145,333 +113,42 @@ export default function App() {
     }
   }, [currentView, hasRestaurantModule, hasRetailModule]);
 
-  // When switching modules, navigate to the appropriate default view
-  const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
-    setActiveModule(module);
-    navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
-  };
-
-  // Global handler to remove leading zeros from number inputs
+  // Global handler to remove leading zeros from number inputs.
   useEffect(() => {
-    const handleNumberInput = (e: Event) => {
-      const input = e.target as HTMLInputElement;
+    const handleNumberInput = (event: Event) => {
+      const input = event.target as HTMLInputElement;
       if (input.type === 'number' && input.value && input.value !== '0') {
-        // Remove leading zeros
         const cleaned = input.value.replace(/^0+/, '') || '0';
         if (cleaned !== input.value) {
           input.value = cleaned;
-          // Trigger change event to update React state
           input.dispatchEvent(new Event('input', { bubbles: true }));
         }
       }
     };
 
-    // Add event listener to all number inputs on blur
     document.addEventListener('blur', handleNumberInput, true);
-
-    return () => {
-      document.removeEventListener('blur', handleNumberInput, true);
-    };
+    return () => document.removeEventListener('blur', handleNumberInput, true);
   }, []);
 
-  useEffect(() => {
-    if (!isLoggedIn) return;
-
-    const loadPhaseOneData = async () => {
-      try {
-        const inventoryRequest = hasRetailModule
-          ? getInventory({ itemType: 'RETAIL_ITEM' })
-          : Promise.resolve([]);
-        const [inventoryData, locationData] = await Promise.all([
-          inventoryRequest,
-          getLocations()
-        ]);
-
-        setInventory(inventoryData.map(mapApiInventoryItem));
-        setLocations(locationData.map(mapApiLocation));
-
-        if (currentUser?.role === 'Admin') {
-          const userData = await getUsers();
-          setUsers(userData.map(mapApiUser));
-        }
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to load backend data');
-      }
-    };
-
-    loadPhaseOneData();
-  }, [isLoggedIn, currentUser?.role, hasRetailModule]);
-
-  const [formData, setFormData] = useState({
-    name: '',
-    category: '',
-    targetCustomer: 'Unisex' as 'Male' | 'Female' | 'Unisex',
-    subcategory: '',
-    size: '',
-    condition: 'Good' as 'Excellent' | 'Good' | 'Fair' | 'Damaged',
-    quantity: 1,
-    price: 0,
-    location: 'Main Store'
-  });
-
-  const [searchTerm, setSearchTerm] = useState('');
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [expandedSubcategories, setExpandedSubcategories] = useState<Set<string>>(new Set());
-
-  // Calculate statistics
-  const stats = useMemo(() => {
-    const totalItems = inventory.reduce((sum, item) => sum + item.quantity, 0);
-    const availableStock = inventory.filter(item => item.condition !== 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const damagedItems = inventory.filter(item => item.condition === 'Damaged').reduce((sum, item) => sum + item.quantity, 0);
-    const stockMovements = inventory.length;
-
-    const lastMonthItems = 15; // Mock data
-    const itemsChange = ((totalItems - lastMonthItems) / lastMonthItems * 100).toFixed(1);
-
-    const lastMonthAvailable = 12;
-    const availableChange = ((availableStock - lastMonthAvailable) / lastMonthAvailable * 100).toFixed(1);
-
-    return {
-      totalItems,
-      availableStock,
-      damagedItems,
-      stockMovements,
-      itemsChange: parseFloat(itemsChange),
-      availableChange: parseFloat(availableChange)
-    };
-  }, [inventory]);
-
-  const stockAlerts = useMemo(() => {
-    return inventory
-      .filter(item => item.quantity <= 3 && item.condition !== 'Damaged')
-      .map(item => ({
-        id: item.id,
-        itemName: item.name,
-        currentStock: item.quantity,
-        threshold: 5,
-        severity: (item.quantity <= 1 ? 'critical' : 'low') as 'low' | 'critical'
-      }));
-  }, [inventory]);
-
-  const getLocationIdByName = (name: string) => {
-    return locations.find(location => location.name === name)?.id;
+  const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
+    setActiveModule(module);
+    navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
   };
-
-  const toInventoryPayload = () => {
-    const locationId = getLocationIdByName(formData.location);
-    if (!locationId) {
-      throw new Error('Please select a valid location');
-    }
-
-    return {
-      name: formData.name,
-      category: formData.category,
-      targetCustomer: formData.targetCustomer,
-      subcategory: formData.subcategory,
-      size: formData.size,
-      condition: formData.condition,
-      quantity: Number(formData.quantity),
-      price: Number(formData.price),
-      locationId
-    };
-  };
-
-  const handleAddItem = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.category || !formData.size) return;
-
-    try {
-      if (editingId) {
-        const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-        setInventory(inventory.map(item =>
-          item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-        ));
-        setEditingId(null);
-      } else {
-        const newItem = await createInventoryItem(toInventoryPayload());
-        setInventory([...inventory, mapApiInventoryItem(newItem)]);
-      }
-
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to save inventory item');
-    }
-  };
-
-  const handleEdit = (item: InventoryItem) => {
-    setFormData({
-      name: item.name,
-      category: item.category,
-      targetCustomer: item.targetCustomer,
-      subcategory: item.subcategory,
-      size: item.size,
-      condition: item.condition,
-      quantity: item.quantity,
-      price: item.price,
-      location: item.location
-    });
-    setEditingId(item.id);
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!editingId) return;
-
-    if (!formData.name || !formData.category || !formData.size) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    try {
-      const updatedItem = await updateInventoryItem(editingId, toInventoryPayload());
-      setInventory(inventory.map(item =>
-        item.id === editingId ? mapApiInventoryItem(updatedItem) : item
-      ));
-
-      setEditingId(null);
-      setShowEditModal(false);
-      setFormData({
-        name: '',
-        category: '',
-        targetCustomer: 'Unisex',
-        subcategory: '',
-        size: '',
-        condition: 'Good',
-        quantity: 1,
-        price: 0,
-        location: 'Main Store'
-      });
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Failed to update inventory item');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-    setShowEditModal(false);
-    setFormData({
-      name: '',
-      category: '',
-      targetCustomer: 'Unisex',
-      subcategory: '',
-      size: '',
-      condition: 'Good',
-      quantity: 1,
-      price: 0,
-      location: 'Main Store'
-    });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to delete this item?')) {
-      try {
-        await deleteInventoryItem(id);
-        setInventory(inventory.filter(item => item.id !== id));
-      } catch (error) {
-        alert(error instanceof Error ? error.message : 'Failed to delete inventory item');
-      }
-    }
-  };
-
-  const filteredInventory = inventory.filter(item =>
-    item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.subcategory.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const toggleCategory = (category: string) => {
-    const newExpanded = new Set(expandedCategories);
-    if (newExpanded.has(category)) {
-      newExpanded.delete(category);
-    } else {
-      newExpanded.add(category);
-    }
-    setExpandedCategories(newExpanded);
-  };
-
-  const toggleSubcategory = (key: string) => {
-    const newExpanded = new Set(expandedSubcategories);
-    if (newExpanded.has(key)) {
-      newExpanded.delete(key);
-    } else {
-      newExpanded.add(key);
-    }
-    setExpandedSubcategories(newExpanded);
-  };
-
-  const applyAuthUser = (user: AuthUser) => {
-    setCurrentUser({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      businessId: user.businessId,
-      modules: user.modules
-    });
-    localStorage.setItem('userRole', user.role.toLowerCase());
-    localStorage.setItem('userEmail', user.email);
-    setIsLoggedIn(true);
-  };
-
-  // Restore the session on load from the HttpOnly cookie, so a refresh keeps the
-  // user logged in instead of bouncing back to the login screen.
-  useEffect(() => {
-    let cancelled = false;
-    getCurrentUser()
-      .then(({ user }) => {
-        if (!cancelled) applyAuthUser(user);
-      })
-      .catch(() => {
-        // No valid session cookie — clear any stale local hints and show login.
-        if (!cancelled) {
-          localStorage.removeItem('userRole');
-          localStorage.removeItem('userEmail');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setSessionChecked(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleLogin = async (email: string, password: string) => {
-    try {
-      const response = await loginUser(email, password);
-      storeToken(response.accessToken);
-      applyAuthUser(response.user);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : 'Invalid credentials');
-    }
+    await login(email, password);
   };
 
-  const handleLogout = () => {
-    clearStoredToken();
-    setIsLoggedIn(false);
-    setCurrentUser(null);
+  const handleLogout = async () => {
+    await logout();
     navigateToView('dashboard');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('userEmail');
+    setActiveModule('RETAIL');
   };
 
-  if (!sessionChecked) {
+  if (isRestoringSession) {
     return (
       <div className="flex h-screen items-center justify-center bg-background text-muted-foreground">
-        Loading…
+        Loading...
       </div>
     );
   }
@@ -480,7 +157,7 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />;
   }
 
-  if (activeModule === 'RESTAURANT' && hasRestaurantModule) {
+  if (resolvedActiveModule === 'RESTAURANT' && hasRestaurantModule) {
     const restaurantContent = (() => {
       switch (currentView) {
         case 'restaurant-dashboard':
@@ -526,7 +203,7 @@ export default function App() {
         onSwitchToRetail={() => switchModule('RETAIL')}
         onLogout={handleLogout}
       >
-        <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
           {restaurantContent}
         </Suspense>
       </RestaurantLayout>
@@ -535,9 +212,7 @@ export default function App() {
 
   return (
     <div className="bg-[#F8FAFB] h-screen w-screen overflow-hidden flex" style={{ fontFamily: 'Inter, sans-serif' }}>
-      {/* Sidebar */}
-      <div className="h-full w-[256px] flex flex-col" style={{ background: "#003534" }}>
-        {/* Header */}
+      <div className="h-full w-[256px] flex flex-col" style={{ background: '#003534' }}>
         <div className="p-6 flex items-center gap-3">
           <div className="bg-white rounded-full size-[40px] flex items-center justify-center shadow-sm overflow-hidden">
             <img src={logoImage} alt="IMS Logo" className="w-full h-full object-contain p-1" />
@@ -550,19 +225,18 @@ export default function App() {
           </div>
         </div>
 
-        {/* Module switch â€” only shown when business has BOTH modules */}
         {hasBothModules && (
           <div className="px-4 pb-3 flex gap-2">
             <button
               onClick={() => switchModule('RETAIL')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${activeModule === 'RETAIL' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${resolvedActiveModule === 'RETAIL' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
             >
               <Store className="size-3.5" />
               Retail
             </button>
             <button
               onClick={() => switchModule('RESTAURANT')}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${activeModule === 'RESTAURANT' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-[6px] text-xs font-semibold transition-colors ${resolvedActiveModule === 'RESTAURANT' ? 'bg-[#007A5E] text-white' : 'bg-[rgba(255,255,255,0.08)] text-[#a0c4bf] hover:bg-[rgba(255,255,255,0.14)]'}`}
             >
               <UtensilsCrossed className="size-3.5" />
               Restaurant
@@ -570,10 +244,8 @@ export default function App() {
           </div>
         )}
 
-        {/* Navigation */}
         <nav className="flex-1 px-6 pb-4 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          {/* Retail navigation */}
-          {activeModule === 'RETAIL' && (
+          {resolvedActiveModule === 'RETAIL' && (
             <>
               <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
                 <DashboardIcon />
@@ -632,7 +304,6 @@ export default function App() {
           )}
         </nav>
 
-        {/* User Profile */}
         <div className="bg-[#005656] border-t border-[rgba(255,255,255,0.1)] p-6">
           <div className="flex items-center gap-3 mb-3">
             <div className="bg-[#008967] rounded-full size-[40px] flex items-center justify-center">
@@ -660,85 +331,70 @@ export default function App() {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 h-full flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="bg-[#005656] border-b border-[rgba(255,255,255,0.1)] px-6 py-4 flex items-center">
           <h1 className="text-white text-[20px] leading-[28px] flex-1" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
             {currentView.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
           </h1>
         </div>
 
-        {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading…</div>}>
-          {currentView === 'dashboard' && (
-            <DashboardView
-              stats={stats}
-              stockAlerts={stockAlerts}
-              inventory={inventory}
-              purchaseOrders={purchaseOrders}
-              productsReceived={productsReceived}
-            />
-          )}
-          {currentView === 'stock-alerts' && (
-            <StockAlertsView alerts={stockAlerts} inventory={inventory} />
-          )}
-          {currentView === 'inventory' && (
-            <InventoryView
-              inventory={filteredInventory}
-              searchTerm={searchTerm}
-              setSearchTerm={setSearchTerm}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              expandedCategories={expandedCategories}
-              expandedSubcategories={expandedSubcategories}
-              toggleCategory={toggleCategory}
-              toggleSubcategory={toggleSubcategory}
-              showEditModal={showEditModal}
-              editingId={editingId}
-              formData={formData}
-              setFormData={setFormData}
-              onSaveEdit={handleSaveEdit}
-              onCancelEdit={handleCancelEdit}
-              locations={locations}
-            />
-          )}
-          {currentView === 'pos' && <POSView currentUser={currentUser} />}
-          {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
-          {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
-          {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
-          {currentView === 'transfers' && (
-            <TransfersView currentUser={currentUser} />
-          )}
-          {currentView === 'multilocation' && (
-            <MultilocationView
-              locations={locations}
-              setLocations={setLocations}
-              inventory={inventory}
-              transfers={transfers}
-              purchaseOrders={purchaseOrders}
-            />
-          )}
-          {currentView === 'reports' && (
-            <ReportsView
-              inventory={inventory}
-              transfers={transfers}
-              adjustments={adjustments}
-              purchaseOrders={purchaseOrders}
-              productsReceived={productsReceived}
-              locations={locations}
-              users={users}
-              currentUser={currentUser}
-            />
-          )}
-          {currentView === 'user-management' && (
-            <UserManagementView
-              users={users}
-              setUsers={setUsers}
-              currentUser={currentUser}
-            />
-          )}
+          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
+            {currentView === 'dashboard' && (
+              <DashboardView
+                stats={stats}
+                stockAlerts={stockAlerts}
+                inventory={inventory}
+                purchaseOrders={purchaseOrders}
+                productsReceived={productsReceived}
+              />
+            )}
+            {currentView === 'stock-alerts' && (
+              <StockAlertsView alerts={stockAlerts} inventory={inventory} />
+            )}
+            {currentView === 'inventory' && (
+              <InventoryView
+                inventory={filteredInventory}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                expandedCategories={expandedCategories}
+                expandedSubcategories={expandedSubcategories}
+                toggleCategory={toggleCategory}
+                toggleSubcategory={toggleSubcategory}
+                showEditModal={showEditModal}
+                editingId={editingId}
+                formData={formData}
+                setFormData={setFormData}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={handleCancelEdit}
+                locations={locations}
+              />
+            )}
+            {currentView === 'pos' && <POSView currentUser={currentUser} />}
+            {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
+            {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
+            {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
+            {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
+            {currentView === 'multilocation' && <MultilocationView />}
+            {currentView === 'reports' && (
+              <ReportsView
+                inventory={inventory}
+                transfers={transfers}
+                adjustments={adjustments}
+                purchaseOrders={purchaseOrders}
+                productsReceived={productsReceived}
+                locations={locations}
+                users={users}
+                currentUser={currentUser}
+              />
+            )}
+            {currentView === 'user-management' && (
+              <UserManagementView
+                currentUser={currentUser}
+              />
+            )}
           </Suspense>
         </div>
       </div>
@@ -746,10 +402,7 @@ export default function App() {
   );
 }
 
-
-
-// Navigation Button Component
-function NavButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function NavButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button
       onClick={onClick}
@@ -765,7 +418,6 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-// Icon components using lucide-react
 const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
@@ -777,4 +429,3 @@ const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;
 const UserManagementIcon = () => <Users className="size-5" />;
 const LogoutIcon = () => <LogOut className="size-4" />;
-

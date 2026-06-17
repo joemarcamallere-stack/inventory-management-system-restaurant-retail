@@ -1,9 +1,16 @@
 import { useState } from "react";
 import { Apple, PhilippinePeso, Hash, Folder, Save, X, Calendar, Plus, FolderPlus, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { defaultInventoryProducts, getCategoryHierarchy, getStorageTemperatureOptions } from "../lib/inventoryLogic";
-import { createInventoryItem, getLocations, upsertRestaurantSetting } from "../../app/api/client";
+import { useSession } from "../../app/hooks/useSession";
+import {
+  useCreateRestaurantInventoryMutation,
+  useRestaurantCategoryHierarchyQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantLocationsQuery,
+  useRestaurantStorageTemperatureOptionsQuery,
+  useUpsertRestaurantCategoryHierarchyMutation,
+  useUpsertRestaurantStorageTemperatureOptionsMutation,
+} from "../lib/restaurant";
 
 const buildGeneratedSku = (name: string, id: number) => {
   const skuBase = name
@@ -34,7 +41,8 @@ type StoredProduct = {
 
 
 export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
-  const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") || "staff" : "staff";
+  const { currentUser } = useSession();
+  const userRole = currentUser?.role === "Admin" ? "admin" : "staff";
 
   if (userRole !== "admin") {
     return (
@@ -69,24 +77,18 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     unit: "",
   });
 
-  const [products] = useRestaurantState<StoredProduct[]>(
-    "inventory.products",
-    defaultInventoryProducts.map((product) => ({ ...product, itemType: "INGREDIENT" })),
-  );
-  const [categoryHierarchy, setCategoryHierarchy] = useRestaurantState<{ [key: string]: string[] }>(
-    "inventory.categoryHierarchy",
-    getCategoryHierarchy(),
-  );
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions(),
-  );
+  const { data: products = [] } = useRestaurantInventoryQuery<StoredProduct[]>();
+  const { data: locations = [] } = useRestaurantLocationsQuery();
+  const { data: categoryHierarchy = {} } = useRestaurantCategoryHierarchyQuery();
+  const { data: storageTemperatureOptions = [] } = useRestaurantStorageTemperatureOptionsQuery();
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
-  const createProduct = useRestaurantMutation(
-    async (product: StoredProduct) => {
-      const locations = await getLocations();
+  const createProduct = useCreateRestaurantInventoryMutation();
+  const saveCategoryHierarchy = useUpsertRestaurantCategoryHierarchyMutation();
+  const saveStorageTemperatureOptions = useUpsertRestaurantStorageTemperatureOptionsMutation();
+
+  const createStoredProduct = async (product: StoredProduct) => {
       if (!locations[0]) throw new Error("Create a location before adding inventory");
-      return createInventoryItem({
+      return createProduct.mutateAsync({
         name: product.name,
         itemType: product.itemType,
         sku: product.sku || undefined,
@@ -101,14 +103,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
         storageTemperature: product.storageTemperature || undefined,
         locationId: locations[0].id,
       });
-    },
-    ["inventory.products", "purchaseOrders.globalProducts"],
-  );
-  const saveSetting = useRestaurantMutation(
-    ({ key, value }: { key: "CATEGORY_HIERARCHY" | "STORAGE_TEMPERATURE_OPTIONS"; value: unknown }) =>
-      upsertRestaurantSetting(key, value),
-    ["inventory.categoryHierarchy", "inventory.storageTemperatureOptions"],
-  );
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,7 +133,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     };
 
     try {
-      await createProduct.mutateAsync(productToAdd);
+      await createStoredProduct(productToAdd);
       onClose?.();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create inventory item");
@@ -163,8 +158,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
         ...categoryHierarchy,
         [newMainCategory.trim()]: []
       };
-      await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
-      setCategoryHierarchy(nextHierarchy);
+      await saveCategoryHierarchy.mutateAsync(nextHierarchy);
       setNewMainCategory("");
       setShowCategoryModal(false);
     }
@@ -179,8 +173,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
           newSubCategory.trim()
         ]
       };
-      await saveSetting.mutateAsync({ key: "CATEGORY_HIERARCHY", value: nextHierarchy });
-      setCategoryHierarchy(nextHierarchy);
+      await saveCategoryHierarchy.mutateAsync(nextHierarchy);
       setNewSubCategory("");
       setCategoryForSubCategory("");
       setShowCategoryModal(false);
@@ -191,8 +184,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     const trimmed = newStorageTemperature.trim();
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
     const nextOptions = [...storageTemperatureOptions, trimmed];
-    await saveSetting.mutateAsync({ key: "STORAGE_TEMPERATURE_OPTIONS", value: nextOptions });
-    setStorageTemperatureOptions(nextOptions);
+    await saveStorageTemperatureOptions.mutateAsync(nextOptions);
     setFormData({ ...formData, storageTemp: trimmed });
     setNewStorageTemperature("");
   };

@@ -1,15 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
 import {
-  getPurchaseOrders,
-  createPurchaseOrder,
-  submitPurchaseOrder,
-  approvePurchaseOrder,
-  cancelPurchaseOrder,
-  getSuppliers,
-  createSupplier,
-  getInventory,
-} from '../../app/api/client';
+  useApproveRetailPurchaseOrderMutation,
+  useCancelRetailPurchaseOrderMutation,
+  useCreateRetailPurchaseOrderMutation,
+  useCreateRetailSupplierMutation,
+  useRejectRetailPurchaseOrderMutation,
+  useRetailInventoryRecordsQuery,
+  useRetailPurchaseOrderRecordsQuery,
+  useRetailSuppliersQuery,
+  useSubmitRetailPurchaseOrderMutation,
+} from '../lib/retail';
 import { categorySubcategories } from '../../app/utils/constants';
 
 const STATUS_LABEL: Record<string, string> = {
@@ -33,10 +34,19 @@ export default function PurchaseOrdersView({
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const ordersQuery = useRetailPurchaseOrderRecordsQuery();
+  const suppliersQuery = useRetailSuppliersQuery();
+  const inventoryQuery = useRetailInventoryRecordsQuery();
+  const createPurchaseOrderMutation = useCreateRetailPurchaseOrderMutation();
+  const submitPurchaseOrderMutation = useSubmitRetailPurchaseOrderMutation();
+  const approvePurchaseOrderMutation = useApproveRetailPurchaseOrderMutation();
+  const rejectPurchaseOrderMutation = useRejectRetailPurchaseOrderMutation();
+  const cancelPurchaseOrderMutation = useCancelRetailPurchaseOrderMutation();
+  const createSupplierMutation = useCreateRetailSupplierMutation();
+  const orders = ordersQuery.data ?? [];
+  const suppliers = suppliersQuery.data ?? [];
+  const inventory = inventoryQuery.data ?? [];
+  const loading = ordersQuery.isLoading || suppliersQuery.isLoading || inventoryQuery.isLoading;
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showNewPOModal, setShowNewPOModal] = useState(false);
   const [showNewItemModal, setShowNewItemModal] = useState(false);
@@ -98,26 +108,6 @@ export default function PurchaseOrdersView({
     t.toLowerCase().includes(newItemForm.baleType.toLowerCase())
   );
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [ordersData, suppliersData, inventoryData] = await Promise.all([
-        getPurchaseOrders(),
-        getSuppliers(),
-        getInventory({ itemType: 'RETAIL_ITEM' }),
-      ]);
-      setOrders(ordersData);
-      setSuppliers(suppliersData);
-      setInventory(inventoryData);
-    } catch (err) {
-      console.error('Failed to load purchase orders data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
-
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(poForm.supplierName.toLowerCase())
   );
@@ -152,7 +142,7 @@ export default function PurchaseOrdersView({
     }
     setSaving(true);
     try {
-      await createPurchaseOrder({
+      await createPurchaseOrderMutation.mutateAsync({
         supplierId: poForm.supplierId || undefined,
         notes: poForm.notes || undefined,
         paymentMethod: poForm.paymentMethod,
@@ -166,7 +156,6 @@ export default function PurchaseOrdersView({
       });
       setPOForm({ supplierId: undefined, supplierName: '', paymentMethod: 'Bank Transfer', paymentTerms: '', notes: '', items: [] });
       setShowNewPOModal(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to create purchase order');
     } finally {
@@ -176,8 +165,7 @@ export default function PurchaseOrdersView({
 
   const handleSubmitPO = async (id: string) => {
     try {
-      await submitPurchaseOrder(id);
-      await loadData();
+      await submitPurchaseOrderMutation.mutateAsync(id);
     } catch (err: any) {
       alert(err.message ?? 'Failed to submit purchase order');
     }
@@ -185,10 +173,9 @@ export default function PurchaseOrdersView({
 
   const handleApprovePO = async (id: string) => {
     try {
-      await approvePurchaseOrder(id);
+      await approvePurchaseOrderMutation.mutateAsync(id);
       setSelectedPOForAction(null);
       setShowPendingApprovalsModal(false);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to approve purchase order');
     }
@@ -200,12 +187,19 @@ export default function PurchaseOrdersView({
       return;
     }
     try {
-      await cancelPurchaseOrder(id);
+      await rejectPurchaseOrderMutation.mutateAsync({ id, reason: rejectionRemarks });
       setRejectionRemarks('');
       setSelectedPOForAction(null);
-      await loadData();
     } catch (err: any) {
       alert(err.message ?? 'Failed to reject purchase order');
+    }
+  };
+
+  const handleCancelPO = async (id: string) => {
+    try {
+      await cancelPurchaseOrderMutation.mutateAsync(id);
+    } catch (err: any) {
+      alert(err.message ?? 'Failed to cancel purchase order');
     }
   };
 
@@ -216,11 +210,9 @@ export default function PurchaseOrdersView({
     }
     setSaving(true);
     try {
-      await createSupplier(newSupplierForm);
+      await createSupplierMutation.mutateAsync(newSupplierForm);
       setNewSupplierForm({ name: '', contactPerson: '', email: '', phone: '', address: '', category: '' });
       setShowNewSupplierModal(false);
-      const updated = await getSuppliers();
-      setSuppliers(updated);
     } catch (err: any) {
       alert(err.message ?? 'Failed to create supplier');
     } finally {
@@ -652,7 +644,7 @@ export default function PurchaseOrdersView({
                 </>
               )}
               {['DRAFT', 'SUBMITTED', 'APPROVED'].includes(order.status) && (
-                <button onClick={() => cancelPurchaseOrder(order.id).then(loadData)} className="px-4 py-1.5 bg-[#f3f4f6] text-[#6b7280] rounded-[6px] text-[13px] font-medium hover:bg-[#e5e7eb]">
+                <button onClick={() => handleCancelPO(order.id)} className="px-4 py-1.5 bg-[#f3f4f6] text-[#6b7280] rounded-[6px] text-[13px] font-medium hover:bg-[#e5e7eb]">
                   Cancel
                 </button>
               )}

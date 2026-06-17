@@ -16,6 +16,11 @@ import {
   useRecipesQuery,
 } from '../domainQueries';
 
+const parseOrderModifiers = (notes?: string | null) => {
+  const modifierText = notes?.match(/Modifiers:\s*([^|]+)/i)?.[1]?.trim();
+  return modifierText ? modifierText.split(',').map((item) => item.trim()).filter(Boolean) : [];
+};
+
 export function useRestaurantRecipesQuery() {
   return useRecipesQuery(undefined, {
     select: (recipes) =>
@@ -24,7 +29,7 @@ export function useRestaurantRecipesQuery() {
           id: ingredient.id,
           productId: ingredient.itemId,
           backendItemId: ingredient.itemId,
-          productSku: ingredient.item?.sku,
+          productSku: ingredient.item?.sku ?? undefined,
           name: ingredient.item?.name ?? 'Ingredient',
           quantity: ingredient.quantity,
           unit: ingredient.unit ?? ingredient.item?.unit ?? 'pcs',
@@ -56,6 +61,16 @@ export function useRestaurantRecipesQuery() {
           sellingPrice: recipe.sellingPrice ?? 0,
           grossMargin: 0,
           isActive: recipe.isActive,
+          modifiers: Array.isArray((recipe as any).modifiers)
+            ? (recipe as any).modifiers.map((modifier: any) => ({
+                id: modifier.id,
+                name: modifier.name,
+                type: modifier.type ?? 'remove',
+                itemId: modifier.itemId,
+                itemName: modifier.itemName ?? '',
+                productId: modifier.itemId,
+              }))
+            : [],
           instructions: recipe.instructions ?? '',
         };
       }),
@@ -75,6 +90,7 @@ export function useRestaurantKitchenOrdersQuery() {
         orderedAt: order.createdAt,
         completedBy: order.completedBy?.email ?? 'shared-backend',
         notes: order.notes ?? '',
+        modifiers: parseOrderModifiers(order.notes),
         voidReason: order.voidReason,
         voidedAt: order.voidedAt,
       })),

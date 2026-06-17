@@ -1,8 +1,19 @@
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell } from "recharts";
 import { Download, TrendingUp, PhilippinePeso, ShoppingCart, Eye, AlertTriangle, ClipboardList } from "lucide-react";
-import { useRestaurantState } from "../lib/restaurantData";
-import { defaultCategoryHierarchy, formatCurrency, getInventoryProducts, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
+import {
+  useRestaurantAdjustmentsQuery,
+  useRestaurantGoodsRecordsQuery,
+  useRestaurantInventoryMovementsQuery,
+  useRestaurantInventoryQuery,
+  useRestaurantKitchenOrdersQuery,
+  useRestaurantPurchaseOrdersQuery,
+  useRestaurantTransfersQuery,
+  useRestaurantUsersQuery,
+  useRestaurantWasteQuery,
+} from "../lib/restaurant";
+import { useSession } from "../../app/hooks/useSession";
+import { defaultCategoryHierarchy, formatCurrency, getInventoryValue, splitCategory } from "../lib/inventoryLogic";
 
 type TabType = 'overview' | 'inventory' | 'orders' | 'operations' | 'audit' | 'financial' | 'confidential';
 
@@ -43,26 +54,28 @@ const formatAuditDate = (value?: string) => {
 
 const csvValue = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
+const normalizeAuditActor = (value: unknown) => String(value ?? '').trim().toLowerCase();
+
 export function Reports() {
+  const { currentUser } = useSession();
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [dateRange, setDateRange] = useState("30days");
   const [selectedMainCategory, setSelectedMainCategory] = useState("all");
   const [selectedSubCategory, setSelectedSubCategory] = useState("all");
 
-  const isAdmin = useMemo(
-    () => (localStorage.getItem("userRole") || "staff").toLowerCase() === "admin",
-    [],
-  );
+  const isAdmin = currentUser?.role === "Admin";
+  const hasFullAuditTrailAccess = currentUser?.role === "Admin" || currentUser?.role === "Manager";
+  const currentUserEmail = currentUser?.email ?? "";
 
-  const [products] = useRestaurantState("inventory.products", getInventoryProducts());
-  const [purchaseOrders] = useRestaurantState<any[]>("purchaseOrders.orders", []);
-  const [transfers] = useRestaurantState<any[]>("transfers.records", []);
-  const [adjustments] = useRestaurantState<any[]>("transfers.adjustments", []);
-  const [wasteLogs] = useRestaurantState<any[]>("transfers.wasteLogs", []);
-  const [goodsReceived] = useRestaurantState<any[]>("goodsReceived.records", []);
-  const [inventoryMovements] = useRestaurantState<any[]>("inventory.movements", []);
-  const [posOrders] = useRestaurantState<any[]>("pos.orders", []);
-  const [users] = useRestaurantState<any[]>("users.records", []);
+  const { data: products = [] } = useRestaurantInventoryQuery();
+  const { data: purchaseOrders = [] } = useRestaurantPurchaseOrdersQuery();
+  const { data: transfers = [] } = useRestaurantTransfersQuery();
+  const { data: adjustments = [] } = useRestaurantAdjustmentsQuery();
+  const { data: wasteLogs = [] } = useRestaurantWasteQuery();
+  const { data: goodsReceived = [] } = useRestaurantGoodsRecordsQuery();
+  const { data: inventoryMovements = [] } = useRestaurantInventoryMovementsQuery();
+  const { data: posOrders = [] } = useRestaurantKitchenOrdersQuery();
+  const { data: users = [] } = useRestaurantUsersQuery(isAdmin);
 
   const inventoryValue = getInventoryValue(products);
 
@@ -259,7 +272,7 @@ export function Reports() {
         action: `Transfer ${transfer.status || 'requested'}`,
         item: transfer.item || 'Multiple items',
         quantity: transfer.quantity ? `${transfer.quantity} ${transfer.unit || ''}`.trim() : '',
-        performedBy: transfer.requestedBy || '',
+        performedBy: transfer.requestedByEmail || transfer.requestedBy || '',
         reference: transfer.id,
         details: `${transfer.from || 'Source'} to ${transfer.to || 'Destination'}`,
         status: transfer.status || 'recorded',
@@ -299,14 +312,24 @@ export function Reports() {
       });
   }, [inventoryMovements, posOrders, goodsReceived, purchaseOrders, transfers, adjustments, wasteLogs]);
 
+  const visibleAuditTrail = useMemo(() => {
+    if (hasFullAuditTrailAccess) return auditTrail;
+    if (!currentUserEmail) return [];
+
+    const normalizedEmail = normalizeAuditActor(currentUserEmail);
+    return auditTrail.filter(
+      entry => normalizeAuditActor(entry.performedBy) === normalizedEmail,
+    );
+  }, [auditTrail, currentUserEmail, hasFullAuditTrailAccess]);
+
   const auditSummary = useMemo(() => {
-    const byModule = auditTrail.reduce<Record<string, number>>((acc, entry) => {
+    const byModule = visibleAuditTrail.reduce<Record<string, number>>((acc, entry) => {
       acc[entry.module] = (acc[entry.module] || 0) + 1;
       return acc;
     }, {});
-    const latest = auditTrail[0]?.date ? formatAuditDate(auditTrail[0].date) : 'No activity';
+    const latest = visibleAuditTrail[0]?.date ? formatAuditDate(visibleAuditTrail[0].date) : 'No activity';
     return { byModule, latest };
-  }, [auditTrail]);
+  }, [visibleAuditTrail]);
 
   // ── Confidential ────────────────────────────────────────────────────────────
   const confidentialData = useMemo(() => {
@@ -367,7 +390,7 @@ export function Reports() {
       csv += `Goods Received,${goodsReceived.length}\n`;
     } else if (activeTab === 'audit') {
       csv = 'Date,Module,Action,Item,Quantity,Performed By,Reference,Status,Details\n';
-      auditTrail.forEach(entry => {
+      visibleAuditTrail.forEach(entry => {
         csv += [
           formatAuditDate(entry.date),
           entry.module,
@@ -813,12 +836,15 @@ export function Reports() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-semibold text-foreground">Audit Trail</h3>
+            <span className="inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground">
+              {hasFullAuditTrailAccess ? 'Full operation view' : 'Your activity only'}
+            </span>
           </div>
 
           <div className="grid grid-cols-4 gap-4 mb-4">
             <div className="bg-card border border-border rounded-2xl p-6">
               <p className="text-muted-foreground text-xs mb-2">Total Events</p>
-              <p className="text-2xl font-bold text-foreground">{auditTrail.length}</p>
+              <p className="text-2xl font-bold text-foreground">{visibleAuditTrail.length}</p>
             </div>
             <div className="bg-card border border-border rounded-2xl p-6">
               <p className="text-muted-foreground text-xs mb-2">Inventory Events</p>
@@ -837,7 +863,7 @@ export function Reports() {
           <div className="bg-card border border-border rounded-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-base font-semibold text-foreground">Recent Activity</h4>
-              <p className="text-xs text-muted-foreground">{auditTrail.length} record{auditTrail.length !== 1 ? 's' : ''}</p>
+              <p className="text-xs text-muted-foreground">{visibleAuditTrail.length} record{visibleAuditTrail.length !== 1 ? 's' : ''}</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[900px]">
@@ -854,14 +880,14 @@ export function Reports() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {auditTrail.length === 0 ? (
+                  {visibleAuditTrail.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-sm text-muted-foreground">
                         No audit trail records found
                       </td>
                     </tr>
                   ) : (
-                    auditTrail.slice(0, 100).map(entry => (
+                    visibleAuditTrail.slice(0, 100).map(entry => (
                       <tr key={entry.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">{formatAuditDate(entry.date)}</td>
                         <td className="px-4 py-3">

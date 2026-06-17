@@ -65,9 +65,9 @@ export function mapRestaurantAdjustments(movements: ApiStockMovement[]) {
       quantity: item.newQuantity,
       unit: item.unit ?? item.item?.unit ?? 'pcs',
       location: item.location?.name ?? '',
-      type: 'correction',
+      type: 'correction' as const,
       reason: item.reason ?? '',
-      adjustedBy: item.createdBy?.name ?? '',
+      adjustedBy: item.createdBy?.email ?? item.createdBy?.name ?? '',
       date: toDateInput(item.createdAt),
       notes: item.notes ?? '',
     }));
@@ -82,15 +82,44 @@ export function mapRestaurantWaste(movements: ApiStockMovement[]) {
       quantity: item.quantity,
       unit: item.unit ?? item.item?.unit ?? 'pcs',
       location: item.location?.name ?? '',
-      wasteType: item.type === 'EXPIRY' ? 'expiry' : 'spoilage',
+      wasteType: item.type === 'EXPIRY' ? 'expiry' as const : 'spoilage' as const,
       unitCost: item.item?.costPrice ?? item.item?.price ?? 0,
       totalValue:
         item.quantity * (item.item?.costPrice ?? item.item?.price ?? 0),
       date: toDateInput(item.createdAt),
-      loggedBy: item.createdBy?.name ?? '',
-      source: 'manual',
+      loggedBy: item.createdBy?.email ?? item.createdBy?.name ?? '',
+      source: 'manual' as const,
       notes: item.notes ?? item.reason ?? '',
     }));
+}
+
+export function mapRestaurantInventoryMovements(movements: ApiStockMovement[]) {
+  return movements.map((item) => {
+    const type =
+      item.type === 'RECIPE_CONSUMPTION'
+        ? 'pos-consumption'
+        : item.type === 'VOID_RESTOCK'
+          ? 'pos-void'
+          : item.type;
+
+    return {
+      id: item.id,
+      type,
+      source: item.referenceType ?? 'shared-backend',
+      sourceId: item.referenceId ?? item.id,
+      item: item.item?.name ?? 'Item',
+      quantity: item.quantity,
+      unit: item.unit ?? item.item?.unit ?? '',
+      previousQuantity: item.previousQuantity,
+      newQuantity: item.newQuantity,
+      location: item.location?.name ?? '',
+      createdBy: item.createdBy?.email ?? item.createdBy?.name ?? '',
+      by: item.createdBy?.email ?? item.createdBy?.name ?? '',
+      date: item.createdAt,
+      notes: item.notes ?? item.reason ?? '',
+      reason: item.reason ?? '',
+    };
+  });
 }
 
 export function useRestaurantInventoryQuery<
@@ -126,6 +155,13 @@ export function useRestaurantStockMovementsQuery<
   return useStockMovementsQuery(
     { module: 'RESTAURANT' },
     select ? { select } : undefined,
+  );
+}
+
+export function useRestaurantInventoryMovementsQuery() {
+  return useStockMovementsQuery(
+    { module: 'RESTAURANT' },
+    { select: mapRestaurantInventoryMovements },
   );
 }
 

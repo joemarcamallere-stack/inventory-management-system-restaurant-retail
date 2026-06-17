@@ -328,6 +328,6 @@ export class TransfersService {
     fromLocation: true,
     toLocation: true,
     items: { include: { inventoryItem: true } },
-    createdBy: { select: { id: true, name: true } },
+    createdBy: { select: { id: true, name: true, email: true } },
   };
 }

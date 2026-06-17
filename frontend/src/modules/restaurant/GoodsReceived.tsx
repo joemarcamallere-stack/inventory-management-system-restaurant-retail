@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Search, CheckCircle, Package, Calendar, AlertCircle, ClipboardCheck, X, XCircle, Eye } from "lucide-react";
 import { toast } from "sonner";
-import { useInvalidateRestaurantData, useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { defaultInventoryProducts, getStorageTemperatureOptions, InventoryProduct } from "../lib/inventoryLogic";
-import { receivePurchaseOrder, upsertRestaurantSetting } from "../../app/api/client";
+import { getStorageTemperatureOptions } from "../lib/inventoryLogic";
+import {
+  useRestaurantGoodsRecordsQuery,
+  useReceiveRestaurantPurchaseOrderMutation,
+  useRestaurantStorageTemperatureOptionsQuery,
+  useUpsertRestaurantStorageTemperatureOptionsMutation,
+} from "../lib/restaurant";
 
 type QualityCheckCriteria = {
   appearance: "pass" | "fail" | "";
@@ -62,52 +66,6 @@ type GoodsItem = {
   };
 };
 
-type PurchaseOrder = {
-  id: string;
-  status: string;
-};
-
-type GlobalProduct = {
-  id: string;
-  inventoryId?: number;
-  name: string;
-  sku?: string;
-  category?: string;
-  subCategory?: string;
-  unit?: string;
-};
-
-const normalizeText = (value: string | undefined) => (value || '').trim().toLowerCase().replace(/\s+/g, " ");
-const normalizeSku = (value?: string) => (value || "").trim().toLowerCase();
-const normalizeUnit = (value?: string) => {
-  const normalized = (value || "").trim().toLowerCase();
-  if (normalized === "pc" || normalized === "piece" || normalized === "pieces") return "pcs";
-  if (normalized === "litre" || normalized === "liter" || normalized === "liters" || normalized === "ltr") return "l";
-  return normalized;
-};
-
-const buildCategory = (item: ReceivedItem) => {
-  return item.subCategory
-    ? `${item.category || "Uncategorized"} > ${item.subCategory}`
-    : item.category || "Uncategorized";
-};
-
-const buildGeneratedSku = (name: string, id: number) => {
-  const skuBase = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 10);
-  return `${skuBase || "ITEM"}-${id}`;
-};
-
-const getEarliestDate = (dates: string[]) => {
-  return dates
-    .filter(Boolean)
-    .sort((a, b) => new Date(`${a}T00:00:00`).getTime() - new Date(`${b}T00:00:00`).getTime())[0] || "";
-};
-
 const INSPECTION_CRITERIA: Array<{ key: InspectionCriterionKey; label: string; description: string }> = [
   { key: "appearance", label: "Appearance & Freshness", description: "Visible spoilage, damage, discoloration, freshness" },
   { key: "quantity", label: "Quantity Verification", description: "Count or weight received versus ordered" },
@@ -124,30 +82,6 @@ const INSPECTION_SHORT_LABELS: Record<InspectionCriterionKey, string> = {
   temperature: "Temp",
   expiration: "Expiry",
   packaging: "Packaging",
-};
-
-const findInventoryProduct = (products: InventoryProduct[], item: ReceivedItem) => {
-  if (item.inventoryId) {
-    const byInventoryId = products.find((product) => product.id === item.inventoryId);
-    if (byInventoryId) return byInventoryId;
-  }
-
-  if (item.productId?.startsWith("inv-")) {
-    const inventoryId = Number(item.productId.replace("inv-", ""));
-    const byInventoryProductId = products.find((product) => product.id === inventoryId);
-    if (byInventoryProductId) return byInventoryProductId;
-  }
-
-  const itemSku = normalizeSku(item.sku);
-  if (itemSku) {
-    const bySku = products.find((product) => normalizeSku(product.sku) === itemSku);
-    if (bySku) return bySku;
-  }
-
-  return products.find((product) =>
-    normalizeText(product.name) === normalizeText(item.productName) &&
-    (!product.unit || !item.unit || normalizeUnit(product.unit) === normalizeUnit(item.unit))
-  );
 };
 
 const getAcceptedQuantity = (item: ReceivedItem) => item.acceptedQuantity ?? item.quantity;
@@ -225,26 +159,12 @@ export function GoodsReceived() {
   const [itemCriteriaScores, setItemCriteriaScores] = useState<{
     [itemIndex: number]: Partial<Record<InspectionCriterionKey, { passed: string; total: string; remarks: string }>>;
   }>({});
-  const [storageTemperatureOptions, setStorageTemperatureOptions] = useRestaurantState<string[]>(
-    "inventory.storageTemperatureOptions",
-    getStorageTemperatureOptions()
-  );
+  const { data: storageTemperatureOptions = getStorageTemperatureOptions() } = useRestaurantStorageTemperatureOptionsQuery();
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
 
-  const [receivedGoods, setReceivedGoods] = useRestaurantState<GoodsItem[]>("goodsReceived.records", []);
-  const [purchaseOrders, setPurchaseOrders] = useRestaurantState<PurchaseOrder[]>("purchaseOrders.orders", []);
-  const [products, setProducts] = useRestaurantState<InventoryProduct[]>("inventory.products", defaultInventoryProducts);
-  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>("purchaseOrders.globalProducts", []);
-  const invalidateRestaurantData = useInvalidateRestaurantData();
-  const receiveOrder = useRestaurantMutation(
-    ({ id, items, notes }: { id: string; items: any[]; notes?: string }) =>
-      receivePurchaseOrder(id, items, notes),
-    ["goodsReceived.records", "purchaseOrders.orders", "inventory.products", "inventory.movements"],
-  );
-  const saveTemperatureOptions = useRestaurantMutation(
-    (value: string[]) => upsertRestaurantSetting("STORAGE_TEMPERATURE_OPTIONS", value),
-    ["inventory.storageTemperatureOptions"],
-  );
+  const { data: receivedGoods = [] } = useRestaurantGoodsRecordsQuery() as { data?: GoodsItem[] };
+  const receiveOrder = useReceiveRestaurantPurchaseOrderMutation();
+  const saveTemperatureOptions = useUpsertRestaurantStorageTemperatureOptionsMutation();
 
   const dateFilters = ["all", "today", "week", "month"];
 
@@ -353,7 +273,6 @@ export function GoodsReceived() {
     if (!trimmed || storageTemperatureOptions.includes(trimmed)) return;
     const nextOptions = [...storageTemperatureOptions, trimmed];
     await saveTemperatureOptions.mutateAsync(nextOptions);
-    setStorageTemperatureOptions(nextOptions);
     setNewStorageTemperature("");
   };
 
@@ -493,7 +412,6 @@ export function GoodsReceived() {
           ? "partial"
             : "accepted") as ReceivedItem["qualityStatus"],
     }));
-    const payableTotal = decision === "reject" ? 0 : getPayableTotal(receivedItemsWithExpiry);
     try {
       await receiveOrder.mutateAsync({
         id: selectedItem.poId,
@@ -505,7 +423,10 @@ export function GoodsReceived() {
           receivedQty: item.acceptedQuantity ?? 0,
           rejectedQty: item.rejectedQuantity ?? 0,
           condition: item.qualityStatus,
-          notes: item.qualityRemarks || undefined,
+          notes: JSON.stringify({
+            remarks: item.qualityRemarks || undefined,
+            qualityScores: item.qualityScores,
+          }),
           expiryDate: item.acceptedQuantity && item.expiryDate
             ? new Date(`${item.expiryDate}T00:00:00`).toISOString()
             : undefined,
@@ -518,114 +439,10 @@ export function GoodsReceived() {
       return;
     }
 
-    setReceivedGoods(receivedGoods.map(item =>
-      item.id === selectedItem.id
-        ? { ...item, status: newStatus, notes: newNotes, receivedItems: receivedItemsWithExpiry, totalValue: payableTotal }
-        : item
-    ));
-
-    const poStatus = newStatus === "verified" ? "received" : newStatus;
-    setPurchaseOrders(
-      purchaseOrders.map(order => order.id === selectedItem.poId ? { ...order, status: poStatus } : order)
-    );
-
-    if (decision === "accept") {
-      const checkedReceivedItems = receivedItemsWithExpiry
-        ?.filter((item) => (item.acceptedQuantity || 0) > 0)
-        .map((item) => ({ ...item, quantity: item.acceptedQuantity || 0 })) || [];
-
-      const matchedItems = checkedReceivedItems.map((item) => ({
-        item,
-        product: findInventoryProduct(products, item),
-      }));
-
-      const updateMatchedProducts = products.map((product) => {
-        const receivedItems = matchedItems
-          .filter((match) => match.product?.id === product.id)
-          .map((match) => match.item);
-
-        if (receivedItems.length === 0) return product;
-
-        const quantityToAdd = receivedItems.reduce((sum, item) => sum + item.quantity, 0);
-        const nextStock = product.stock + quantityToAdd;
-        const receivedValue = receivedItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-        const wacPrice = nextStock > 0
-          ? (product.stock * product.price + receivedValue) / nextStock
-          : product.price;
-        const earliestExpiry = getEarliestDate([
-          product.expiry,
-          ...receivedItems.map((item) => item.expiryDate || ""),
-        ]);
-
-        return {
-          ...product,
-          stock: nextStock,
-          maxStock: Math.max(product.maxStock, nextStock),
-          price: wacPrice,
-          expiry: earliestExpiry,
-          storageTemperature: receivedItems[receivedItems.length - 1].storageTemperature || (product as any).storageTemperature || "",
-          unit: product.unit || receivedItems[0].unit || "pcs",
-        };
-      });
-
-      const unmatchedItems = matchedItems
-        .filter((match) => !match.product)
-        .map((match) => match.item);
-
-      let nextId = products.reduce((maxId, product) => Math.max(maxId, product.id), 0) + 1;
-      const createdProducts: InventoryProduct[] = unmatchedItems.map((item) => {
-        const sku = item.sku?.trim() || buildGeneratedSku(item.productName, nextId);
-        const category = buildCategory(item);
-        const created = {
-          id: nextId,
-          name: item.productName,
-          sku,
-          category,
-          stock: item.quantity,
-          maxStock: Math.max(item.quantity, 1),
-          price: item.unitPrice || 0,
-          expiry: item.expiryDate || "",
-          storageTemperature: item.storageTemperature || "",
-          location: "Unassigned",
-          unit: item.unit || "pcs",
-        };
-        nextId += 1;
-        return created;
-      });
-
-      setProducts([...updateMatchedProducts, ...createdProducts]);
-
-      const acceptedInventoryLinks = [
-        ...matchedItems
-          .filter((match) => match.product)
-          .map((match) => ({ item: match.item, product: match.product! })),
-        ...unmatchedItems.map((item, index) => ({ item, product: createdProducts[index] })),
-      ];
-
-      setGlobalProducts(
-        globalProducts.map((product) => {
-          const link = acceptedInventoryLinks.find(({ item }) =>
-            item.productId === product.id ||
-            normalizeSku(item.sku) === normalizeSku(product.sku) ||
-            normalizeText(item.productName) === normalizeText(product.name)
-          );
-
-          return link
-            ? { ...product, inventoryId: link.product.id, sku: product.sku || link.product.sku, unit: link.product.unit }
-            : product;
-        })
-      );
-    }
-
-    await invalidateRestaurantData(
-      "goodsReceived.records",
-      "purchaseOrders.orders",
-      "inventory.products",
-      "purchaseOrders.globalProducts",
-    );
-
     setShowQualityCheckModal(false);
     setSelectedItem(null);
+    setQualityNotes("");
+    toast.success(decision === "reject" ? "Goods rejected" : "Goods receipt saved");
   };
 
   const handleViewDetails = (item: GoodsItem) => {

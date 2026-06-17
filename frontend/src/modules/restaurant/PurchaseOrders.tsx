@@ -1,30 +1,19 @@
 import { useState, useEffect } from "react";
 import { Plus, Search, Filter, Eye, Download, CheckCircle, Clock, XCircle, X, Save, Trash2, Edit, Building2, Users, AlertCircle, Check } from "lucide-react";
 import { toast } from "sonner";
-import { useRestaurantMutation, useRestaurantState } from "../lib/restaurantData";
-import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
+import { useSession } from "../../app/hooks/useSession";
 import { PurchaseOrderItemInput, PurchaseOrderItemInputValue } from "./PurchaseOrderItemInput";
 import {
-  approvePurchaseOrder,
-  cancelPurchaseOrder,
-  createInventoryItem,
-  createPurchaseOrder,
-  createSupplier,
-  getLocations,
-  rejectPurchaseOrder,
-  submitPurchaseOrder,
-  updatePurchaseOrder,
-} from "../../app/api/client";
-
-const buildGeneratedSku = (name: string, suffix: number) => {
-  const skuBase = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 10);
-  return `${skuBase || "ITEM"}-${suffix}`;
-};
+  useApproveRestaurantPurchaseOrderMutation,
+  useCancelRestaurantPurchaseOrderMutation,
+  useCreateRestaurantSupplierMutation,
+  useRejectRestaurantPurchaseOrderMutation,
+  useRestaurantGlobalProductsQuery,
+  useRestaurantPurchaseOrdersQuery,
+  useRestaurantSuppliersQuery,
+  useRestaurantUsersQuery,
+  useSaveRestaurantPurchaseOrderMutation,
+} from "../lib/restaurant";
 
 // Helper function to normalize product names (capitalize first letter of each word, trim)
 const normalizeProductName = (name: string | undefined): string => {
@@ -34,12 +23,6 @@ const normalizeProductName = (name: string | undefined): string => {
     .split(/\s+/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
-};
-
-// Check if product exists (case-insensitive)
-const findProductByName = (name: string, allProducts: GlobalProduct[]): GlobalProduct | undefined => {
-  const normalized = normalizeProductName(name);
-  return allProducts.find(p => normalizeProductName(p.name) === normalized);
 };
 
 const blankOrderItemInput = (): OrderItemInput => ({
@@ -142,20 +125,6 @@ type UserSummary = {
   role: string;
 };
 
-const getCurrentUser = (users: UserSummary[], userRole: string) => {
-  const email = localStorage.getItem("userEmail") || "";
-  const matchedUser = users.find((user) => (user.email || '').toLowerCase() === email.toLowerCase());
-
-  if (matchedUser) return matchedUser;
-
-  return {
-    id: userRole === "admin" ? 0 : -1,
-    name: userRole === "admin" ? "Admin" : email || "Local User",
-    email: email || (userRole === "admin" ? "admin@local" : "local-user"),
-    role: userRole,
-  };
-};
-
 const getOrderCreator = (order: Order, users: UserSummary[]) => {
   if (order.createdByRole === "admin") return "Admin";
 
@@ -175,6 +144,8 @@ const getOrderCreator = (order: Order, users: UserSummary[]) => {
 const getOrderCreatorRole = (order: Order) => order.createdByRole || "unknown";
 
 export function PurchaseOrders() {
+  const { currentUser: sessionUser } = useSession();
+  const userRole = sessionUser?.role === "Admin" ? "admin" : "staff";
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -189,13 +160,6 @@ export function PurchaseOrders() {
   const [rejectingOrder, setRejectingOrder] = useState<Order | null>(null);
   const [approvingOrder, setApprovingOrder] = useState<Order | null>(null);
   const [rejectionNote, setRejectionNote] = useState("");
-  const [userRole, setUserRole] = useState<string>("staff");
-
-  useEffect(() => {
-    const role = localStorage.getItem("userRole") || "staff";
-    setUserRole(role);
-  }, []);
-
   useEffect(() => {
     if (sessionStorage.getItem('po-open-approval') === 'true') {
       sessionStorage.removeItem('po-open-approval');
@@ -217,14 +181,9 @@ export function PurchaseOrders() {
     address: "",
   });
 
-  // Global products storage
-  const [globalProducts, setGlobalProducts] = useRestaurantState<GlobalProduct[]>(
-    "purchaseOrders.globalProducts",
-    []
-  );
-
-  const [orders] = useRestaurantState<Order[]>("purchaseOrders.orders", []);
-  const [users] = useRestaurantState<UserSummary[]>("users.records", []);
+  const { data: globalProducts = [] } = useRestaurantGlobalProductsQuery();
+  const { data: orders = [] } = useRestaurantPurchaseOrdersQuery<Order[]>();
+  const { data: users = [] } = useRestaurantUsersQuery();
 
   const statuses = ["all", "pending", "approved", "received", "partial", "rejected", "cancelled"];
 
@@ -334,114 +293,19 @@ export function PurchaseOrders() {
     },
   ];
 
-  const [suppliers, setSuppliers] = useRestaurantState<Supplier[]>("purchaseOrders.suppliers", []);
-  const saveOrder = useRestaurantMutation(
-    async ({ order, editingId }: { order: { supplier: string; expectedDelivery: string; items: OrderItem[] }; editingId?: string }) => {
-      const supplier = suppliers.find((item) => item.name === order.supplier);
-      const supplierId = supplier?.backendId ?? supplier?.id;
-      if (!supplierId) throw new Error("Select a supplier saved in the database");
-
-      const locations = await getLocations();
-      if (!locations[0]) throw new Error("Create a location before ordering a new product");
-
-      const apiItems = [];
-      for (const line of order.items) {
-        const product = globalProducts.find((item) =>
-          item.id === line.productId || item.inventoryId === line.inventoryId
-        );
-        let inventoryItemId = product?.backendId
-          ?? (product?.id && !product.id.startsWith("gp-") && !product.id.startsWith("inv-") ? product.id : undefined);
-
-        if (!inventoryItemId) {
-          const created = await createInventoryItem({
-            name: line.productName,
-            itemType: "INGREDIENT",
-            sku: line.sku?.trim() || buildGeneratedSku(line.productName, Date.now() % 100000),
-            category: `${line.category || "Other"} > ${line.subCategory || "General"}`,
-            quantity: 0,
-            price: line.unitPrice,
-            unit: line.unit || "pcs",
-            minStock: 0,
-            maxStock: 0,
-            reorderPoint: 0,
-            locationId: locations[0].id,
-          });
-          inventoryItemId = created.id;
-        }
-
-        apiItems.push({
-          inventoryItemId,
-          name: line.productName,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-        });
-      }
-
-      const payload = {
-        supplierId,
-        expectedDelivery: order.expectedDelivery
-          ? new Date(`${order.expectedDelivery}T00:00:00`).toISOString()
-          : undefined,
-        items: apiItems,
-      };
-      if (editingId) return updatePurchaseOrder(editingId, payload);
-      const created = await createPurchaseOrder(payload);
-      return submitPurchaseOrder(created.id);
-    },
-    ["purchaseOrders.orders", "dashboard.pendingOrders", "purchaseOrders.globalProducts"],
-  );
-  const approveOrder = useRestaurantMutation(
-    (id: string) => approvePurchaseOrder(id),
-    ["purchaseOrders.orders", "dashboard.pendingOrders", "goodsReceived.records"],
-  );
-  const rejectOrder = useRestaurantMutation(
-    ({ id, reason }: { id: string; reason: string }) => rejectPurchaseOrder(id, reason),
-    ["purchaseOrders.orders", "dashboard.pendingOrders"],
-  );
-  const cancelOrder = useRestaurantMutation(
-    (id: string) => cancelPurchaseOrder(id),
-    ["purchaseOrders.orders", "dashboard.pendingOrders"],
-  );
-  const addSupplier = useRestaurantMutation(
-    (supplier: Supplier) => createSupplier({
-      name: supplier.name,
-      contactPerson: supplier.contact,
-      email: supplier.email,
-      phone: supplier.phone,
-      address: supplier.address,
-    }),
-    ["purchaseOrders.suppliers"],
-  );
+  const { data: suppliers = [] } = useRestaurantSuppliersQuery();
+  const saveOrder = useSaveRestaurantPurchaseOrderMutation();
+  const approveOrder = useApproveRestaurantPurchaseOrderMutation();
+  const rejectOrder = useRejectRestaurantPurchaseOrderMutation();
+  const cancelOrder = useCancelRestaurantPurchaseOrderMutation();
+  const addSupplier = useCreateRestaurantSupplierMutation();
 
   // Get available products from selected supplier
   const availableProducts = newOrder.supplier
     ? suppliers.find(s => s.name === newOrder.supplier)?.products || []
     : [];
 
-  const inventoryProductOptions: GlobalProduct[] = getInventoryProducts().map((product) => {
-    const { main, sub } = splitCategory(product.category);
-    return {
-      id: `inv-${product.id}`,
-      inventoryId: product.id,
-      name: product.name,
-      sku: product.sku,
-      category: main,
-      subCategory: sub,
-      unit: product.unit,
-    };
-  });
-
   const productDatabase = [...globalProducts];
-  inventoryProductOptions.forEach((inventoryProduct) => {
-    const alreadyExists = productDatabase.some((product) =>
-      product.inventoryId === inventoryProduct.inventoryId ||
-      Boolean(product.sku && inventoryProduct.sku && product.sku.trim().toLowerCase() === inventoryProduct.sku.trim().toLowerCase()) ||
-      normalizeProductName(product.name) === normalizeProductName(inventoryProduct.name)
-    );
-    if (!alreadyExists) {
-      productDatabase.push(inventoryProduct);
-    }
-  });
 
   const handleCreateNewProduct = (payload: {
     name: string;
@@ -452,7 +316,9 @@ export function PurchaseOrders() {
   }) => {
     const normalized = normalizeProductName(payload.name);
 
-    const existingProduct = findProductByName(normalized, globalProducts);
+    const existingProduct = globalProducts.find(
+      (product) => normalizeProductName(product.name) === normalized,
+    );
     if (existingProduct) {
       return existingProduct;
     }
@@ -466,22 +332,6 @@ export function PurchaseOrders() {
       subCategory: payload.subCategory,
       unit: payload.unit || "pcs",
     };
-
-    setGlobalProducts([...globalProducts, newProduct]);
-
-    if (newOrder.supplier) {
-      const supplier = suppliers.find(s => s.name === newOrder.supplier);
-      if (supplier) {
-        const updatedSupplier: Supplier = {
-          ...supplier,
-          products: [
-            ...supplier.products,
-            { name: normalized, price: parseFloat(currentItem.unitPrice) || 0 },
-          ],
-        };
-        setSuppliers(suppliers.map(s => (s.name === newOrder.supplier ? updatedSupplier : s)));
-      }
-    }
 
     return newProduct;
   };
@@ -545,8 +395,15 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     }
 
     try {
+      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) throw new Error("Select a supplier saved in the database");
+
       await saveOrder.mutateAsync({
-        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+        supplierId,
+        expectedDelivery: newOrder.expectedDelivery,
+        items: orderItems,
+        products: globalProducts,
       });
       setShowCreateModal(false);
       setNewOrder({ supplier: "", expectedDelivery: "" });
@@ -683,9 +540,16 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     if (!editingOrder) return;
 
     try {
+      const supplier = suppliers.find((item) => item.name === newOrder.supplier);
+      const supplierId = supplier?.backendId ?? supplier?.id;
+      if (!supplierId) throw new Error("Select a supplier saved in the database");
+
       await saveOrder.mutateAsync({
         editingId: editingOrder.backendId ?? editingOrder.id,
-        order: { supplier: newOrder.supplier, expectedDelivery: newOrder.expectedDelivery, items: orderItems },
+        supplierId,
+        expectedDelivery: newOrder.expectedDelivery,
+        items: orderItems,
+        products: globalProducts,
       });
       setShowEditModal(false);
       setEditingOrder(null);
@@ -723,7 +587,13 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     };
 
     try {
-      await addSupplier.mutateAsync(supplierToAdd);
+      await addSupplier.mutateAsync({
+        name: supplierToAdd.name,
+        contactPerson: supplierToAdd.contact,
+        email: supplierToAdd.email,
+        phone: supplierToAdd.phone,
+        address: supplierToAdd.address,
+      });
       setNewOrder({ ...newOrder, supplier: supplierToAdd.name });
       setNewSupplier({
         name: "",

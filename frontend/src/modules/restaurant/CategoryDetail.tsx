@@ -1,6 +1,7 @@
 import { useSearchParams, useNavigate } from "react-router";
 import { ArrowLeft, Package, AlertTriangle, TrendingDown, TrendingUp } from "lucide-react";
-import { getInventoryProducts, splitCategory } from "../lib/inventoryLogic";
+import { splitCategory } from "../lib/inventoryLogic";
+import { useRestaurantInventoryQuery } from "../lib/restaurant";
 
 type CategoryItem = {
   id: number;
@@ -62,7 +63,8 @@ export function CategoryDetail() {
     { id: 27, name: "Blue Cheese", sku: "DRY-CHE-004", subCategory: "Cheese", stock: 0, maxStock: 40, price: 12.99, expiry: "2024-06-10", location: "Refrigerator 2" },
   ];
 
-  const liveCategoryItems = getInventoryProducts()
+  const { data: inventoryProducts = [] } = useRestaurantInventoryQuery();
+  const liveCategoryItems = inventoryProducts
     .filter((item) => {
       const { main } = splitCategory(item.category);
       return !category || main === category;

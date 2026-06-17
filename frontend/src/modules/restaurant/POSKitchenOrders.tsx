@@ -1,13 +1,19 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle, ClipboardList, PackageMinus, ReceiptText, RotateCcw, Search, XCircle } from "lucide-react";
-import { completeKitchenOrder, voidKitchenOrder } from "../../app/api/client";
-import { readRestaurantData, useInvalidateRestaurantData, useRestaurantState, writeRestaurantDataOnly } from "../lib/restaurantData";
 import { InventoryProduct } from "../lib/inventoryLogic";
+import {
+  useCompleteRestaurantKitchenOrderMutation,
+  useRestaurantInventoryQuery,
+  useRestaurantKitchenOrdersQuery,
+  useRestaurantRecipesQuery,
+  useVoidRestaurantKitchenOrderMutation,
+} from "../lib/restaurant";
 
 type Ingredient = {
   id: string;
+  backendItemId?: string;
   itemBackendId?: string;
-  productId?: number;
+  productId?: number | string;
   productSku?: string;
   name: string;
   quantity: number;
@@ -24,7 +30,7 @@ type RecipeModifier = {
   type: "remove";
   itemId?: string;
   itemName?: string;
-  productId?: number;
+  productId?: number | string;
 };
 
 type Recipe = {
@@ -44,25 +50,12 @@ type POSOrder = {
   recipeName: string;
   quantity: number;
   modifiers?: string[];
-  status: "completed" | "voided";
+  status: "completed" | "voided" | "pending" | "preparing" | "ready";
   orderedAt: string;
   completedBy: string;
   notes: string;
   voidReason?: string;
   voidedAt?: string;
-};
-
-type InventoryMovement = {
-  id: string;
-  type: "pos-consumption" | "pos-void";
-  source: "pos-kitchen";
-  sourceId: string;
-  productId: number;
-  item: string;
-  quantity: number;
-  unit: string;
-  date: string;
-  notes: string;
 };
 
 const normalizeName = (value: string | undefined) => (value || '').trim().toLowerCase();
@@ -90,11 +83,14 @@ export function POSKitchenOrders() {
   const [isVoiding, setIsVoiding] = useState(false);
   const [excludedIngredientIds, setExcludedIngredientIds] = useState<Set<string>>(new Set());
 
-  const [orders, setOrders] = useRestaurantState<POSOrder[]>("pos.orders", []);
-  const [recipes] = useRestaurantState<Recipe[]>("recipes.records", []);
+  const { data: orderRecords = [] } = useRestaurantKitchenOrdersQuery();
+  const orders = orderRecords as POSOrder[];
+  const { data: recipeRecords = [] } = useRestaurantRecipesQuery();
+  const recipes = recipeRecords as Recipe[];
   const activeRecipes = recipes.filter((recipe) => recipe.isActive ?? true);
-  const [inventory] = useRestaurantState<InventoryProduct[]>("inventory.products", []);
-  const invalidateRestaurantData = useInvalidateRestaurantData();
+  const { data: inventory = [] } = useRestaurantInventoryQuery<(InventoryProduct & { backendId?: string })[]>();
+  const completeKitchenOrder = useCompleteRestaurantKitchenOrderMutation();
+  const voidKitchenOrder = useVoidRestaurantKitchenOrderMutation();
 
   const selectedRecipe = activeRecipes.find((recipe) => recipe.id === recipeId);
 
@@ -104,7 +100,11 @@ export function POSKitchenOrders() {
 
     return selectedRecipe.ingredients.map((ingredient) => {
       const product = inventory.find((item) =>
-        ingredient.productId ? item.id === ingredient.productId : normalizeName(item.name) === normalizeName(ingredient.name)
+        ingredient.backendItemId
+          ? item.backendId === ingredient.backendItemId
+          : ingredient.productId
+            ? String(item.id) === String(ingredient.productId) || item.backendId === ingredient.productId
+            : normalizeName(item.name) === normalizeName(ingredient.name)
       );
       const servingFactor = orderQty / Math.max(selectedRecipe.servings || 1, 1);
       const required = (ingredient.inventoryQuantity ?? ingredient.quantity) * servingFactor;
@@ -135,7 +135,7 @@ export function POSKitchenOrders() {
   const menuModifierOptions = (selectedRecipe?.modifiers ?? [])
     .map((modifier) => {
       const ingredient = ingredientPreview.find((item) =>
-        (modifier.itemId && item.itemBackendId === modifier.itemId) ||
+        (modifier.itemId && (item.backendItemId === modifier.itemId || item.itemBackendId === modifier.itemId)) ||
         (modifier.productId && item.productId === modifier.productId)
       );
       return ingredient ? { ...modifier, ingredientId: ingredient.id } : null;
@@ -172,70 +172,25 @@ export function POSKitchenOrders() {
     event.preventDefault();
     if (!selectedRecipe || !canCompleteOrder || isCompleting) return;
 
-    const now = new Date().toISOString();
-    const orderId = `POS-${Date.now()}`;
     const orderQty = Number(quantity) || 1;
-    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
-    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
-
-    const nextProducts = products.map((product) => {
-      const consumed = selectedIngredientPreview.find((item) => item.product?.id === product.id);
-      return consumed ? { ...product, stock: product.stock - consumed.required } : product;
-    });
-
-    const nextMovements: InventoryMovement[] = selectedIngredientPreview.map((item, index) => ({
-      id: `MOV-${Date.now()}-${index}`,
-      type: "pos-consumption",
-      source: "pos-kitchen",
-      sourceId: orderId,
-      productId: item.product!.id,
-      item: item.product!.name,
-      quantity: item.required,
-      unit: item.deductionUnit,
-      date: now,
-      notes: `POS receipt ${receiptNo.trim()} consumed by ${selectedRecipe.name} x${orderQty}${selectedModifiers.length ? ` (${selectedModifiers.join(", ")})` : ""}`,
-    }));
-
-    const order: POSOrder = {
-      id: orderId,
-      receiptNo: receiptNo.trim(),
-      recipeId: selectedRecipe.id,
-      recipeName: selectedRecipe.name,
-      quantity: orderQty,
-      modifiers: selectedModifiers,
-      status: "completed",
-      orderedAt: now,
-      completedBy: localStorage.getItem("userEmail") || "local-user",
-      notes: selectedModifiers.length
-        ? [notes, `Modifiers: ${selectedModifiers.join(", ")}`].filter(Boolean).join(" | ")
-        : notes,
-    };
+    const orderNotes = selectedModifiers.length
+      ? [notes, `Modifiers: ${selectedModifiers.join(", ")}`].filter(Boolean).join(" | ")
+      : notes;
 
     setIsCompleting(true);
     try {
-      const recipeIdMap = readRestaurantData<Record<string, string>>("recipes.backendIdByLocalId", {});
-      const saved = await completeKitchenOrder({
-        receiptNo: order.receiptNo,
-        recipeId: recipeIdMap[String(order.recipeId)] ?? order.recipeId,
-        quantity: order.quantity,
-        notes: order.notes,
+      await completeKitchenOrder.mutateAsync({
+        receiptNo: receiptNo.trim(),
+        recipeId: selectedRecipe.id,
+        quantity: orderQty,
+        notes: orderNotes,
         excludedIngredientIds: Array.from(excludedIngredientIds),
       });
-      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
-      orderIdMap[orderId] = saved.id;
-      writeRestaurantDataOnly("pos.backendIdByLocalId", orderIdMap);
-
-      // The backend has already deducted cloud stock. These writes only mirror
-      // the successful result in the legacy UI.
-      writeRestaurantDataOnly("inventory.products", nextProducts);
-      writeRestaurantDataOnly("inventory.movements", [...nextMovements, ...movements]);
-      setOrders([order, ...orders]);
       setReceiptNo("");
       setRecipeId("");
       setExcludedIngredientIds(new Set());
       setQuantity("1");
       setNotes("");
-      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {
@@ -246,48 +201,11 @@ export function POSKitchenOrders() {
   const voidOrder = async (order: POSOrder) => {
     if (!voidReason.trim() || isVoiding) return;
 
-    const products = readRestaurantData<InventoryProduct[]>("inventory.products", []);
-    const movements = readRestaurantData<InventoryMovement[]>("inventory.movements", []);
-    const sourceMovements = movements.filter((movement) => movement.sourceId === order.id && movement.type === "pos-consumption");
-    const now = new Date().toISOString();
-
-    const nextProducts = products.map((product) => {
-      const restoreQty = sourceMovements
-        .filter((movement) => movement.productId === product.id)
-        .reduce((sum, movement) => sum + movement.quantity, 0);
-      return restoreQty > 0 ? { ...product, stock: product.stock + restoreQty } : product;
-    });
-
-    const reversalMovements: InventoryMovement[] = sourceMovements.map((movement, index) => ({
-      ...movement,
-      id: `MOV-VOID-${Date.now()}-${index}`,
-      type: "pos-void",
-      date: now,
-      notes: `Void reversal for ${order.receiptNo}: ${voidReason.trim()}`,
-    }));
-
     setIsVoiding(true);
     try {
-      const orderIdMap = readRestaurantData<Record<string, string>>("pos.backendIdByLocalId", {});
-      const backendId = orderIdMap[String(order.id)] ?? order.id;
-      await voidKitchenOrder(backendId, voidReason.trim());
-
-      const voidedSynced = readRestaurantData<Record<string, boolean>>("pos.voidedSynced", {});
-      voidedSynced[String(order.id)] = true;
-      writeRestaurantDataOnly("pos.voidedSynced", voidedSynced);
-
-      // The backend has already restored cloud stock. These writes only mirror
-      // the successful result in the legacy UI.
-      writeRestaurantDataOnly("inventory.products", nextProducts);
-      writeRestaurantDataOnly("inventory.movements", [...reversalMovements, ...movements]);
-      setOrders(orders.map((current) =>
-        current.id === order.id
-          ? { ...current, status: "voided", voidReason: voidReason.trim(), voidedAt: now }
-          : current
-      ));
+      await voidKitchenOrder.mutateAsync({ id: order.id, reason: voidReason.trim() });
       setVoidingOrderId("");
       setVoidReason("");
-      await invalidateRestaurantData("pos.orders", "inventory.products", "inventory.movements");
     } catch (error) {
       reportSyncError(error);
     } finally {

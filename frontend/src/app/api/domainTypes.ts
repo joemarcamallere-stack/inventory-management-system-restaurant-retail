@@ -334,7 +334,8 @@ export interface ApiCategory {
 
 export type RestaurantSettingKey =
   | 'CATEGORY_HIERARCHY'
-  | 'STORAGE_TEMPERATURE_OPTIONS';
+  | 'STORAGE_TEMPERATURE_OPTIONS'
+  | 'PRODUCT_MERGE_METADATA';
 
 export interface ApiRestaurantSetting {
   key: RestaurantSettingKey;

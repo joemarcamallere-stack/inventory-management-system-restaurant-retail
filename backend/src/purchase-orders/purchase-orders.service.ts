@@ -440,8 +440,8 @@ export class PurchaseOrdersService {
       },
       orderBy: { createdAt: 'desc' as const },
     },
-    createdBy: { select: { id: true, name: true } },
-    receivedBy: { select: { id: true, name: true } },
+    createdBy: { select: { id: true, name: true, email: true } },
+    receivedBy: { select: { id: true, name: true, email: true } },
   };
 
   private async assertReferencesBelongToBusiness(

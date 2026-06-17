@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
-import { createUser, deleteUser, updateUser, getPurchaseOrders, getPurchaseOrder, receivePurchaseOrder, getInventory, getBundles, createBundle, updateBundle, approveBundle, rejectBundle, activateBundle, deactivateBundle, deleteBundle } from '../../app/api/client';
 import type {
   InventoryItem,
   PurchaseOrder,
@@ -14,15 +13,25 @@ import type {
 } from '../../app/utils/generateSampleData';
 import { categorySubcategories, CHART_COLORS } from '../../app/utils/constants';
 import { autoSortItem } from '../../app/utils/autoSortingRules';
+import {
+  useReceiveRetailPurchaseOrderMutation,
+  useRetailPurchaseOrderDetailQuery,
+  useRetailPurchaseOrderRecordsQuery,
+} from '../lib/retail';
 
 export function ProductsReceivedView({
   currentUser
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
-  const [approvedPOs, setApprovedPOs] = useState<any[]>([]);
-  const [receivedPOs, setReceivedPOs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const approvedPOsQuery = useRetailPurchaseOrderRecordsQuery({ status: 'APPROVED' });
+  const receivedPOsQuery = useRetailPurchaseOrderRecordsQuery({ status: 'RECEIVED' });
+  const receivePurchaseOrderMutation = useReceiveRetailPurchaseOrderMutation();
+  const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
+  const selectedPODetailQuery = useRetailPurchaseOrderDetailQuery(selectedPOId ?? undefined, Boolean(selectedPOId));
+  const approvedPOs = approvedPOsQuery.data ?? [];
+  const receivedPOs = receivedPOsQuery.data ?? [];
+  const loading = approvedPOsQuery.isLoading || receivedPOsQuery.isLoading;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -39,24 +48,24 @@ export function ProductsReceivedView({
   }>({});
   const [filterStatus, setFilterStatus] = useState<string>('all');
 
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const [approved, received] = await Promise.all([
-        getPurchaseOrders({ status: 'APPROVED' }),
-        getPurchaseOrders({ status: 'RECEIVED' }),
-      ]);
-      setApprovedPOs(approved);
-      setReceivedPOs(received);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  useEffect(() => {
+    const fullPO = selectedPODetailQuery.data;
+    if (!fullPO || selectedPO?.id === fullPO.id) return;
 
-  useEffect(() => { loadData(); }, [loadData]);
+    const initialForm: typeof inspectionForm = {};
+    (fullPO.items ?? []).forEach((item: any) => {
+      initialForm[item.id] = {
+        receivedQty: item.quantity,
+        acceptedQty: item.quantity,
+        rejectedQty: 0,
+        condition: 'Good',
+        inspectionNotes: '',
+      };
+    });
+    setSelectedPO(fullPO);
+    setInspectionForm(initialForm);
+    setShowInspectionModal(true);
+  }, [selectedPODetailQuery.data, selectedPO?.id]);
 
   const poTotalAccepted = (po: any) =>
     (po.items ?? []).reduce((sum: number, item: any) => sum + (item.receivedQty - item.rejectedQty), 0);
@@ -79,27 +88,11 @@ export function ProductsReceivedView({
     withRejections: receivedPOs.filter(po => poTotalRejected(po) > 0).length,
   };
 
-  const handleStartReceiving = async (po: any) => {
-    try {
-      setError(null);
-      const fullPO = await getPurchaseOrder(po.id);
-      setSelectedPO(fullPO);
-      const initialForm: typeof inspectionForm = {};
-      (fullPO.items ?? []).forEach((item: any) => {
-        initialForm[item.id] = {
-          receivedQty: item.quantity,
-          acceptedQty: item.quantity,
-          rejectedQty: 0,
-          condition: 'Good',
-          inspectionNotes: '',
-        };
-      });
-      setInspectionForm(initialForm);
-      setShowReceiveModal(false);
-      setShowInspectionModal(true);
-    } catch (e: any) {
-      setError(e.message);
-    }
+  const handleStartReceiving = (po: any) => {
+    setError(null);
+    setSelectedPO(null);
+    setSelectedPOId(po.id);
+    setShowReceiveModal(false);
   };
 
   const handleInspectionChange = (itemId: string, field: string, value: any) => {
@@ -123,11 +116,11 @@ export function ProductsReceivedView({
         const ins = inspectionForm[item.id] ?? { receivedQty: item.quantity, rejectedQty: 0 };
         return { id: item.id, receivedQty: ins.receivedQty, rejectedQty: ins.rejectedQty };
       });
-      await receivePurchaseOrder(selectedPO.id, items);
+      await receivePurchaseOrderMutation.mutateAsync({ id: selectedPO.id, items });
       setShowInspectionModal(false);
       setSelectedPO(null);
+      setSelectedPOId(null);
       setInspectionForm({});
-      await loadData();
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -211,7 +204,7 @@ export function ProductsReceivedView({
                 <h3 className="text-[24px] font-bold text-[#323B42]">Quality Inspection - {selectedPO.orderNumber}</h3>
                 <p className="text-[14px] text-[#323B42] mt-1">Supplier: {selectedPO.supplier?.name ?? 'N/A'}</p>
               </div>
-              <button onClick={() => setShowInspectionModal(false)} className="p-2 hover:bg-[#F8FAFB] rounded">
+              <button onClick={() => { setShowInspectionModal(false); setSelectedPO(null); setSelectedPOId(null); }} className="p-2 hover:bg-[#F8FAFB] rounded">
                 <X className="size-5 text-[#323B42]" />
               </button>
             </div>
@@ -350,7 +343,7 @@ export function ProductsReceivedView({
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowInspectionModal(false)}
+                onClick={() => { setShowInspectionModal(false); setSelectedPO(null); setSelectedPOId(null); }}
                 disabled={saving}
                 className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors disabled:opacity-50"
               >

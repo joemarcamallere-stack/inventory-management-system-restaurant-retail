@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Toaster } from "sonner";
 import {
   Apple,
   ArrowLeftRight,
@@ -65,7 +64,11 @@ export function RestaurantLayout({
       setDataError(detail?.message || "A restaurant data request failed.");
     };
     window.addEventListener("restaurant-sync-error", handleError);
-    return () => window.removeEventListener("restaurant-sync-error", handleError);
+    window.addEventListener("api-error", handleError);
+    return () => {
+      window.removeEventListener("restaurant-sync-error", handleError);
+      window.removeEventListener("api-error", handleError);
+    };
   }, []);
 
   return (
@@ -166,7 +169,6 @@ export function RestaurantLayout({
         )}
         {children}
       </main>
-      <Toaster richColors position="top-right" />
     </div>
   );
 }
