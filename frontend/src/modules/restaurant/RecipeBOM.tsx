@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale, Tag } from "lucide-react";
+import { ChefHat, Plus, Search, Edit, Trash2, X, Save, Calculator, Scale } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../../app/hooks/useSession";
 import { InventoryProduct } from "../lib/inventoryLogic";
@@ -99,8 +99,9 @@ export function RecipeBOM() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
   const [scaleMultiplier, setScaleMultiplier] = useState(1);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [ingredientSearch, setIngredientSearch] = useState("");
+  const [isIngredientPickerOpen, setIsIngredientPickerOpen] = useState(false);
 
   const [newRecipe, setNewRecipe] = useState({
     name: "",
@@ -132,9 +133,6 @@ export function RecipeBOM() {
   // Only show products that are actually in stock.
   const availableInventoryItems = inventoryItems.filter(item => item.stock > 0);
 
-  // Extract unique categories from inventory
-  const availableCategories = Array.from(new Set(inventoryItems.map(item => item.category))).sort();
-
   const { data: recipes = [] } = useRestaurantRecipesQuery();
   const saveRecipe = useSaveRestaurantRecipeMutation();
   const removeRecipe = useDeleteRestaurantRecipeMutation();
@@ -146,10 +144,14 @@ export function RecipeBOM() {
 
   const categories = ["all", "Appetizer", "Main Course", "Dessert", "Beverage"];
 
-  // Filter inventory items based on selected categories
-  const filteredInventoryItems = selectedCategories.length === 0
-    ? availableInventoryItems
-    : availableInventoryItems.filter(item => selectedCategories.includes(item.category));
+  const filteredInventoryItems = availableInventoryItems.filter((item) => {
+    const query = ingredientSearch.trim().toLowerCase();
+    if (!query) return true;
+    return [item.name, item.sku, item.category, item.unit]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(query));
+  });
+  const visibleIngredientOptions = filteredInventoryItems.slice(0, 10);
 
   const filteredRecipes = recipes.filter(recipe => {
     const matchesSearch = (recipe.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -227,6 +229,8 @@ export function RecipeBOM() {
         inventoryUnit: "",
         unitCost: "",
       });
+      setIngredientSearch("");
+      setIsIngredientPickerOpen(false);
     }
   };
 
@@ -434,6 +438,8 @@ export function RecipeBOM() {
       setModifiers([]);
       setModifierIngredientId("");
       setModifierName("");
+      setIngredientSearch("");
+      setIsIngredientPickerOpen(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save recipe");
     }
@@ -467,7 +473,8 @@ export function RecipeBOM() {
     setModifiers(recipe.modifiers ?? []);
     setModifierIngredientId("");
     setModifierName("");
-    setSelectedCategories([]);
+    setIngredientSearch("");
+    setIsIngredientPickerOpen(false);
     setShowCreateModal(true);
   };
 
@@ -505,40 +512,44 @@ export function RecipeBOM() {
   const handleIngredientInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
 
-    // If selecting an ingredient from dropdown, auto-fill unit cost and unit
-    if (name === "name" && value) {
-      const selectedItem = inventoryItems.find(item => item.id === Number(value));
-      if (selectedItem) {
-        setCurrentIngredient({
-          ...currentIngredient,
-          productId: selectedItem.id.toString(),
-          name: selectedItem.name,
-          unit: selectedItem.unit,
-          inventoryUnit: selectedItem.unit,
-          unitCost: selectedItem.price.toString(),
-        });
-        return;
-      }
-    }
-
     setCurrentIngredient({
       ...currentIngredient,
       [name]: value,
     });
   };
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategories(prev =>
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
+  const handleIngredientSearchChange = (value: string) => {
+    setIngredientSearch(value);
+    setIsIngredientPickerOpen(true);
+    if (currentIngredient.productId) {
+      setCurrentIngredient({
+        ...currentIngredient,
+        productId: "",
+        name: "",
+        inventoryUnit: "",
+        unitCost: "",
+      });
+    }
+  };
+
+  const selectIngredient = (item: InventoryItem) => {
+    setIngredientSearch(`${item.name}${item.sku ? ` (${item.sku})` : ""}`);
+    setIsIngredientPickerOpen(false);
+    setCurrentIngredient({
+      ...currentIngredient,
+      productId: item.id.toString(),
+      name: item.name,
+      unit: item.unit,
+      inventoryUnit: item.unit,
+      unitCost: item.price.toString(),
+    });
   };
 
   const handleOpenCreateModal = () => {
     setShowCreateModal(true);
     setEditingRecipe(null);
-    setSelectedCategories([]);
+    setIngredientSearch("");
+    setIsIngredientPickerOpen(false);
     setIngredients([]);
     setModifiers([]);
     setModifierIngredientId("");
@@ -751,36 +762,6 @@ export function RecipeBOM() {
             </div>
 
             <form onSubmit={handleCreateRecipe} className="p-6 space-y-6">
-              {/* Category Selection for Filtering Ingredients */}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Tag className="w-5 h-5 text-blue-600" />
-                  <h3 className="font-semibold text-blue-900">Select Ingredient Categories</h3>
-                </div>
-                <p className="text-xs text-blue-700 mb-3">Select one or more categories to filter available ingredients</p>
-                <div className="flex flex-wrap gap-2">
-                  {availableCategories.map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleCategory(cat)}
-                      className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${
-                        selectedCategories.includes(cat)
-                          ? "bg-blue-600 text-white border-blue-600"
-                          : "bg-white text-blue-900 border-blue-300 hover:bg-blue-50"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-                {selectedCategories.length > 0 && (
-                  <div className="mt-3 text-xs text-blue-700">
-                    <strong>{filteredInventoryItems.length}</strong> ingredients available from selected categories
-                  </div>
-                )}
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-sm mb-2 text-foreground font-medium">
@@ -924,23 +905,57 @@ export function RecipeBOM() {
 
                 <div className="grid grid-cols-5 gap-3 mb-4">
                   <div className="col-span-2">
-                    <label htmlFor="ingredientName" className="block text-xs mb-1 text-foreground">
-                      Ingredient Name
+                    <label htmlFor="ingredientSearch" className="block text-xs mb-1 text-foreground">
+                      Ingredient
                     </label>
-                    <select
-                      id="ingredientName"
-                      name="name"
-                      value={currentIngredient.productId}
-                      onChange={handleIngredientInputChange}
-                      className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                    >
-                      <option value="">Select ingredient...</option>
-                      {filteredInventoryItems.map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.name} ({item.sku}) - {item.stock} {item.unit} on hand
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <input
+                        id="ingredientSearch"
+                        type="search"
+                        value={ingredientSearch}
+                        onFocus={() => setIsIngredientPickerOpen(true)}
+                        onBlur={() => setTimeout(() => setIsIngredientPickerOpen(false), 120)}
+                        onChange={(event) => handleIngredientSearchChange(event.target.value)}
+                        placeholder="Search and select ingredient"
+                        autoComplete="off"
+                        className="w-full px-3 py-2 text-sm bg-input-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                      />
+                      {isIngredientPickerOpen && (
+                        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg">
+                          {visibleIngredientOptions.length === 0 ? (
+                            <div className="px-3 py-3 text-sm text-muted-foreground">
+                              No matching ingredient
+                            </div>
+                          ) : (
+                            visibleIngredientOptions.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => selectIngredient(item)}
+                                className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm transition-colors ${
+                                  String(currentIngredient.productId) === String(item.id)
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-foreground hover:bg-muted/60"
+                                }`}
+                              >
+                                <span className="min-w-0 truncate">
+                                  {item.name}{item.sku ? ` (${item.sku})` : ""}
+                                </span>
+                                <span className="shrink-0 text-[11px] text-muted-foreground">
+                                  {item.stock} {item.unit}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {currentIngredient.productId
+                        ? `Selected: ${currentIngredient.name}`
+                        : `Showing ${filteredInventoryItems.length} of ${availableInventoryItems.length} in-stock ingredients`}
+                    </p>
                   </div>
 
                   <div>
