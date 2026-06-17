@@ -400,13 +400,23 @@ export function cancelTransfer(id: string, module?: BusinessModule) {
 
 // ─── Sales ───────────────────────────────────────────────────────────────────
 
-export function getSales(params?: { module?: BusinessModule; locationId?: string; status?: string; dateFrom?: string; dateTo?: string }) {
+export function getSales(params?: {
+  module?: BusinessModule;
+  locationId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}) {
   const query = new URLSearchParams();
   if (params?.module) query.set('module', params.module);
   if (params?.locationId) query.set('locationId', params.locationId);
   if (params?.status) query.set('status', params.status);
   if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
   if (params?.dateTo) query.set('dateTo', params.dateTo);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
   const suffix = query.toString() ? `?${query.toString()}` : '';
   return request<PagedResponse<ApiSale>>(`/api/sales${suffix}`).then((r) => r.data);
 }
@@ -421,6 +431,31 @@ export function createSale(data: unknown) {
 
 export function refundSale(id: string, refundReason: string, module?: BusinessModule) {
   return request<ApiSale>(`/api/sales/${id}/refund${moduleSuffix(module)}`, { method: 'PATCH', body: JSON.stringify({ refundReason }) });
+}
+
+// ─── Adjustments ─────────────────────────────────────────────────────────────
+
+export function getAdjustments(params?: { module?: BusinessModule; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
+  if (params?.status) query.set('status', params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<unknown>>(`/api/adjustments${suffix}`).then((r) => r.data);
+}
+
+export function createAdjustment(data: unknown) {
+  return request<unknown>('/api/adjustments', { method: 'POST', body: JSON.stringify(data) });
+}
+
+export function approveAdjustment(id: string, module?: BusinessModule) {
+  return request<unknown>(`/api/adjustments/${id}/approve${moduleSuffix(module)}`, { method: 'PATCH' });
+}
+
+export function rejectAdjustment(id: string, reason: string, module?: BusinessModule) {
+  return request<unknown>(`/api/adjustments/${id}/reject${moduleSuffix(module)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
 }
 
 // ─── Bundles ─────────────────────────────────────────────────────────────────

@@ -204,7 +204,15 @@ export function useStockMovementsQuery<TData = ApiStockMovement[]>(
 }
 
 export function useSalesQuery<TData = ApiSale[]>(
-  params?: { module?: BusinessModule; locationId?: string; status?: string; dateFrom?: string; dateTo?: string },
+  params?: {
+    module?: BusinessModule;
+    locationId?: string;
+    status?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  },
   options?: SelectOptions<ApiSale[], TData>,
 ) {
   return useQuery({

@@ -9,6 +9,8 @@ import {
   MapPin,
   Package,
   PackageCheck,
+  Receipt,
+  Settings2,
   ShoppingCart,
   Store,
   Users,
@@ -24,7 +26,9 @@ import { useRetailInventoryQuery } from '../modules/lib/retail';
 const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
 const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
+const ProductManagementView = lazy(() => import('../modules/retail/ProductManagementView'));
 const POSView = lazy(() => import('../modules/retail/POSView'));
+const SalesHistoryView = lazy(() => import('../modules/retail/SalesHistoryView'));
 const DashboardView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.DashboardView })));
 const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.StockAlertsView })));
 const InventoryView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.InventoryView })));
@@ -242,6 +246,10 @@ export default function App() {
                   </span>
                 )}
               </NavButton>
+              <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
+                <ProductManagementIcon />
+                Product Management
+              </NavButton>
               <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
                 <PurchaseOrdersIcon />
                 Purchase Orders
@@ -253,6 +261,10 @@ export default function App() {
               <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
                 <ItemBundlingIcon />
                 Item Bundling
+              </NavButton>
+              <NavButton active={currentView === 'sales-history'} onClick={() => navigateToView('sales-history')}>
+                <SalesHistoryIcon />
+                Sales History
               </NavButton>
               <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
                 <TransfersIcon />
@@ -322,7 +334,9 @@ export default function App() {
             {currentView === 'inventory' && (
               <InventoryView />
             )}
+            {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
             {currentView === 'pos' && <POSView currentUser={currentUser} />}
+            {currentView === 'sales-history' && <SalesHistoryView currentUser={currentUser} />}
             {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
             {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
             {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
@@ -362,9 +376,11 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
 const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
+const ProductManagementIcon = () => <Settings2 className="size-5" />;
 const PurchaseOrdersIcon = () => <ShoppingCart className="size-5" />;
 const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;
+const SalesHistoryIcon = () => <Receipt className="size-5" />;
 const TransfersIcon = () => <ArrowRightLeft className="size-5" />;
 const MultilocationIcon = () => <MapPin className="size-5" />;
 const ReportsIcon = () => <FileText className="size-5" />;

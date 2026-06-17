@@ -54,11 +54,11 @@ export function UserManagementView({
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <div className="bg-[#ffe2e2] size-20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Eye className="size-10 text-[#E7000B]" />
+          <div className="bg-destructive/10 size-20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Eye className="size-10 text-destructive" />
           </div>
-          <h3 className="text-[24px] font-bold text-[#323B42] mb-2">Access Denied</h3>
-          <p className="text-[14px] text-[#6b7280]">
+          <h3 className="text-[24px] font-bold text-foreground mb-2">Access Denied</h3>
+          <p className="text-[14px] text-muted-foreground">
             You do not have permission to access User Management.<br />
             This section is restricted to administrators only.
           </p>
@@ -261,12 +261,12 @@ export function UserManagementView({
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-[30px] font-bold text-[#323B42]">User Management</h2>
-          <p className="text-[#6b7280] text-[14px] mt-1">Manage user accounts and permissions</p>
+          <h2 className="text-[30px] font-bold text-foreground">User Management</h2>
+          <p className="text-muted-foreground text-[14px] mt-1">Manage user accounts and permissions</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
-          className="bg-[#007A5E] text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-[#008967] transition-colors"
+          className="bg-secondary text-white px-4 py-2 rounded-[8px] text-[14px] font-medium flex items-center gap-2 hover:bg-secondary transition-colors"
         >
           <Plus className="size-4" />
           Add User
@@ -275,66 +275,66 @@ export function UserManagementView({
 
       {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
+        <div className="bg-white border border-border rounded-[14px] p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-[#6b7280] text-[12px] mb-1">Total Users</p>
-              <p className="text-[#323B42] text-[28px] font-bold">{userStats.total}</p>
+              <p className="text-muted-foreground text-[12px] mb-1">Total Users</p>
+              <p className="text-foreground text-[28px] font-bold">{userStats.total}</p>
               <div className="flex gap-3 mt-2">
-                <span className="text-[11px] text-[#00a63e]">Active: {userStats.active}</span>
-                <span className="text-[11px] text-[#E7000B]">Inactive: {userStats.inactive}</span>
+                <span className="text-[11px] text-success">Active: {userStats.active}</span>
+                <span className="text-[11px] text-destructive">Inactive: {userStats.inactive}</span>
               </div>
             </div>
-            <div className="bg-[#E0F5F1] rounded-full size-[56px] flex items-center justify-center">
-              <Users className="size-7 text-[#007A5E]" />
+            <div className="bg-secondary/10 rounded-full size-[56px] flex items-center justify-center">
+              <Users className="size-7 text-secondary" />
             </div>
           </div>
         </div>
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-          <p className="text-[#6b7280] text-[12px] mb-3">Users by Role</p>
+        <div className="bg-white border border-border rounded-[14px] p-6">
+          <p className="text-muted-foreground text-[12px] mb-3">Users by Role</p>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-[#323B42]">Admin</span>
-              <span className="text-[14px] font-bold text-[#bb4d00]">{userStats.admins}</span>
+              <span className="text-[13px] text-foreground">Admin</span>
+              <span className="text-[14px] font-bold text-warning">{userStats.admins}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-[#323B42]">Manager</span>
-              <span className="text-[14px] font-bold text-[#007A5E]">{userStats.managers}</span>
+              <span className="text-[13px] text-foreground">Manager</span>
+              <span className="text-[14px] font-bold text-secondary">{userStats.managers}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-[13px] text-[#323B42]">Staff</span>
-              <span className="text-[14px] font-bold text-[#008967]">{userStats.staff}</span>
+              <span className="text-[13px] text-foreground">Staff</span>
+              <span className="text-[14px] font-bold text-secondary">{userStats.staff}</span>
             </div>
           </div>
         </div>
-        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-6">
-          <p className="text-[#6b7280] text-[12px] mb-1">Active Rate</p>
-          <p className="text-[#323B42] text-[28px] font-bold">
+        <div className="bg-white border border-border rounded-[14px] p-6">
+          <p className="text-muted-foreground text-[12px] mb-1">Active Rate</p>
+          <p className="text-foreground text-[28px] font-bold">
             {userStats.total > 0 ? Math.round((userStats.active / userStats.total) * 100) : 0}%
           </p>
-          <p className="text-[11px] text-[#6b7280] mt-2">{userStats.active} out of {userStats.total} users active</p>
+          <p className="text-[11px] text-muted-foreground mt-2">{userStats.active} out of {userStats.total} users active</p>
         </div>
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] mb-4 p-4">
+      <div className="bg-white border border-border rounded-[14px] mb-4 p-4">
         <div className="flex items-center gap-4">
           <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[#6b7280]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search by name or email..."
-              className="w-full pl-10 pr-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+              className="w-full pl-10 pr-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
             />
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[14px] text-[#323B42] font-medium">Role:</label>
+            <label className="text-[14px] text-foreground font-medium">Role:</label>
             <select
               value={filterRole}
               onChange={(e) => setFilterRole(e.target.value)}
-              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]"
+              className="px-3 py-2 border border-border rounded-[8px] text-[14px] bg-white focus:outline-none focus:border-secondary"
             >
               <option value="all">All Roles</option>
               <option value="Admin">Admin</option>
@@ -346,11 +346,11 @@ export function UserManagementView({
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <label className="text-[14px] text-[#323B42] font-medium">Status:</label>
+            <label className="text-[14px] text-foreground font-medium">Status:</label>
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] bg-white focus:outline-none focus:border-[#007A5E]"
+              className="px-3 py-2 border border-border rounded-[8px] text-[14px] bg-white focus:outline-none focus:border-secondary"
             >
               <option value="all">All Status</option>
               <option value="Active">Active</option>
@@ -361,51 +361,51 @@ export function UserManagementView({
       </div>
 
       {/* Users List */}
-      <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] overflow-hidden">
+      <div className="bg-white border border-border rounded-[14px] overflow-hidden">
         <table className="w-full">
-          <thead className="bg-[#F8FAFB] border-b border-[rgba(0,0,0,0.1)]">
+          <thead className="bg-muted border-b border-border">
             <tr>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">User</th>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">Email</th>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">Role</th>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">Status</th>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">Last Login</th>
-              <th className="text-left px-6 py-3 text-[13px] font-semibold text-[#323B42]">Actions</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">User</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">Email</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">Role</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">Status</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">Last Login</th>
+              <th className="text-left px-6 py-3 text-[13px] font-semibold text-foreground">Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredUsers.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-[#6b7280]">
+                <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
                   No users found
                 </td>
               </tr>
             ) : (
               filteredUsers.map(user => (
-                <tr key={user.id} className="border-b border-[rgba(0,0,0,0.1)] hover:bg-[#F8FAFB] transition-colors">
+                <tr key={user.id} className="border-b border-border hover:bg-muted transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className={`rounded-full size-[40px] flex items-center justify-center ${
-                        user.role === 'Admin' ? 'bg-[#fef3c6]' :
-                        user.role === 'Manager' ? 'bg-[#E0F2F2]' :
-                        'bg-[#E0F5F1]'
+                        user.role === 'Admin' ? 'bg-warning/10' :
+                        user.role === 'Manager' ? 'bg-secondary/10' :
+                        'bg-secondary/10'
                       }`}>
-                        <span className="text-[16px] font-semibold text-[#323B42]">{user.name.charAt(0)}</span>
+                        <span className="text-[16px] font-semibold text-foreground">{user.name.charAt(0)}</span>
                       </div>
                       <div>
-                        <p className="text-[14px] font-medium text-[#323B42]">{user.name}</p>
+                        <p className="text-[14px] font-medium text-foreground">{user.name}</p>
                         {user.email === currentUser?.email && (
-                          <span className="text-[11px] text-[#007A5E] font-medium">(You)</span>
+                          <span className="text-[11px] text-secondary font-medium">(You)</span>
                         )}
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-[14px] text-[#323B42]">{user.email}</td>
+                  <td className="px-6 py-4 text-[14px] text-foreground">{user.email}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 rounded text-[12px] font-semibold ${
-                      user.role === 'Admin' ? 'bg-[#fef3c6] text-[#bb4d00]' :
-                      user.role === 'Manager' ? 'bg-[#E0F2F2] text-[#007A5E]' :
-                      'bg-[#E0F5F1] text-[#008967]'
+                      user.role === 'Admin' ? 'bg-warning/10 text-warning' :
+                      user.role === 'Manager' ? 'bg-secondary/10 text-secondary' :
+                      'bg-secondary/10 text-secondary'
                     }`}>
                       {user.role}
                     </span>
@@ -414,32 +414,32 @@ export function UserManagementView({
                     <button
                       onClick={() => handleToggleStatus(user)}
                       className={`px-2 py-1 rounded text-[12px] font-semibold transition-opacity hover:opacity-80 ${
-                        user.status === 'Active' ? 'bg-[#E0F5F1] text-[#008967]' : 'bg-[#ffe2e2] text-[#E7000B]'
+                        user.status === 'Active' ? 'bg-secondary/10 text-secondary' : 'bg-destructive/10 text-destructive'
                       }`}
                     >
                       {user.status}
                     </button>
                   </td>
-                  <td className="px-6 py-4 text-[14px] text-[#323B42]">{user.lastLogin}</td>
+                  <td className="px-6 py-4 text-[14px] text-foreground">{user.lastLogin}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openEditModal(user)}
-                        className="p-2 hover:bg-[#E0F2F2] rounded-[6px] text-[#007A5E] transition-colors"
+                        className="p-2 hover:bg-secondary/10 rounded-[6px] text-secondary transition-colors"
                         title="Edit User"
                       >
                         <Edit2 className="size-4" />
                       </button>
                       <button
                         onClick={() => openPasswordModal(user)}
-                        className="p-2 hover:bg-[#fff4e6] rounded-[6px] text-[#FFA500] transition-colors"
+                        className="p-2 hover:bg-warning/10 rounded-[6px] text-warning transition-colors"
                         title="Reset Password"
                       >
                         <RefreshCw className="size-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteUser(user)}
-                        className="p-2 hover:bg-[#ffe2e2] rounded-[6px] text-[#991b1b] transition-colors"
+                        className="p-2 hover:bg-destructive/10 rounded-[6px] text-destructive transition-colors"
                         title="Delete User"
                       >
                         <Trash2 className="size-4" />
@@ -458,13 +458,13 @@ export function UserManagementView({
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-[14px] p-6 w-[500px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[20px] font-bold text-[#323B42]">Add New User</h3>
+              <h3 className="text-[20px] font-bold text-foreground">Add New User</h3>
               <button
                 onClick={() => {
                   setShowAddModal(false);
                   setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                 }}
-                className="text-[#6b7280] hover:text-[#323B42]"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="size-5" />
               </button>
@@ -473,41 +473,41 @@ export function UserManagementView({
             <form onSubmit={handleAddUser}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Full Name <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Full Name <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
                     value={userForm.name}
                     onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter full name"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Email Address <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Email Address <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="email"
                     value={userForm.email}
                     onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter email address"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Role <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Role <span className="text-destructive">*</span>
                   </label>
                   <select
                     value={userForm.role}
                     onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     required
                   >
                     <option value="Staff">Staff</option>
@@ -520,28 +520,28 @@ export function UserManagementView({
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Password <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Password <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="password"
                     value={userForm.password}
                     onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter password (min. 6 characters)"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Confirm Password <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Confirm Password <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="password"
                     value={userForm.confirmPassword}
                     onChange={(e) => setUserForm({ ...userForm, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Confirm password"
                     required
                   />
@@ -551,7 +551,7 @@ export function UserManagementView({
               <div className="flex items-center gap-3 mt-6">
                 <button
                   type="submit"
-                  className="flex-1 bg-[#007A5E] text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+                  className="flex-1 bg-secondary text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
                 >
                   Create User
                 </button>
@@ -561,7 +561,7 @@ export function UserManagementView({
                     setShowAddModal(false);
                     setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                   }}
-                  className="flex-1 border border-[rgba(0,0,0,0.1)] py-2 rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
+                  className="flex-1 border border-border py-2 rounded-[8px] text-[14px] font-medium text-foreground hover:bg-muted transition-colors"
                 >
                   Cancel
                 </button>
@@ -576,14 +576,14 @@ export function UserManagementView({
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-[14px] p-6 w-[500px] max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[20px] font-bold text-[#323B42]">Edit User</h3>
+              <h3 className="text-[20px] font-bold text-foreground">Edit User</h3>
               <button
                 onClick={() => {
                   setShowEditModal(false);
                   setSelectedUser(null);
                   setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                 }}
-                className="text-[#6b7280] hover:text-[#323B42]"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="size-5" />
               </button>
@@ -592,41 +592,41 @@ export function UserManagementView({
             <form onSubmit={handleEditUser}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Full Name <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Full Name <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="text"
                     value={userForm.name}
                     onChange={(e) => setUserForm({ ...userForm, name: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter full name"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Email Address <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Email Address <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="email"
                     value={userForm.email}
                     onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter email address"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Role <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Role <span className="text-destructive">*</span>
                   </label>
                   <select
                     value={userForm.role}
                     onChange={(e) => setUserForm({ ...userForm, role: e.target.value as any })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     required
                     disabled={selectedUser.email === currentUser?.email}
                   >
@@ -638,12 +638,12 @@ export function UserManagementView({
                     <option value="Admin">Admin</option>
                   </select>
                   {selectedUser.email === currentUser?.email && (
-                    <p className="text-[11px] text-[#6b7280] mt-1">You cannot change your own role</p>
+                    <p className="text-[11px] text-muted-foreground mt-1">You cannot change your own role</p>
                   )}
                 </div>
 
-                <div className="bg-[#E0F2F2] border border-[#007A5E] rounded-[8px] p-3">
-                  <p className="text-[12px] text-[#007A5E]">
+                <div className="bg-secondary/10 border border-secondary rounded-[8px] p-3">
+                  <p className="text-[12px] text-secondary">
                     <strong>Note:</strong> To change the password, use the "Reset Password" button in the actions menu.
                   </p>
                 </div>
@@ -652,7 +652,7 @@ export function UserManagementView({
               <div className="flex items-center gap-3 mt-6">
                 <button
                   type="submit"
-                  className="flex-1 bg-[#007A5E] text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+                  className="flex-1 bg-secondary text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
                 >
                   Save Changes
                 </button>
@@ -663,7 +663,7 @@ export function UserManagementView({
                     setSelectedUser(null);
                     setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                   }}
-                  className="flex-1 border border-[rgba(0,0,0,0.1)] py-2 rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
+                  className="flex-1 border border-border py-2 rounded-[8px] text-[14px] font-medium text-foreground hover:bg-muted transition-colors"
                 >
                   Cancel
                 </button>
@@ -678,48 +678,48 @@ export function UserManagementView({
         <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-[14px] p-6 w-[500px]">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[20px] font-bold text-[#323B42]">Reset Password</h3>
+              <h3 className="text-[20px] font-bold text-foreground">Reset Password</h3>
               <button
                 onClick={() => {
                   setShowPasswordModal(false);
                   setSelectedUser(null);
                   setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                 }}
-                className="text-[#6b7280] hover:text-[#323B42]"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <X className="size-5" />
               </button>
             </div>
 
-            <p className="text-[14px] text-[#6b7280] mb-4">
-              Reset password for <strong className="text-[#323B42]">{selectedUser.name}</strong>
+            <p className="text-[14px] text-muted-foreground mb-4">
+              Reset password for <strong className="text-foreground">{selectedUser.name}</strong>
             </p>
 
             <form onSubmit={handleResetPassword}>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    New Password <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    New Password <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="password"
                     value={userForm.password}
                     onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Enter new password (min. 6 characters)"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Confirm New Password <span className="text-[#E7000B]">*</span>
+                  <label className="block text-[14px] font-medium text-foreground mb-2">
+                    Confirm New Password <span className="text-destructive">*</span>
                   </label>
                   <input
                     type="password"
                     value={userForm.confirmPassword}
                     onChange={(e) => setUserForm({ ...userForm, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
+                    className="w-full px-4 py-2 border border-border rounded-[8px] text-[14px] focus:outline-none focus:border-secondary"
                     placeholder="Confirm new password"
                     required
                   />
@@ -729,7 +729,7 @@ export function UserManagementView({
               <div className="flex items-center gap-3 mt-6">
                 <button
                   type="submit"
-                  className="flex-1 bg-[#007A5E] text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
+                  className="flex-1 bg-secondary text-white py-2 rounded-[8px] text-[14px] font-medium hover:bg-secondary transition-colors"
                 >
                   Reset Password
                 </button>
@@ -740,7 +740,7 @@ export function UserManagementView({
                     setSelectedUser(null);
                     setUserForm({ name: '', email: '', role: 'Staff', password: '', confirmPassword: '' });
                   }}
-                  className="flex-1 border border-[rgba(0,0,0,0.1)] py-2 rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
+                  className="flex-1 border border-border py-2 rounded-[8px] text-[14px] font-medium text-foreground hover:bg-muted transition-colors"
                 >
                   Cancel
                 </button>
