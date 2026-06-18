@@ -317,12 +317,6 @@ export default function App() {
       </div>
 
       <div className="flex-1 h-full flex flex-col overflow-hidden">
-        <div className="bg-[#005656] border-b border-[rgba(255,255,255,0.1)] px-6 py-4 flex items-center">
-          <h1 className="text-white text-[20px] leading-[28px] flex-1" style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700 }}>
-            {currentView.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
-          </h1>
-        </div>
-
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
             {currentView === 'dashboard' && (
@@ -361,7 +355,7 @@ function NavButton({ active, onClick, children }: { active: boolean; onClick: ()
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[16px] transition-colors ${
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-[10px] mt-2 text-[16px] text-left leading-snug transition-colors [&>svg]:shrink-0 ${
         active
           ? 'bg-[#009BA5] text-white font-medium'
           : 'text-[#e5e7eb] hover:bg-[rgba(255,255,255,0.05)] font-normal'

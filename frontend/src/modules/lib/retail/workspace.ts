@@ -179,6 +179,27 @@ export function useRetailWorkspace({
     setFormData(emptyForm);
   };
 
+  const handleAdd = async () => {
+    if (!formData.name || !formData.category || !formData.size) {
+      toast.error('Please fill in all required fields');
+      return false;
+    }
+
+    try {
+      await saveInventoryMutation.mutateAsync({ data: toInventoryPayload() });
+      setFormData(emptyForm);
+      toast.success('Inventory item added');
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to add inventory item',
+      );
+      return false;
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
@@ -232,6 +253,7 @@ export function useRetailWorkspace({
     handleEdit,
     handleSaveEdit,
     handleCancelEdit,
+    handleAdd,
     handleDelete,
     toggleCategory: (category: string) =>
       toggleSetValue(category, setExpandedCategories),
