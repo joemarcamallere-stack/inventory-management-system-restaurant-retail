@@ -1,4 +1,4 @@
-// Category subcategories mapping
+// Category subcategories mapping — apparel/thrift (ukay-ukay) goods
 export const categorySubcategories: { [key: string]: string[] } = {
   'Tops': ['T-Shirts', 'Polo Shirts', 'Blouses', 'Tank Tops'],
   'Bottoms': ['Jeans', 'Pants', 'Shorts', 'Skirts'],
@@ -6,6 +6,20 @@ export const categorySubcategories: { [key: string]: string[] } = {
   'Outerwear': ['Jackets', 'Hoodies & Sweaters'],
   'Shoes': ['Sneakers', 'Boots', 'Sandals'],
   'Accessories': ['Bags', 'Hats']
+};
+
+// Category subcategories mapping — brand-new general merchandise (mall/retail goods)
+export const generalMerchandiseSubcategories: { [key: string]: string[] } = {
+  'Electronics': ['Mobile & Accessories', 'Computers & Peripherals', 'Audio & Headphones', 'Cables & Chargers', 'Batteries'],
+  'Home & Kitchen': ['Cookware', 'Tableware', 'Storage & Organization', 'Small Appliances', 'Home Decor'],
+  'Health & Beauty': ['Skincare', 'Cosmetics', 'Hair Care', 'Fragrances', 'Personal Care'],
+  'Groceries & Food': ['Snacks & Confectionery', 'Beverages', 'Canned & Packaged Goods', 'Condiments & Spices', 'Dairy & Frozen'],
+  'Household Supplies': ['Cleaning Supplies', 'Laundry', 'Paper Products', 'Air Fresheners', 'Pest Control'],
+  'Stationery & Office': ['Writing Instruments', 'Paper & Notebooks', 'Office Supplies', 'Art & Craft', 'Filing & Storage'],
+  'Toys & Games': ['Educational Toys', 'Action Figures & Dolls', 'Board Games & Puzzles', 'Outdoor Play'],
+  'Hardware & Tools': ['Hand Tools', 'Power Tools', 'Fasteners', 'Electrical', 'Plumbing'],
+  'Baby & Kids': ['Diapers & Wipes', 'Feeding', 'Baby Care', 'Kids Apparel'],
+  'Sports & Outdoors': ['Fitness Equipment', 'Outdoor Gear', 'Sportswear', 'Bicycles & Accessories'],
 };
 
 // Colors for charts

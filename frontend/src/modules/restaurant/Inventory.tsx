@@ -713,9 +713,9 @@ export function Inventory() {
 
       {/* Initial Stock Setup Modal */}
       {showInitialStockModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 overflow-auto">
-          <div className="min-h-full bg-background">
-            <div className="sticky top-0 bg-card border-b border-border px-8 py-3 flex items-center justify-between z-10">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-card border-b border-border px-6 py-3 flex items-center justify-between z-10">
               <p className="text-sm font-medium text-muted-foreground">Admin — Initial Stock Setup</p>
               <button
                 onClick={() => setShowInitialStockModal(false)}
