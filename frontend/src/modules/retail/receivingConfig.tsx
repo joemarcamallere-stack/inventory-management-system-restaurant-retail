@@ -53,6 +53,7 @@ export function useRetailReceivingConfig(): ResolvedReceivingConfig {
       orderNumber: po.orderNumber,
       supplier: po.supplier?.name ?? '',
       receivedDate: po.receivedAt ? new Date(po.receivedAt).toLocaleDateString() : '',
+      receivedAt: po.receivedAt ?? undefined,
       receivedBy: po.receivedBy?.name ?? '',
       status: totalRejected > 0 ? 'Partially Accepted' : 'Fully Accepted',
       totalAccepted,

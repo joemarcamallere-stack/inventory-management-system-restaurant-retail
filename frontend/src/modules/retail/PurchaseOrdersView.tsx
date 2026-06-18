@@ -155,6 +155,15 @@ export default function PurchaseOrdersView({
   // Thrift bales are apparel; general merchandise uses mall/retail categories.
   const itemCategoryMap = isThrift ? categorySubcategories : generalMerchandiseSubcategories;
 
+  // Whether the Add-Item form has all required details (mirrors handleAddItemToPO).
+  const itemName = isThrift ? newItemForm.baleType.trim() : newItemForm.name.trim();
+  const itemFinalCategory = newItemForm.newCategory.trim() || newItemForm.category;
+  const canAddItem =
+    !!itemName &&
+    newItemForm.quantity > 0 &&
+    newItemForm.unitPrice > 0 &&
+    (!!newItemForm.inventoryItemId || !!itemFinalCategory);
+
   const handleAddItemToPO = () => {
     const isThrift = newItemForm.productType === 'THRIFT';
     const itemName = isThrift ? newItemForm.baleType.trim() : newItemForm.name.trim();
@@ -166,8 +175,8 @@ export default function PurchaseOrdersView({
       alert('Please enter a Quantity greater than zero');
       return;
     }
-    if (newItemForm.unitPrice == null || newItemForm.unitPrice < 0) {
-      alert('Please enter a valid Unit Cost');
+    if (!newItemForm.unitPrice || newItemForm.unitPrice <= 0) {
+      alert('Please enter a Unit Cost greater than zero');
       return;
     }
     const isNew = !newItemForm.inventoryItemId;
@@ -176,6 +185,11 @@ export default function PurchaseOrdersView({
     // New items become inventory on PO creation, so they must be classified.
     if (isNew && !finalCategory) {
       alert('Please select or enter a Category for the new item');
+      return;
+    }
+    // A retail price below cost would mean selling at a loss — guard against typos.
+    if (!isThrift && newItemForm.sellingPrice > 0 && newItemForm.sellingPrice < newItemForm.unitPrice) {
+      alert('Retail Price is lower than Unit Cost — please review the pricing.');
       return;
     }
     setPOForm({
@@ -205,6 +219,10 @@ export default function PurchaseOrdersView({
   };
 
   const handleCreatePO = async () => {
+    if (!poForm.supplierId) {
+      alert('Please select a supplier. For informal/cash buys, add a "Walk-in / Cash Purchase" supplier and select it.');
+      return;
+    }
     if (poForm.items.length === 0) {
       alert('Add at least one item');
       return;
@@ -389,7 +407,7 @@ export default function PurchaseOrdersView({
 
             <div className="space-y-4 mt-6">
               <div className="relative">
-                <label className="block text-[12px] font-medium text-[#323b42] mb-2">Supplier (optional)</label>
+                <label className="block text-[12px] font-medium text-[#323b42] mb-2">Supplier <span className="text-[#E7000B]">*</span></label>
                 <input
                   type="text"
                   value={poForm.supplierName}
@@ -536,7 +554,7 @@ export default function PurchaseOrdersView({
               <button onClick={() => setShowNewPOModal(false)} className="px-[16.8px] py-[8.8px] h-[36px] bg-[#f8fafb] border-[0.8px] border-[rgba(50,59,66,0.15)] rounded-[10px] text-[14px] font-medium text-[#323b42] hover:bg-[#e9ecef] transition-colors">
                 Cancel
               </button>
-              <button onClick={handleCreatePO} disabled={saving} className="px-4 py-2 h-[36px] bg-[#007a5e] text-white rounded-[10px] text-[14px] font-medium hover:bg-[#008967] transition-colors disabled:opacity-60">
+              <button onClick={handleCreatePO} disabled={saving || !poForm.supplierId || poForm.items.length === 0} className="px-4 py-2 h-[36px] bg-[#007a5e] text-white rounded-[10px] text-[14px] font-medium hover:bg-[#008967] transition-colors disabled:opacity-60">
                 {saving ? 'Creating…' : 'Create Order'}
               </button>
             </div>
@@ -667,7 +685,7 @@ export default function PurchaseOrdersView({
                   <select
                     value={newItemForm.category}
                     onChange={(e) => setNewItemForm({ ...newItemForm, category: e.target.value, subcategory: '', newSubcategory: '' })}
-                    disabled={!!newItemForm.inventoryItemId}
+                    disabled={!!newItemForm.inventoryItemId || !!newItemForm.newCategory.trim()}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
                   >
                     <option value="">Select category</option>
@@ -679,9 +697,10 @@ export default function PurchaseOrdersView({
                     <input
                       type="text"
                       value={newItemForm.newCategory}
-                      onChange={(e) => setNewItemForm({ ...newItemForm, newCategory: e.target.value })}
-                      className="w-full mt-2 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                      placeholder="…or type a new category"
+                      onChange={(e) => setNewItemForm({ ...newItemForm, newCategory: e.target.value, subcategory: '' })}
+                      disabled={!!newItemForm.category}
+                      className="w-full mt-2 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
+                      placeholder={newItemForm.category ? 'Using selected category' : '…or type a new category'}
                     />
                   )}
                 </div>
@@ -690,7 +709,7 @@ export default function PurchaseOrdersView({
                   <select
                     value={newItemForm.subcategory}
                     onChange={(e) => setNewItemForm({ ...newItemForm, subcategory: e.target.value })}
-                    disabled={!!newItemForm.inventoryItemId || (!newItemForm.category && !newItemForm.newCategory)}
+                    disabled={!!newItemForm.inventoryItemId || !newItemForm.category || !!newItemForm.newSubcategory.trim()}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
                   >
                     <option value="">Select subcategory</option>
@@ -703,8 +722,9 @@ export default function PurchaseOrdersView({
                       type="text"
                       value={newItemForm.newSubcategory}
                       onChange={(e) => setNewItemForm({ ...newItemForm, newSubcategory: e.target.value })}
-                      className="w-full mt-2 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                      placeholder="…or type a new subcategory"
+                      disabled={!!newItemForm.subcategory}
+                      className="w-full mt-2 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
+                      placeholder={newItemForm.subcategory ? 'Using selected subcategory' : '…or type a new subcategory'}
                     />
                   )}
                 </div>
@@ -776,7 +796,7 @@ export default function PurchaseOrdersView({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit Cost (₱) *</label>
-                  <input type="number" min="0" step="0.01" value={newItemForm.unitPrice} onChange={(e) => setNewItemForm({ ...newItemForm, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="What you pay the supplier" />
+                  <input type="number" min="0" step="0.01" value={newItemForm.unitPrice || ''} onChange={(e) => setNewItemForm({ ...newItemForm, unitPrice: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="What you pay the supplier" />
                 </div>
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">
@@ -786,7 +806,7 @@ export default function PurchaseOrdersView({
                     type="number"
                     min="0"
                     step="0.01"
-                    value={newItemForm.sellingPrice}
+                    value={newItemForm.sellingPrice || ''}
                     onChange={(e) => setNewItemForm({ ...newItemForm, sellingPrice: parseFloat(e.target.value) || 0 })}
                     disabled={!!newItemForm.inventoryItemId}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
@@ -802,7 +822,7 @@ export default function PurchaseOrdersView({
                   <input
                     type="number"
                     min="0"
-                    value={newItemForm.reorderPoint}
+                    value={newItemForm.reorderPoint || ''}
                     onChange={(e) => setNewItemForm({ ...newItemForm, reorderPoint: parseFloat(e.target.value) || 0 })}
                     disabled={!!newItemForm.inventoryItemId}
                     className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E] disabled:bg-[#F8FAFB] disabled:text-[#6b7280]"
@@ -820,7 +840,7 @@ export default function PurchaseOrdersView({
             </div>
             <div className="flex gap-3 mt-6">
               <button onClick={() => setShowNewItemModal(false)} className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors">Cancel</button>
-              <button onClick={handleAddItemToPO} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors">Add to Order</button>
+              <button onClick={handleAddItemToPO} disabled={!canAddItem} className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">Add to Order</button>
             </div>
           </div>
         </div>

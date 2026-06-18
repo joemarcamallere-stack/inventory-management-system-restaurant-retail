@@ -37,6 +37,8 @@ export type ReceiptRecord = {
   receivedDate: string;
   receivedBy: string;
   status: string; // module-specific label
+  // Parseable date (ISO or YYYY-MM-DD) used for time-range filtering.
+  receivedAt?: string;
   totalAccepted: number;
   totalRejected: number;
   lines: Array<{
@@ -121,6 +123,8 @@ export function GoodsReceived({ config }: { config: ResolvedReceivingConfig }) {
   } = config;
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [outcomeFilter, setOutcomeFilter] = useState<'all' | 'accepted' | 'rejected'>('all');
+  const [monthsFilter, setMonthsFilter] = useState<'all' | '1' | '3' | '6' | '12'>('all');
   const [selected, setSelected] = useState<PendingReceipt | null>(null);
   const [drafts, setDrafts] = useState<Record<string, LineDraft>>({});
   const [saving, setSaving] = useState(false);
@@ -139,10 +143,27 @@ export function GoodsReceived({ config }: { config: ResolvedReceivingConfig }) {
 
   const filteredHistory = history.filter((r) => {
     const q = searchQuery.toLowerCase();
-    return (
-      r.orderNumber.toLowerCase().includes(q) ||
-      r.supplier.toLowerCase().includes(q)
-    );
+    const matchesSearch =
+      r.orderNumber.toLowerCase().includes(q) || r.supplier.toLowerCase().includes(q);
+
+    const matchesOutcome =
+      outcomeFilter === 'all'
+        ? true
+        : outcomeFilter === 'accepted'
+          ? r.totalRejected === 0
+          : r.totalRejected > 0;
+
+    let matchesMonths = true;
+    if (monthsFilter !== 'all' && r.receivedAt) {
+      const received = new Date(r.receivedAt);
+      if (!Number.isNaN(received.getTime())) {
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - Number(monthsFilter));
+        matchesMonths = received >= cutoff;
+      }
+    }
+
+    return matchesSearch && matchesOutcome && matchesMonths;
   });
 
   const openInspection = (po: PendingReceipt) => {
@@ -352,6 +373,35 @@ export function GoodsReceived({ config }: { config: ResolvedReceivingConfig }) {
         </div>
       )}
 
+      {/* Receiving history + filters */}
+      <div className="flex flex-col gap-3 mb-4 sm:flex-row sm:items-center sm:justify-between">
+        <h3 className="text-[16px] font-semibold text-[#323B42]">Receiving History</h3>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-[13px] text-[#6b7280]">Outcome</label>
+          <select
+            value={outcomeFilter}
+            onChange={(e) => setOutcomeFilter(e.target.value as typeof outcomeFilter)}
+            className="px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[13px] bg-white focus:outline-none focus:border-[#007A5E]"
+          >
+            <option value="all">All</option>
+            <option value="accepted">Fully Accepted</option>
+            <option value="rejected">With Rejections</option>
+          </select>
+          <label className="text-[13px] text-[#6b7280] ml-1">Period</label>
+          <select
+            value={monthsFilter}
+            onChange={(e) => setMonthsFilter(e.target.value as typeof monthsFilter)}
+            className="px-3 py-1.5 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[13px] bg-white focus:outline-none focus:border-[#007A5E]"
+          >
+            <option value="all">All time</option>
+            <option value="1">Last month</option>
+            <option value="3">Last 3 months</option>
+            <option value="6">Last 6 months</option>
+            <option value="12">Last 12 months</option>
+          </select>
+        </div>
+      </div>
+
       {/* History */}
       <div className="space-y-4">
         {loading ? (
@@ -363,7 +413,9 @@ export function GoodsReceived({ config }: { config: ResolvedReceivingConfig }) {
             <PackageCheck className="size-16 text-[#d1d5dc] mx-auto mb-4" />
             <p className="text-[16px] text-[#323B42] font-medium">No receipts found</p>
             <p className="text-[14px] text-[#6b7280] mt-1">
-              Complete a quality check to see received goods here
+              {history.length > 0
+                ? 'No receipts match the current filters — try a different outcome or period.'
+                : 'Complete a quality check to see received goods here'}
             </p>
           </div>
         ) : (

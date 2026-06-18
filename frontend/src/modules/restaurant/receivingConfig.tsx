@@ -74,6 +74,7 @@ export function useRestaurantReceivingConfig(): ResolvedReceivingConfig {
       orderNumber: g.id,
       supplier: g.supplier ?? '',
       receivedDate: g.receivedDate ?? '',
+      receivedAt: g.receivedDate ?? undefined,
       receivedBy: g.receivedBy ?? '',
       status: g.status,
       totalAccepted: lines.reduce((s: number, l: { acceptedQty: number }) => s + l.acceptedQty, 0),
