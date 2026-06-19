@@ -1,0 +1,52 @@
+# POS/IMS ownership boundaries.
+#
+# Before enabling branch protection, create these GitHub teams or replace them
+# with the exact users/teams that should review each area:
+#   @joemarcamallere-stack/ims-team
+#   @joemarcamallere-stack/pos-team
+#
+# Rule intent:
+# - IMS team owns backend, database, auth, shared API contracts, and existing IMS modules.
+# - POS team owns POS frontend workflow/screens.
+# - Shared POS/API surfaces require both teams.
+
+# Default ownership
+* @joemarcamallere-stack/ims-team
+
+# Backend/data/platform: IMS-owned
+/backend/ @joemarcamallere-stack/ims-team
+/backend/prisma/ @joemarcamallere-stack/ims-team
+
+# App shell and shared API contracts: IMS-owned, POS review when POS paths are affected
+/frontend/src/app/ @joemarcamallere-stack/ims-team
+/frontend/src/app/api/ @joemarcamallere-stack/ims-team @joemarcamallere-stack/pos-team
+
+# POS frontend workspaces: POS-owned
+/frontend/src/modules/retail/pos/ @joemarcamallere-stack/pos-team
+/frontend/src/modules/restaurant/pos/ @joemarcamallere-stack/pos-team
+
+# POS reports are POS-facing but depend on IMS report contracts
+/frontend/src/modules/retail/reports/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+/frontend/src/modules/restaurant/reports/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+
+# Shared POS/receipt/money utilities require both teams
+/frontend/src/modules/shared/pos/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+/frontend/src/modules/shared/receipts/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+/frontend/src/modules/shared/money/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+
+# Domain hooks wrap backend contracts; both teams review POS-sensitive changes
+/frontend/src/modules/lib/retail/ @joemarcamallere-stack/ims-team @joemarcamallere-stack/pos-team
+/frontend/src/modules/lib/restaurant/ @joemarcamallere-stack/ims-team @joemarcamallere-stack/pos-team
+
+# Existing non-POS retail/restaurant IMS screens remain IMS-owned
+/frontend/src/modules/retail/ @joemarcamallere-stack/ims-team
+/frontend/src/modules/restaurant/ @joemarcamallere-stack/ims-team
+
+# Re-assert POS ownership after broader module rules
+/frontend/src/modules/retail/pos/ @joemarcamallere-stack/pos-team
+/frontend/src/modules/restaurant/pos/ @joemarcamallere-stack/pos-team
+/frontend/src/modules/retail/reports/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+/frontend/src/modules/restaurant/reports/ @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team
+
+# Architecture and migration docs require both teams
+/docs/pos-* @joemarcamallere-stack/pos-team @joemarcamallere-stack/ims-team

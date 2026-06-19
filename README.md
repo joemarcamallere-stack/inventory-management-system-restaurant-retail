@@ -10,6 +10,23 @@ Originally bootstrapped from a Figma prototype (https://www.figma.com/design/A67
 - **Backend** — NestJS modular monolith, one module per domain (`inventory`, `sales`, `purchase-orders`, `transfers`, `recipes`, `kitchen-orders`, `bundles`, `adjustments`, etc.), backed by **Prisma ORM** over PostgreSQL. Auth is JWT-based with role (`roles.guard`) and business-module (`business-modules.guard`) access control.
 - **Frontend** — React + Vite SPA. `app/` holds the shell (routing, session, API client); `modules/restaurant/` and `modules/retail/` hold the per-vertical screens, switched at runtime based on the logged-in user's licensed modules.
 
+## POS migration
+
+POS is integrated into this IMS app, not deployed as a separate Bukolabs runtime. IMS owns the backend, Prisma schema, auth/session model, API contracts, stock ledger, reports, and app shell. Bukolabs-POS remains a workflow/UI reference only.
+
+The POS frontend now has dedicated module workspaces:
+
+- Restaurant POS: `restaurant-pos-dashboard`, `restaurant-create-order`, `restaurant-payment`, `restaurant-receipt`, `restaurant-order-list`, `restaurant-kitchen-queue`, table management, reports, and settings.
+- Retail POS: `pos-dashboard`, `retail-create-order`, `retail-order-list`, `retail-thermal-receipt`, reports, and settings.
+
+The production transaction path is:
+
+```txt
+POSOrder -> Payment -> Receipt -> Sale -> StockMovement
+```
+
+Restaurant orders also connect to dining tables and POS-linked kitchen tickets. Store and receipt settings are stored through neutral `BusinessSetting` and `POSSetting` models. SuperAdmin is intentionally deferred until the cross-business tenancy model is discussed and approved.
+
 ## Running the code
 
 ### Prerequisites

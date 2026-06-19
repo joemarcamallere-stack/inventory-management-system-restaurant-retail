@@ -1,24 +1,43 @@
 import type {
   ApiBundle,
   ApiCategory,
+  ApiDiningTable,
   ApiGoodsReceipt,
   ApiInventoryItem,
   ApiKitchenOrder,
   ApiLocation,
+  ApiBusinessSetting,
+  ApiPayment,
+  ApiPOSOrder,
+  ApiPOSSetting,
+  ApiPeriodReportQuery,
   ApiPurchaseOrder,
   ApiRecipe,
+  ApiReceipt,
+  ApiReportQuery,
+  ApiSalesByCashier,
   ApiRestaurantSetting,
   ApiSale,
+  ApiSalesByItem,
+  ApiSalesByLocation,
+  ApiSalesByOrderType,
+  ApiSalesByPaymentMethod,
+  ApiSalesByPeriodPoint,
+  ApiSalesSummary,
   ApiStockMovement,
   ApiSupplier,
+  ApiTopReportQuery,
   ApiTransfer,
   ApiUser,
   BusinessModule,
+  DiningTableStatus,
   KitchenOrderStatus,
+  PaymentStatus,
+  POSOrderStatus,
   RestaurantSettingKey,
 } from './domainTypes';
 
-export type { KitchenOrderStatus, RestaurantSettingKey } from './domainTypes';
+export type { DiningTableStatus, KitchenOrderStatus, RestaurantSettingKey } from './domainTypes';
 
 type RequestOptions = Omit<RequestInit, 'credentials'>;
 
@@ -197,6 +216,48 @@ export function updateKitchenOrderStatus(id: string, status: KitchenOrderStatus)
   });
 }
 
+export function getDiningTables(params?: {
+  locationId?: string;
+  status?: DiningTableStatus;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.locationId) query.set('locationId', params.locationId);
+  if (params?.status) query.set('status', params.status);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<ApiDiningTable>>(`/api/dining-tables${suffix}`).then((r) => r.data);
+}
+
+export function createDiningTable(data: unknown) {
+  return request<ApiDiningTable>('/api/dining-tables', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateDiningTable(id: string, data: unknown) {
+  return request<ApiDiningTable>(`/api/dining-tables/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateDiningTableStatus(id: string, status: DiningTableStatus) {
+  return request<ApiDiningTable>(`/api/dining-tables/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+export function deleteDiningTable(id: string) {
+  return request<void>(`/api/dining-tables/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export function getLocations() {
   return request<PagedResponse<ApiLocation>>('/api/locations').then((r) => r.data);
 }
@@ -265,6 +326,31 @@ export function getRestaurantSettings() {
 
 export function upsertRestaurantSetting(key: RestaurantSettingKey, value: unknown) {
   return request<ApiRestaurantSetting>(`/api/restaurant-settings/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
+export function getBusinessSettings() {
+  return request<ApiBusinessSetting[]>('/api/business-settings');
+}
+
+export function upsertBusinessSetting(key: string, value: unknown) {
+  return request<ApiBusinessSetting>(`/api/business-settings/${key}`, {
+    method: 'PUT',
+    body: JSON.stringify({ value }),
+  });
+}
+
+export function getPOSSettings(params?: { module?: BusinessModule }) {
+  const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<ApiPOSSetting[]>(`/api/pos-settings${suffix}`);
+}
+
+export function upsertPOSSetting(module: BusinessModule, key: string, value: unknown) {
+  return request<ApiPOSSetting>(`/api/pos-settings/${module}/${key}`, {
     method: 'PUT',
     body: JSON.stringify({ value }),
   });
@@ -431,6 +517,176 @@ export function createSale(data: unknown) {
 
 export function refundSale(id: string, refundReason: string, module?: BusinessModule) {
   return request<ApiSale>(`/api/sales/${id}/refund${moduleSuffix(module)}`, { method: 'PATCH', body: JSON.stringify({ refundReason }) });
+}
+
+// POS Orders
+
+export function getPOSOrders(params?: {
+  module?: BusinessModule;
+  status?: string;
+  paymentStatus?: string;
+  locationId?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
+  if (params?.status) query.set('status', params.status);
+  if (params?.paymentStatus) query.set('paymentStatus', params.paymentStatus);
+  if (params?.locationId) query.set('locationId', params.locationId);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<ApiPOSOrder>>(`/api/pos-orders${suffix}`).then((r) => r.data);
+}
+
+export function getPOSOrder(id: string, module?: BusinessModule) {
+  return request<ApiPOSOrder>(`/api/pos-orders/${id}${moduleSuffix(module)}`);
+}
+
+export function createPOSOrder(data: unknown) {
+  return request<ApiPOSOrder>('/api/pos-orders', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updatePOSOrderStatus(id: string, status: POSOrderStatus, module?: BusinessModule, notes?: string) {
+  return request<ApiPOSOrder>(`/api/pos-orders/${id}/status${moduleSuffix(module)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status, notes }),
+  });
+}
+
+export function voidPOSOrder(id: string, voidReason: string, module?: BusinessModule) {
+  return request<ApiPOSOrder>(`/api/pos-orders/${id}/void${moduleSuffix(module)}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ voidReason }),
+  });
+}
+
+export function completePOSOrderPayment(
+  id: string,
+  data: { paymentMethod: string; amountPaid: number; receiptData?: unknown },
+  module?: BusinessModule,
+) {
+  return request<ApiPOSOrder>(`/api/pos-orders/${id}/complete-payment${moduleSuffix(module)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// Payments
+
+export function getPayments(params?: {
+  module?: BusinessModule;
+  method?: string;
+  status?: PaymentStatus;
+  saleId?: string;
+  posOrderId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
+  if (params?.method) query.set('method', params.method);
+  if (params?.status) query.set('status', params.status);
+  if (params?.saleId) query.set('saleId', params.saleId);
+  if (params?.posOrderId) query.set('posOrderId', params.posOrderId);
+  if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) query.set('dateTo', params.dateTo);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<ApiPayment>>(`/api/payments${suffix}`).then((r) => r.data);
+}
+
+export function getPayment(id: string, module?: BusinessModule) {
+  return request<ApiPayment>(`/api/payments/${id}${moduleSuffix(module)}`);
+}
+
+// Receipts
+
+export function getReceipts(params?: {
+  module?: BusinessModule;
+  saleId?: string;
+  posOrderId?: string;
+  paymentId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.module) query.set('module', params.module);
+  if (params?.saleId) query.set('saleId', params.saleId);
+  if (params?.posOrderId) query.set('posOrderId', params.posOrderId);
+  if (params?.paymentId) query.set('paymentId', params.paymentId);
+  if (params?.dateFrom) query.set('dateFrom', params.dateFrom);
+  if (params?.dateTo) query.set('dateTo', params.dateTo);
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.limit) query.set('limit', String(params.limit));
+  const suffix = query.toString() ? `?${query.toString()}` : '';
+  return request<PagedResponse<ApiReceipt>>(`/api/receipts${suffix}`).then((r) => r.data);
+}
+
+export function getReceipt(id: string, module?: BusinessModule) {
+  return request<ApiReceipt>(`/api/receipts/${id}${moduleSuffix(module)}`);
+}
+
+export function markReceiptPrinted(id: string, module?: BusinessModule) {
+  return request<ApiReceipt>(`/api/receipts/${id}/printed${moduleSuffix(module)}`, {
+    method: 'PATCH',
+  });
+}
+
+// Reports
+
+function reportQuerySuffix(params?: ApiReportQuery | ApiPeriodReportQuery | ApiTopReportQuery) {
+  const query = new URLSearchParams();
+  if (params?.from) query.set('from', params.from);
+  if (params?.to) query.set('to', params.to);
+  if (params?.locationId) query.set('locationId', params.locationId);
+  if (params?.module) query.set('module', params.module);
+  if (params?.cashierId) query.set('cashierId', params.cashierId);
+  if (params?.status) query.set('status', params.status);
+  if ('granularity' in (params ?? {}) && params?.granularity) {
+    query.set('granularity', params.granularity);
+  }
+  if ('limit' in (params ?? {}) && params?.limit) {
+    query.set('limit', String(params.limit));
+  }
+  return query.toString() ? `?${query.toString()}` : '';
+}
+
+export function getSalesSummary(params?: ApiReportQuery) {
+  return request<ApiSalesSummary>(`/api/reports/sales-summary${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByPeriod(params?: ApiPeriodReportQuery) {
+  return request<ApiSalesByPeriodPoint[]>(`/api/reports/sales-by-period${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByPaymentMethod(params?: ApiReportQuery) {
+  return request<ApiSalesByPaymentMethod[]>(`/api/reports/sales-by-payment-method${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByItem(params?: ApiTopReportQuery) {
+  return request<ApiSalesByItem[]>(`/api/reports/sales-by-item${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByLocation(params?: ApiReportQuery) {
+  return request<ApiSalesByLocation[]>(`/api/reports/sales-by-location${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByCashier(params?: ApiReportQuery) {
+  return request<ApiSalesByCashier[]>(`/api/reports/sales-by-cashier${reportQuerySuffix(params)}`);
+}
+
+export function getSalesByOrderType(params?: ApiReportQuery) {
+  return request<ApiSalesByOrderType[]>(`/api/reports/sales-by-order-type${reportQuerySuffix(params)}`);
 }
 
 // ─── Adjustments ─────────────────────────────────────────────────────────────

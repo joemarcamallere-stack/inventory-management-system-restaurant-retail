@@ -129,7 +129,7 @@ export class KitchenOrdersService {
         );
       }
 
-      if (status === KitchenOrderStatus.COMPLETED) {
+      if (status === KitchenOrderStatus.COMPLETED && !order.posOrderId) {
         const recipe = await this.loadRecipeForCompletion(
           tx,
           order.recipeId,
@@ -417,5 +417,6 @@ export class KitchenOrdersService {
     location: { select: { id: true, name: true } },
     table: { select: { id: true, tableNumber: true } },
     sale: { select: { id: true, transactionNumber: true } },
+    posOrder: { select: { id: true, orderNumber: true, status: true, paymentStatus: true } },
   };
 }

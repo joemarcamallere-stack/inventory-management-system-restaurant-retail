@@ -199,21 +199,63 @@ export class SalesService {
     return this.prisma.$transaction(async (tx) => {
       const sale = await tx.sale.findFirst({
         where: { id, businessId, module },
-        include: { items: true },
+        include: {
+          items: true,
+          posOrder: {
+            include: {
+              items: true,
+            },
+          },
+        },
       });
       if (!sale) throw new NotFoundException(`Sale #${id} not found`);
       if (sale.status !== 'COMPLETED') {
         throw new BadRequestException('Only COMPLETED sales can be refunded');
       }
 
-      const itemIds = sale.items.map((i) => i.inventoryItemId);
+      const recipeBackedOrderItems = sale.posOrder?.items.filter((item) => item.recipeId && !item.inventoryItemId) ?? [];
+      const recipeMenuItemIds = recipeBackedOrderItems.length > 0
+        ? new Set(
+            (
+              await tx.recipe.findMany({
+                where: {
+                  id: { in: recipeBackedOrderItems.map((item) => item.recipeId!) },
+                  businessId,
+                },
+                select: { menuItemId: true },
+              })
+            )
+              .map((recipe) => recipe.menuItemId)
+              .filter((menuItemId): menuItemId is string => Boolean(menuItemId)),
+          )
+        : new Set<string>();
+
+      const restockSaleItems = sale.items.filter(
+        (item) => !recipeMenuItemIds.has(item.inventoryItemId),
+      );
+      const recipeConsumptionMovements = sale.posOrder
+        ? await tx.stockMovement.findMany({
+            where: {
+              businessId,
+              module,
+              type: 'RECIPE_CONSUMPTION',
+              referenceType: 'POS_ORDER',
+              referenceId: sale.posOrder.id,
+            },
+          })
+        : [];
+
+      const itemIds = Array.from(new Set([
+        ...restockSaleItems.map((i) => i.inventoryItemId),
+        ...recipeConsumptionMovements.map((movement) => movement.itemId),
+      ]));
       await tx.$queryRaw`
         SELECT id FROM "InventoryItem"
         WHERE id = ANY(${itemIds}::uuid[])
         FOR UPDATE
       `;
 
-      for (const saleItem of sale.items) {
+      for (const saleItem of restockSaleItems) {
         const item = await tx.inventoryItem.findUnique({ where: { id: saleItem.inventoryItemId } });
         if (!item) continue;
 
@@ -242,13 +284,52 @@ export class SalesService {
         });
       }
 
+      for (const movement of recipeConsumptionMovements) {
+        const item = await tx.inventoryItem.findUnique({ where: { id: movement.itemId } });
+        if (!item) continue;
+
+        const previousQuantity = item.quantity;
+        const newQuantity = previousQuantity + movement.quantity;
+
+        await tx.inventoryItem.update({ where: { id: item.id }, data: { quantity: newQuantity } });
+
+        await tx.stockMovement.create({
+          data: {
+            type: 'VOID_RESTOCK',
+            quantity: movement.quantity,
+            previousQuantity,
+            newQuantity,
+            unit: item.unit ?? movement.unit,
+            reason: refundReason,
+            referenceType: 'SALE',
+            referenceId: sale.id,
+            notes: `Recipe refund reversal for sale ${sale.transactionNumber}`,
+            itemId: item.id,
+            locationId: movement.locationId,
+            businessId,
+            module: sale.module,
+            createdById: refundedById,
+          },
+        });
+      }
+
       const result = await tx.sale.updateMany({
         where: { id, businessId, module, status: 'COMPLETED' },
-        data: { status: 'REFUNDED', refundReason },
+        data: { status: 'REFUNDED', refundReason, refundedAt: new Date() },
       });
       if (result.count === 0) {
         throw new NotFoundException(`Sale #${id} not found`);
       }
+      if (sale.posOrder) {
+        await tx.pOSOrder.update({
+          where: { id: sale.posOrder.id },
+          data: { paymentStatus: 'REFUNDED' },
+        });
+      }
+      await tx.payment.updateMany({
+        where: { saleId: sale.id, businessId },
+        data: { status: 'REFUNDED' },
+      });
       return tx.sale.findFirstOrThrow({
         where: { id, businessId, module },
         include: this.saleInclude,

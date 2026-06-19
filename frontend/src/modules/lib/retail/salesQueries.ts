@@ -40,6 +40,12 @@ export function useRefundRetailSaleMutation() {
   return useRetailMutation(
     ({ id, reason }: { id: string; reason: string }) =>
       refundSale(id, reason, 'RETAIL'),
-    [retailQueryKeys.inventory, retailQueryKeys.sales],
+    [
+      retailQueryKeys.inventory,
+      retailQueryKeys.sales,
+      retailQueryKeys.posOrders,
+      retailQueryKeys.payments,
+      retailQueryKeys.receipts,
+    ],
   );
 }

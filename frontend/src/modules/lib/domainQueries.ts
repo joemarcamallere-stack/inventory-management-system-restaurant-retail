@@ -7,34 +7,68 @@ import {
 } from '@tanstack/react-query';
 import {
   getBundles,
+  getDiningTables,
   getGoodsReceipts,
   getInventory,
   getKitchenOrders,
   getLocations,
+  getBusinessSettings,
+  getPayments,
+  getPOSOrders,
+  getPOSSettings,
   getPurchaseOrders,
+  getReceipts,
   getRecipes,
   getRestaurantSettings,
+  getSalesByCashier,
+  getSalesByItem,
+  getSalesByLocation,
+  getSalesByOrderType,
+  getSalesByPaymentMethod,
+  getSalesByPeriod,
+  getSalesSummary,
   getSales,
   getStockMovements,
   getSuppliers,
   getTransfers,
   getUsers,
+  upsertBusinessSetting,
+  upsertPOSSetting,
   type KitchenOrderStatus,
+  type DiningTableStatus,
 } from '../../app/api/client';
 import type {
   ApiBundle,
+  ApiBusinessSetting,
+  ApiDiningTable,
   ApiGoodsReceipt,
   ApiInventoryItem,
   ApiKitchenOrder,
   ApiLocation,
+  ApiPayment,
+  ApiPOSOrder,
+  ApiPOSSetting,
+  ApiPeriodReportQuery,
   ApiPurchaseOrder,
   ApiRecipe,
+  ApiReceipt,
+  ApiReportQuery,
   ApiSale,
+  ApiSalesByCashier,
+  ApiSalesByItem,
+  ApiSalesByLocation,
+  ApiSalesByOrderType,
+  ApiSalesByPaymentMethod,
+  ApiSalesByPeriodPoint,
+  ApiSalesSummary,
   ApiStockMovement,
   ApiSupplier,
+  ApiTopReportQuery,
   ApiTransfer,
   ApiUser,
   BusinessModule,
+  PaymentStatus,
+  POSOrderStatus,
 } from '../../app/api/domainTypes';
 
 export const domainQueryKeys = {
@@ -50,7 +84,14 @@ export const domainQueryKeys = {
   bundles: ['bundles'] as const,
   recipes: ['recipes'] as const,
   kitchenOrders: ['kitchen-orders'] as const,
+  diningTables: ['dining-tables'] as const,
   restaurantSettings: ['restaurant-settings'] as const,
+  businessSettings: ['business-settings'] as const,
+  posSettings: ['pos-settings'] as const,
+  posOrders: ['pos-orders'] as const,
+  payments: ['payments'] as const,
+  receipts: ['receipts'] as const,
+  reports: ['reports'] as const,
 };
 
 const domainInvalidationDependencies = new Map<string, QueryKey[]>([
@@ -81,13 +122,27 @@ const domainInvalidationDependencies = new Map<string, QueryKey[]>([
   ['transfers', [domainQueryKeys.inventory, domainQueryKeys.stockMovements]],
   ['stock-movements', [domainQueryKeys.inventory]],
   ['sales', [domainQueryKeys.inventory, domainQueryKeys.stockMovements]],
+  ['pos-orders', [
+    domainQueryKeys.sales,
+    domainQueryKeys.inventory,
+    domainQueryKeys.stockMovements,
+    domainQueryKeys.payments,
+    domainQueryKeys.receipts,
+    domainQueryKeys.reports,
+    domainQueryKeys.diningTables,
+  ]],
+  ['payments', [domainQueryKeys.sales, domainQueryKeys.posOrders, domainQueryKeys.receipts]],
+  ['receipts', [domainQueryKeys.payments, domainQueryKeys.posOrders]],
+  ['reports', [domainQueryKeys.sales]],
   ['bundles', [domainQueryKeys.inventory]],
   ['recipes', [domainQueryKeys.kitchenOrders]],
   ['kitchen-orders', [
     domainQueryKeys.inventory,
     domainQueryKeys.stockMovements,
     domainQueryKeys.sales,
+    domainQueryKeys.diningTables,
   ]],
+  ['dining-tables', [domainQueryKeys.posOrders, domainQueryKeys.kitchenOrders]],
 ]);
 
 function expandInvalidationKeys(queryKeys: QueryKey[]) {
@@ -222,6 +277,163 @@ export function useSalesQuery<TData = ApiSale[]>(
   });
 }
 
+export function usePOSOrdersQuery<TData = ApiPOSOrder[]>(
+  params?: {
+    module?: BusinessModule;
+    status?: string;
+    paymentStatus?: string;
+    locationId?: string;
+    page?: number;
+    limit?: number;
+  },
+  options?: SelectOptions<ApiPOSOrder[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.posOrders, params ?? {}],
+    queryFn: () => getPOSOrders(params),
+    ...options,
+  });
+}
+
+export function usePaymentsQuery<TData = ApiPayment[]>(
+  params?: {
+    module?: BusinessModule;
+    method?: string;
+    status?: PaymentStatus;
+    saleId?: string;
+    posOrderId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  },
+  options?: SelectOptions<ApiPayment[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.payments, params ?? {}],
+    queryFn: () => getPayments(params),
+    ...options,
+  });
+}
+
+export function useReceiptsQuery<TData = ApiReceipt[]>(
+  params?: {
+    module?: BusinessModule;
+    saleId?: string;
+    posOrderId?: string;
+    paymentId?: string;
+    dateFrom?: string;
+    dateTo?: string;
+    page?: number;
+    limit?: number;
+  },
+  options?: SelectOptions<ApiReceipt[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.receipts, params ?? {}],
+    queryFn: () => getReceipts(params),
+    ...options,
+  });
+}
+
+export function useBusinessSettingsQuery<TData = ApiBusinessSetting[]>(
+  options?: SelectOptions<ApiBusinessSetting[], TData>,
+) {
+  return useQuery({
+    queryKey: domainQueryKeys.businessSettings,
+    queryFn: getBusinessSettings,
+    ...options,
+  });
+}
+
+export function usePOSSettingsQuery<TData = ApiPOSSetting[]>(
+  params?: { module?: BusinessModule },
+  options?: SelectOptions<ApiPOSSetting[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.posSettings, params ?? {}],
+    queryFn: () => getPOSSettings(params),
+    ...options,
+  });
+}
+
+export function useSalesSummaryQuery<TData = ApiSalesSummary>(
+  params?: ApiReportQuery,
+  options?: SelectOptions<ApiSalesSummary, TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-summary', params ?? {}],
+    queryFn: () => getSalesSummary(params),
+    ...options,
+  });
+}
+
+export function useSalesByPeriodQuery<TData = ApiSalesByPeriodPoint[]>(
+  params?: ApiPeriodReportQuery,
+  options?: SelectOptions<ApiSalesByPeriodPoint[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-period', params ?? {}],
+    queryFn: () => getSalesByPeriod(params),
+    ...options,
+  });
+}
+
+export function useSalesByPaymentMethodQuery<TData = ApiSalesByPaymentMethod[]>(
+  params?: ApiReportQuery,
+  options?: SelectOptions<ApiSalesByPaymentMethod[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-payment-method', params ?? {}],
+    queryFn: () => getSalesByPaymentMethod(params),
+    ...options,
+  });
+}
+
+export function useSalesByItemQuery<TData = ApiSalesByItem[]>(
+  params?: ApiTopReportQuery,
+  options?: SelectOptions<ApiSalesByItem[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-item', params ?? {}],
+    queryFn: () => getSalesByItem(params),
+    ...options,
+  });
+}
+
+export function useSalesByLocationQuery<TData = ApiSalesByLocation[]>(
+  params?: ApiReportQuery,
+  options?: SelectOptions<ApiSalesByLocation[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-location', params ?? {}],
+    queryFn: () => getSalesByLocation(params),
+    ...options,
+  });
+}
+
+export function useSalesByCashierQuery<TData = ApiSalesByCashier[]>(
+  params?: ApiReportQuery,
+  options?: SelectOptions<ApiSalesByCashier[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-cashier', params ?? {}],
+    queryFn: () => getSalesByCashier(params),
+    ...options,
+  });
+}
+
+export function useSalesByOrderTypeQuery<TData = ApiSalesByOrderType[]>(
+  params?: ApiReportQuery,
+  options?: SelectOptions<ApiSalesByOrderType[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.reports, 'sales-by-order-type', params ?? {}],
+    queryFn: () => getSalesByOrderType(params),
+    ...options,
+  });
+}
+
 export function useBundlesQuery<TData = ApiBundle[]>(
   params?: { status?: string },
   options?: SelectOptions<ApiBundle[], TData>,
@@ -255,6 +467,22 @@ export function useKitchenOrdersQuery<TData = ApiKitchenOrder[]>(
   });
 }
 
+export function useDiningTablesQuery<TData = ApiDiningTable[]>(
+  params?: {
+    locationId?: string;
+    status?: DiningTableStatus;
+    page?: number;
+    limit?: number;
+  },
+  options?: SelectOptions<ApiDiningTable[], TData>,
+) {
+  return useQuery({
+    queryKey: [...domainQueryKeys.diningTables, params ?? {}],
+    queryFn: () => getDiningTables(params),
+    ...options,
+  });
+}
+
 export function useRestaurantSettingsQuery<TData = Awaited<ReturnType<typeof getRestaurantSettings>>>(
   options?: SelectOptions<Awaited<ReturnType<typeof getRestaurantSettings>>, TData>,
 ) {
@@ -280,6 +508,22 @@ export function useDomainMutation<TData, TVariables>(
       );
     },
   });
+}
+
+export function useUpsertBusinessSettingMutation() {
+  return useDomainMutation(
+    ({ key, value }: { key: string; value: unknown }) =>
+      upsertBusinessSetting(key, value),
+    [domainQueryKeys.businessSettings],
+  );
+}
+
+export function useUpsertPOSSettingMutation() {
+  return useDomainMutation(
+    ({ module, key, value }: { module: BusinessModule; key: string; value: unknown }) =>
+      upsertPOSSetting(module, key, value),
+    [domainQueryKeys.posSettings],
+  );
 }
 
 export function useInvalidateDomains() {

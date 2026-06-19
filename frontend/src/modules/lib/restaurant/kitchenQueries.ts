@@ -59,6 +59,7 @@ export function useRestaurantRecipesQuery() {
           targetFoodCost: recipe.targetFoodCost ?? 35,
           suggestedSellingPrice: recipe.sellingPrice ?? 0,
           sellingPrice: recipe.sellingPrice ?? 0,
+          menuItemId: recipe.menuItemId,
           grossMargin: 0,
           isActive: recipe.isActive,
           modifiers: Array.isArray((recipe as any).modifiers)
@@ -90,6 +91,9 @@ export function useRestaurantKitchenOrdersQuery() {
         orderedAt: order.createdAt,
         completedBy: order.completedBy?.email ?? 'shared-backend',
         notes: order.notes ?? '',
+        posOrderId: order.posOrderId,
+        posOrderNumber: order.posOrder?.orderNumber,
+        paymentStatus: order.posOrder?.paymentStatus,
         modifiers: parseOrderModifiers(order.notes),
         voidReason: order.voidReason,
         voidedAt: order.voidedAt,

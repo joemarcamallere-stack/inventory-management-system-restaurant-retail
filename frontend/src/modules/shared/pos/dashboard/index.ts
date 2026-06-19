@@ -1,0 +1,1 @@
+export { POSDashboard } from './POSDashboard';

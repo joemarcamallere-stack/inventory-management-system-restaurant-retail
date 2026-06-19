@@ -224,9 +224,80 @@ export interface ApiSale {
   customer?: string | null;
   status: SaleStatus;
   refundReason?: string | null;
+  refundedAt?: string | null;
   items: ApiSaleItem[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export interface ApiReportQuery {
+  from?: string;
+  to?: string;
+  locationId?: string;
+  module?: BusinessModule;
+  cashierId?: string;
+  status?: SaleStatus;
+}
+
+export interface ApiPeriodReportQuery extends ApiReportQuery {
+  granularity?: 'day' | 'week' | 'month';
+}
+
+export interface ApiTopReportQuery extends ApiReportQuery {
+  limit?: number;
+}
+
+export interface ApiSalesSummary {
+  from: string;
+  to: string;
+  grossSales: number;
+  discounts: number;
+  tax: number;
+  netSales: number;
+  transactionCount: number;
+  averageTicket: number;
+  totalRefunds: number;
+  totalVoids: number;
+}
+
+export interface ApiSalesByPeriodPoint {
+  period: string;
+  grossSales: number;
+  refunds: number;
+  netSales: number;
+}
+
+export interface ApiSalesByPaymentMethod {
+  paymentMethod: string;
+  transactionCount: number;
+  grossSales: number;
+}
+
+export interface ApiSalesByItem {
+  inventoryItemId: string;
+  name: string;
+  quantitySold: number;
+  grossSales: number;
+}
+
+export interface ApiSalesByLocation {
+  locationId: string;
+  locationName: string;
+  transactionCount: number;
+  grossSales: number;
+}
+
+export interface ApiSalesByCashier {
+  cashierId?: string | null;
+  cashierName: string;
+  transactionCount: number;
+  grossSales: number;
+}
+
+export interface ApiSalesByOrderType {
+  orderType: POSOrderType;
+  orderCount: number;
+  grossSales: number;
 }
 
 export type BundleStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ACTIVE' | 'INACTIVE';
@@ -319,6 +390,13 @@ export interface ApiKitchenOrder {
   table?: { id: string; tableNumber: string } | null;
   saleId?: string | null;
   sale?: { id: string; transactionNumber: string } | null;
+  posOrderId?: string | null;
+  posOrder?: {
+    id: string;
+    orderNumber: string;
+    status: POSOrderStatus;
+    paymentStatus: POSPaymentStatus;
+  } | null;
   completedBy?: ApiActor | null;
   createdAt: string;
   updatedAt?: string;
@@ -340,6 +418,132 @@ export type RestaurantSettingKey =
 export interface ApiRestaurantSetting {
   key: RestaurantSettingKey;
   value: unknown;
+}
+
+export interface ApiBusinessSetting {
+  key: string;
+  value: unknown;
+}
+
+export interface ApiPOSSetting {
+  key: string;
+  value: unknown;
+  module: BusinessModule;
+}
+
+export type POSOrderType = 'DINE_IN' | 'TAKEOUT' | 'MIXED' | 'RETAIL';
+export type POSOrderStatus =
+  | 'PENDING'
+  | 'PREPARING'
+  | 'READY'
+  | 'SERVED'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'VOIDED';
+export type POSPaymentStatus =
+  | 'NOT_PAID'
+  | 'PAID'
+  | 'REFUNDED'
+  | 'PARTIALLY_REFUNDED'
+  | 'VOIDED';
+export type PaymentStatus =
+  | 'PENDING'
+  | 'PAID'
+  | 'REFUNDED'
+  | 'PARTIALLY_REFUNDED'
+  | 'VOIDED';
+
+export interface ApiPOSOrderItem {
+  id: string;
+  inventoryItemId?: string | null;
+  recipeId?: string | null;
+  name: string;
+  category?: string | null;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  itemType?: string | null;
+  notes?: string | null;
+  customizations?: unknown;
+}
+
+export interface ApiPayment {
+  id: string;
+  paymentNumber: string;
+  method: string;
+  amountDue: number;
+  amountPaid: number;
+  change: number;
+  status: PaymentStatus;
+  saleId?: string | null;
+  sale?: { id: string; transactionNumber: string; module: BusinessModule; status: SaleStatus } | null;
+  posOrderId?: string | null;
+  posOrder?: {
+    id: string;
+    orderNumber: string;
+    orderType: POSOrderType;
+    module: BusinessModule;
+    status: POSOrderStatus;
+  } | null;
+  processedBy?: ApiActor | null;
+  receipts?: Pick<ApiReceipt, 'id' | 'receiptNumber' | 'printedAt' | 'createdAt'>[];
+  paidAt: string;
+  createdAt?: string;
+}
+
+export interface ApiReceipt {
+  id: string;
+  receiptNumber: string;
+  receiptData: unknown;
+  saleId?: string | null;
+  sale?: { id: string; transactionNumber: string; module: BusinessModule; status: SaleStatus } | null;
+  posOrderId?: string | null;
+  posOrder?: {
+    id: string;
+    orderNumber: string;
+    orderType: POSOrderType;
+    module: BusinessModule;
+    status: POSOrderStatus;
+  } | null;
+  paymentId?: string | null;
+  payment?: Pick<ApiPayment, 'id' | 'paymentNumber' | 'method' | 'status' | 'amountPaid'> | null;
+  printedAt?: string | null;
+  createdAt: string;
+}
+
+export interface ApiPOSOrder {
+  id: string;
+  orderNumber: string;
+  orderType: POSOrderType;
+  status: POSOrderStatus;
+  paymentStatus: POSPaymentStatus;
+  customerName?: string | null;
+  contactNumber?: string | null;
+  tableName?: string | null;
+  partySize?: number | null;
+  subtotal: number;
+  discount: number;
+  discountType?: string | null;
+  tax: number;
+  serviceCharge: number;
+  total: number;
+  notes?: string | null;
+  voidReason?: string | null;
+  voidedAt?: string | null;
+  completedAt?: string | null;
+  locationId: string;
+  location?: Pick<ApiLocation, 'id' | 'name'>;
+  tableId?: string | null;
+  table?: { id: string; tableNumber: string; status: DiningTableStatus } | null;
+  saleId?: string | null;
+  sale?: { id: string; transactionNumber: string; status: SaleStatus } | null;
+  module: BusinessModule;
+  items: ApiPOSOrderItem[];
+  payments?: ApiPayment[];
+  receipts?: ApiReceipt[];
+  createdBy?: ApiActor | null;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export type DiningTableStatus =

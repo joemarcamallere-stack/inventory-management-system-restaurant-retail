@@ -71,6 +71,50 @@ describe('KitchenOrdersService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('completes POS-linked kitchen tickets without deducting recipe inventory', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([]),
+      kitchenOrder: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'order-1',
+          status: KitchenOrderStatus.READY,
+          recipeId: 'recipe-1',
+          posOrderId: 'pos-order-1',
+        }),
+        update: jest.fn().mockResolvedValue({}),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'order-1',
+          status: KitchenOrderStatus.COMPLETED,
+          posOrderId: 'pos-order-1',
+        }),
+      },
+      recipe: { findFirst: jest.fn() },
+      inventoryItem: { update: jest.fn() },
+      stockMovement: { create: jest.fn() },
+    };
+    const prisma = {
+      $transaction: jest.fn(
+        async (callback: (client: typeof tx) => unknown) => callback(tx),
+      ),
+    };
+    const service = new KitchenOrdersService(prisma as any);
+
+    await service.updateStatus(
+      'order-1',
+      KitchenOrderStatus.COMPLETED,
+      'business-1',
+      'user-1',
+    );
+
+    expect(tx.recipe.findFirst).not.toHaveBeenCalled();
+    expect(tx.inventoryItem.update).not.toHaveBeenCalled();
+    expect(tx.stockMovement.create).not.toHaveBeenCalled();
+    expect(tx.kitchenOrder.update).toHaveBeenCalledWith({
+      where: { id: 'order-1' },
+      data: { status: KitchenOrderStatus.COMPLETED, completedById: 'user-1' },
+    });
+  });
+
   it('rejects a dining table outside the current business', async () => {
     const tx = {
       location: { findFirst: jest.fn() },

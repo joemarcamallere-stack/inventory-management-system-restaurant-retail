@@ -21,6 +21,12 @@ import { DiningTablesModule } from './dining-tables/dining-tables.module';
 import { CategoriesModule } from './categories/categories.module';
 import { RestaurantSettingsModule } from './restaurant-settings/restaurant-settings.module';
 import { AdjustmentsModule } from './adjustments/adjustments.module';
+import { ReportsModule } from './reports/reports.module';
+import { BusinessSettingsModule } from './business-settings/business-settings.module';
+import { POSSettingsModule } from './pos-settings/pos-settings.module';
+import { POSOrdersModule } from './pos-orders/pos-orders.module';
+import { PaymentsModule } from './payments/payments.module';
+import { ReceiptsModule } from './receipts/receipts.module';
 
 @Module({
   imports: [
@@ -44,6 +50,12 @@ import { AdjustmentsModule } from './adjustments/adjustments.module';
     DiningTablesModule,
     CategoriesModule,
     RestaurantSettingsModule,
+    ReportsModule,
+    BusinessSettingsModule,
+    POSSettingsModule,
+    POSOrdersModule,
+    PaymentsModule,
+    ReceiptsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

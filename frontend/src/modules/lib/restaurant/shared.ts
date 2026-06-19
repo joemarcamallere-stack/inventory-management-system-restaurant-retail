@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryKey } from '@tanstack/react-query';
 import type { RestaurantSettingKey } from '../../../app/api/client';
 import {
   getGoodsReceipts,
@@ -12,6 +13,7 @@ import {
 } from '../../../app/api/client';
 import {
   domainQueryKeys,
+  useDomainMutation,
   useRestaurantSettingsQuery,
 } from '../domainQueries';
 import {
@@ -29,6 +31,19 @@ export const restaurantQueryLoaders = {
   stockMovements: () => getStockMovements({ module: 'RESTAURANT' }),
   users: getUsers,
 };
+
+export const restaurantQueryKeys = {
+  ...domainQueryKeys,
+};
+
+export type RestaurantQueryKey = (typeof restaurantQueryKeys)[keyof typeof restaurantQueryKeys];
+
+export function useRestaurantMutation<TData, TVariables>(
+  mutationFn: (variables: TVariables) => Promise<TData>,
+  invalidateKeys: QueryKey[],
+) {
+  return useDomainMutation(mutationFn, invalidateKeys);
+}
 
 type CategoryHierarchy = Record<string, string[]>;
 

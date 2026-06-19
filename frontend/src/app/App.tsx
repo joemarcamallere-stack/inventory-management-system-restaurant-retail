@@ -27,14 +27,18 @@ const TransfersView = lazy(() => import('../modules/retail/TransfersView'));
 const MultilocationView = lazy(() => import('../modules/retail/MultilocationView'));
 const PurchaseOrdersView = lazy(() => import('../modules/retail/PurchaseOrdersView'));
 const ProductManagementView = lazy(() => import('../modules/retail/ProductManagementView'));
-const POSView = lazy(() => import('../modules/retail/POSView'));
-const SalesHistoryView = lazy(() => import('../modules/retail/SalesHistoryView'));
+const RetailPOSDashboardView = lazy(() => import('../modules/retail/pos/dashboard/POSDashboardView'));
+const RetailPOSSettingsView = lazy(() => import('../modules/retail/pos/settings/POSSettingsView'));
+const RetailCreateOrderView = lazy(() => import('../modules/retail/pos/create-order/RetailCreateOrderView'));
+const RetailOrderListView = lazy(() => import('../modules/retail/pos/order-list/RetailOrderListView'));
+const RetailReceiptView = lazy(() => import('../modules/retail/pos/receipt/RetailReceiptView'));
+const POSView = lazy(() => import('../modules/retail/pos/POSView'));
 const DashboardView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.DashboardView })));
 const StockAlertsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.StockAlertsView })));
 const InventoryView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.InventoryView })));
 const ProductsReceivedView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ProductsReceivedView })));
 const ItemBundlingView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ItemBundlingView })));
-const ReportsView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.ReportsView })));
+const ReportsView = lazy(() => import('../modules/retail/reports/ReportsView'));
 const UserManagementView = lazy(() => import('../modules/retail/RetailViews').then(m => ({ default: m.UserManagementView })));
 const RestaurantDashboard = lazy(() => import('../modules/restaurant/Dashboard').then(m => ({ default: m.Dashboard })));
 const RestaurantStockControl = lazy(() => import('../modules/restaurant/StockControl').then(m => ({ default: m.StockControl })));
@@ -42,12 +46,99 @@ const RestaurantInventory = lazy(() => import('../modules/restaurant/Inventory')
 const RestaurantProductManagement = lazy(() => import('../modules/restaurant/ProductManagement').then(m => ({ default: m.ProductManagement })));
 const RestaurantPurchaseOrders = lazy(() => import('../modules/restaurant/PurchaseOrders').then(m => ({ default: m.PurchaseOrders })));
 const RestaurantGoodsReceived = lazy(() => import('../modules/restaurant/GoodsReceived').then(m => ({ default: m.GoodsReceived })));
-const RestaurantPOSKitchenOrders = lazy(() => import('../modules/restaurant/POSKitchenOrders').then(m => ({ default: m.POSKitchenOrders })));
+const RestaurantPOSDashboardView = lazy(() => import('../modules/restaurant/pos/dashboard/POSDashboardView'));
+const RestaurantPOSSettingsView = lazy(() => import('../modules/restaurant/pos/settings/POSSettingsView'));
+const RestaurantCreateOrderView = lazy(() => import('../modules/restaurant/pos/create-order/CreateOrderView'));
+const RestaurantPaymentView = lazy(() => import('../modules/restaurant/pos/payment/PaymentView'));
+const RestaurantReceiptView = lazy(() => import('../modules/restaurant/pos/receipt/ReceiptView'));
+const RestaurantOrderListView = lazy(() => import('../modules/restaurant/pos/order-list/OrderListView'));
+const RestaurantKitchenQueueView = lazy(() => import('../modules/restaurant/pos/kitchen-queue/KitchenQueueView'));
+const RestaurantTableManagementView = lazy(() => import('../modules/restaurant/pos/tables/TableManagementView'));
+const RestaurantPOSView = lazy(() => import('../modules/restaurant/pos/RestaurantPOSView'));
 const RestaurantRecipeBOM = lazy(() => import('../modules/restaurant/RecipeBOM').then(m => ({ default: m.RecipeBOM })));
 const RestaurantTransfers = lazy(() => import('../modules/restaurant/Transfers').then(m => ({ default: m.Transfers })));
-const RestaurantReports = lazy(() => import('../modules/restaurant/Reports').then(m => ({ default: m.Reports })));
+const RestaurantReports = lazy(() => import('../modules/restaurant/reports/ReportsView'));
 const RestaurantMultiLocation = lazy(() => import('../modules/restaurant/MultiLocation').then(m => ({ default: m.MultiLocation })));
 const RestaurantUserManagement = lazy(() => import('../modules/restaurant/UserManagement').then(m => ({ default: m.UserManagement })));
+
+const retailViewRoles: Partial<Record<ViewType, string[]>> = {
+  dashboard: ['Admin', 'Manager', 'Staff', 'RetailStaff'],
+  'stock-alerts': ['Admin', 'Manager', 'Staff', 'RetailStaff'],
+  inventory: ['Admin', 'Manager', 'Staff', 'RetailStaff'],
+  'product-management': ['Admin', 'Manager'],
+  'pos-dashboard': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'pos-settings': ['Admin', 'Manager'],
+  pos: ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'retail-create-order': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'retail-order-list': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'retail-thermal-receipt': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'sales-history': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
+  'purchase-orders': ['Admin', 'Manager', 'Staff'],
+  'products-received': ['Admin', 'Manager', 'Staff'],
+  'item-bundling': ['Admin', 'Manager'],
+  transfers: ['Admin', 'Manager', 'Staff'],
+  multilocation: ['Admin', 'Manager'],
+  reports: ['Admin', 'Manager'],
+  'user-management': ['Admin'],
+};
+
+const restaurantViewRoles: Partial<Record<ViewType, string[]>> = {
+  'restaurant-dashboard': ['Admin', 'Manager', 'Staff'],
+  'restaurant-ingredients': ['Admin', 'Manager', 'Staff'],
+  'restaurant-menu-items': ['Admin', 'Manager', 'Staff'],
+  'restaurant-recipes': ['Admin', 'Manager', 'Staff'],
+  'restaurant-spoilage': ['Admin', 'Manager', 'Staff'],
+  'restaurant-stock-control': ['Admin', 'Manager', 'Staff'],
+  'restaurant-food-inventory': ['Admin', 'Manager', 'Staff'],
+  'restaurant-product-management': ['Admin'],
+  'restaurant-purchase-orders': ['Admin', 'Manager', 'Staff'],
+  'restaurant-goods-received': ['Admin', 'Manager', 'Staff'],
+  'restaurant-pos-dashboard': ['Admin', 'Manager', 'Staff', 'Cashier', 'KitchenStaff'],
+  'restaurant-pos-settings': ['Admin', 'Manager'],
+  'restaurant-pos-history': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-create-order': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-payment': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-receipt': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-order-list': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-kitchen-queue': ['Admin', 'Manager', 'Staff', 'KitchenStaff'],
+  'restaurant-table-management': ['Admin', 'Manager', 'Staff'],
+  'restaurant-pos': ['Admin', 'Manager', 'Staff', 'Cashier'],
+  'restaurant-kitchen-orders': ['Admin', 'Manager', 'Staff', 'KitchenStaff'],
+  'restaurant-recipe-bom': ['Admin', 'Manager', 'Staff', 'KitchenStaff'],
+  'restaurant-transfers': ['Admin', 'Manager', 'Staff'],
+  'restaurant-reports': ['Admin', 'Manager'],
+  'restaurant-multilocation': ['Admin', 'Manager'],
+  'user-management': ['Admin'],
+};
+
+const retailDefaultViewByRole: Record<string, ViewType> = {
+  Admin: 'dashboard',
+  Manager: 'dashboard',
+  Staff: 'dashboard',
+  RetailStaff: 'retail-create-order',
+  Cashier: 'retail-create-order',
+  KitchenStaff: 'dashboard',
+};
+
+const restaurantDefaultViewByRole: Record<string, ViewType> = {
+  Admin: 'restaurant-dashboard',
+  Manager: 'restaurant-dashboard',
+  Staff: 'restaurant-dashboard',
+  Cashier: 'restaurant-create-order',
+  KitchenStaff: 'restaurant-kitchen-queue',
+  RetailStaff: 'restaurant-dashboard',
+};
+
+function canAccessView(view: ViewType, role: string, module: 'RETAIL' | 'RESTAURANT') {
+  const roles = module === 'RESTAURANT' ? restaurantViewRoles[view] : retailViewRoles[view];
+  return Boolean(roles?.includes(role));
+}
+
+function defaultViewFor(role: string, module: 'RETAIL' | 'RESTAURANT') {
+  return module === 'RESTAURANT'
+    ? restaurantDefaultViewByRole[role] ?? 'restaurant-dashboard'
+    : retailDefaultViewByRole[role] ?? 'dashboard';
+}
 
 export default function App() {
   const { currentUser, isLoggedIn, isRestoringSession, login, logout } = useSession();
@@ -57,6 +148,7 @@ export default function App() {
   const hasBothModules = hasRestaurantModule && hasRetailModule;
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
   const resolvedActiveModule = hasRestaurantModule && !hasRetailModule ? 'RESTAURANT' : activeModule;
+  const currentRole = currentUser?.role ?? 'Staff';
 
   const { data: navInventory = [] } = useRetailInventoryQuery(isLoggedIn && hasRetailModule);
   const retailNavStats = useMemo(
@@ -90,6 +182,16 @@ export default function App() {
     }
   }, [currentView, hasRestaurantModule, hasRetailModule]);
 
+  useEffect(() => {
+    if (!isLoggedIn || !currentUser) return;
+    const module = currentView.startsWith('restaurant-') && hasRestaurantModule
+      ? 'RESTAURANT'
+      : resolvedActiveModule;
+    if (!canAccessView(currentView, currentRole, module)) {
+      navigateToView(defaultViewFor(currentRole, module), true);
+    }
+  }, [currentRole, currentUser, currentView, hasRestaurantModule, isLoggedIn, navigateToView, resolvedActiveModule]);
+
   // Global handler to remove leading zeros from number inputs.
   useEffect(() => {
     const handleNumberInput = (event: Event) => {
@@ -109,7 +211,7 @@ export default function App() {
 
   const switchModule = (module: 'RETAIL' | 'RESTAURANT') => {
     setActiveModule(module);
-    navigateToView(module === 'RESTAURANT' ? 'restaurant-dashboard' : 'dashboard');
+    navigateToView(defaultViewFor(currentRole, module));
   };
 
   const handleLogin = async (email: string, password: string) => {
@@ -152,9 +254,26 @@ export default function App() {
           return <RestaurantPurchaseOrders />;
         case 'restaurant-goods-received':
           return <RestaurantGoodsReceived />;
+        case 'restaurant-pos-dashboard':
+          return <RestaurantPOSDashboardView onNavigate={(view) => navigateToView(view)} />;
+        case 'restaurant-pos-settings':
+          return <RestaurantPOSSettingsView />;
+        case 'restaurant-pos-history':
+        case 'restaurant-order-list':
+          return <RestaurantOrderListView />;
+        case 'restaurant-payment':
+          return <RestaurantPaymentView />;
+        case 'restaurant-receipt':
+          return <RestaurantReceiptView />;
+        case 'restaurant-table-management':
+          return <RestaurantTableManagementView />;
+        case 'restaurant-create-order':
+          return <RestaurantCreateOrderView />;
         case 'restaurant-pos':
+          return <RestaurantPOSView />;
         case 'restaurant-kitchen-orders':
-          return <RestaurantPOSKitchenOrders />;
+        case 'restaurant-kitchen-queue':
+          return <RestaurantKitchenQueueView />;
         case 'restaurant-recipe-bom':
         case 'restaurant-recipes':
           return <RestaurantRecipeBOM />;
@@ -224,60 +343,106 @@ export default function App() {
         <nav className="flex-1 px-6 pb-4 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {resolvedActiveModule === 'RETAIL' && (
             <>
-              <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
-                <DashboardIcon />
-                Dashboard
-              </NavButton>
-              <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
-                <StockAlertsIcon />
-                Stock Alerts
-                {retailNavStockAlerts.length > 0 && (
-                  <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
-                    {retailNavStockAlerts.length}
-                  </span>
-                )}
-              </NavButton>
-              <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
-                <InventoryIcon />
-                Inventory
-                {retailNavStats.totalItems > 0 && (
-                  <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
-                    {retailNavStats.totalItems}
-                  </span>
-                )}
-              </NavButton>
-              <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
-                <ProductManagementIcon />
-                Product Management
-              </NavButton>
-              <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
-                <PurchaseOrdersIcon />
-                Purchase Orders
-              </NavButton>
-              <NavButton active={currentView === 'products-received'} onClick={() => navigateToView('products-received')}>
-                <ProductsReceivedIcon />
-                Products Received
-              </NavButton>
-              <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
-                <ItemBundlingIcon />
-                Item Bundling
-              </NavButton>
-              <NavButton active={currentView === 'sales-history'} onClick={() => navigateToView('sales-history')}>
-                <SalesHistoryIcon />
-                Sales History
-              </NavButton>
-              <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
-                <TransfersIcon />
-                Transfers
-              </NavButton>
-              <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
-                <MultilocationIcon />
-                Multilocation
-              </NavButton>
-              <NavButton active={currentView === 'reports'} onClick={() => navigateToView('reports')}>
-                <ReportsIcon />
-                Reports
-              </NavButton>
+              {canAccessView('dashboard', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
+                  <DashboardIcon />
+                  Dashboard
+                </NavButton>
+              )}
+              {canAccessView('stock-alerts', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
+                  <StockAlertsIcon />
+                  Stock Alerts
+                  {retailNavStockAlerts.length > 0 && (
+                    <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
+                      {retailNavStockAlerts.length}
+                    </span>
+                  )}
+                </NavButton>
+              )}
+              {canAccessView('inventory', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
+                  <InventoryIcon />
+                  Inventory
+                  {retailNavStats.totalItems > 0 && (
+                    <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
+                      {retailNavStats.totalItems}
+                    </span>
+                  )}
+                </NavButton>
+              )}
+              {canAccessView('product-management', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
+                  <ProductManagementIcon />
+                  Product Management
+                </NavButton>
+              )}
+              {canAccessView('pos-dashboard', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'pos-dashboard'} onClick={() => navigateToView('pos-dashboard')}>
+                  <DashboardIcon />
+                  POS Dashboard
+                </NavButton>
+              )}
+              {canAccessView('retail-create-order', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'retail-create-order' || currentView === 'pos'} onClick={() => navigateToView('retail-create-order')}>
+                  <POSIcon />
+                  Create Order
+                </NavButton>
+              )}
+              {canAccessView('pos-settings', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'pos-settings'} onClick={() => navigateToView('pos-settings')}>
+                  <Settings2 className="size-5" />
+                  POS Settings
+                </NavButton>
+              )}
+              {canAccessView('purchase-orders', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
+                  <PurchaseOrdersIcon />
+                  Purchase Orders
+                </NavButton>
+              )}
+              {canAccessView('products-received', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'products-received'} onClick={() => navigateToView('products-received')}>
+                  <ProductsReceivedIcon />
+                  Products Received
+                </NavButton>
+              )}
+              {canAccessView('item-bundling', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
+                  <ItemBundlingIcon />
+                  Item Bundling
+                </NavButton>
+              )}
+              {canAccessView('retail-order-list', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'retail-order-list' || currentView === 'sales-history'} onClick={() => navigateToView('retail-order-list')}>
+                  <SalesHistoryIcon />
+                  Order List
+                </NavButton>
+              )}
+              {canAccessView('retail-thermal-receipt', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'retail-thermal-receipt'} onClick={() => navigateToView('retail-thermal-receipt')}>
+                  <SalesHistoryIcon />
+                  Thermal Receipt
+                </NavButton>
+              )}
+              {canAccessView('transfers', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
+                  <TransfersIcon />
+                  Transfers
+                </NavButton>
+              )}
+              {canAccessView('multilocation', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
+                  <MultilocationIcon />
+                  Multilocation
+                </NavButton>
+              )}
+              {canAccessView('reports', currentRole, 'RETAIL') && (
+                <NavButton active={currentView === 'reports'} onClick={() => navigateToView('reports')}>
+                  <ReportsIcon />
+                  Reports
+                </NavButton>
+              )}
             </>
           )}
 
@@ -335,8 +500,13 @@ export default function App() {
               <InventoryView />
             )}
             {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
+            {currentView === 'pos-dashboard' && <RetailPOSDashboardView onNavigate={(view) => navigateToView(view)} />}
+            {currentView === 'pos-settings' && <RetailPOSSettingsView />}
             {currentView === 'pos' && <POSView currentUser={currentUser} />}
-            {currentView === 'sales-history' && <SalesHistoryView currentUser={currentUser} />}
+            {currentView === 'retail-create-order' && <RetailCreateOrderView currentUser={currentUser} />}
+            {currentView === 'retail-order-list' && <RetailOrderListView />}
+            {currentView === 'sales-history' && <RetailOrderListView />}
+            {currentView === 'retail-thermal-receipt' && <RetailReceiptView />}
             {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
             {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
             {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
@@ -377,6 +547,7 @@ const DashboardIcon = () => <LayoutDashboard className="size-5" />;
 const StockAlertsIcon = () => <AlertTriangle className="size-5" />;
 const InventoryIcon = () => <Package className="size-5" />;
 const ProductManagementIcon = () => <Settings2 className="size-5" />;
+const POSIcon = () => <Store className="size-5" />;
 const PurchaseOrdersIcon = () => <ShoppingCart className="size-5" />;
 const ProductsReceivedIcon = () => <PackageCheck className="size-5" />;
 const ItemBundlingIcon = () => <Layers className="size-5" />;

@@ -46,6 +46,9 @@ type Recipe = {
 type POSOrder = {
   id: string;
   receiptNo: string;
+  posOrderId?: string;
+  posOrderNumber?: string;
+  paymentStatus?: string;
   recipeId: string;
   recipeName: string;
   quantity: number;
@@ -59,6 +62,19 @@ type POSOrder = {
 };
 
 const normalizeName = (value: string | undefined) => (value || '').trim().toLowerCase();
+
+const statusStyle = (status: POSOrder["status"]) => {
+  if (status === "completed") {
+    return { borderColor: "#008967", backgroundColor: "#D1F2E8", color: "#007A5E" };
+  }
+  if (status === "voided") {
+    return { borderColor: "#FCA5A5", backgroundColor: "#FEE2E2", color: "#991B1B" };
+  }
+  if (status === "ready") {
+    return { borderColor: "#3B82F6", backgroundColor: "#DBEAFE", color: "#1D4ED8" };
+  }
+  return { borderColor: "#F59E0B", backgroundColor: "#FEF3C7", color: "#92400E" };
+};
 
 const reportSyncError = (error: unknown) => {
   window.dispatchEvent(
@@ -126,7 +142,9 @@ export function POSKitchenOrders() {
     const query = searchQuery.toLowerCase();
     return (
       (order.receiptNo || '').toLowerCase().includes(query) ||
+      (order.posOrderNumber || '').toLowerCase().includes(query) ||
       (order.recipeName || '').toLowerCase().includes(query) ||
+      (order.paymentStatus || '').toLowerCase().includes(query) ||
       (order.status || '').toLowerCase().includes(query)
     );
   });
@@ -216,28 +234,28 @@ export function POSKitchenOrders() {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-foreground mb-1">POS / Kitchen Orders</h1>
-        <p className="text-muted-foreground">Record kitchen receipts and deduct ingredients from inventory via Recipe &amp; BOM.</p>
+        <h1 className="text-3xl font-bold text-foreground mb-1">Kitchen Orders</h1>
+        <p className="text-muted-foreground">Track POS-linked kitchen tickets and record manual recipe stock deductions when needed.</p>
       </div>
 
       <div className="mb-6 rounded-xl border border-accent/50 bg-accent/10 p-4 text-primary">
         <div className="flex items-center gap-2 font-semibold mb-1">
           <ReceiptText className="h-5 w-5" />
-          Separate from Goods Received
+          POS-linked vs manual tickets
         </div>
-        <p className="text-sm opacity-80">Use this for completed kitchen receipts. Ingredients are auto-deducted based on Recipe &amp; BOM. Supplier deliveries belong in Goods Received.</p>
+        <p className="text-sm opacity-80">POS-linked tickets are created automatically from Restaurant POS and stock is deducted when payment completes. Use the manual form only for non-POS recipe consumption. Supplier deliveries belong in Goods Received.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
         <form onSubmit={completeOrder} className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="mb-4 flex items-center gap-2">
             <PackageMinus className="h-5 w-5 text-primary" />
-            <h2 className="font-semibold text-foreground">Complete Kitchen Receipt</h2>
+            <h2 className="font-semibold text-foreground">Manual Recipe Deduction</h2>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="mb-1 block text-xs text-foreground">POS / Kitchen Receipt No.</label>
+              <label className="mb-1 block text-xs text-foreground">Manual Ticket No.</label>
               <input value={receiptNo} onChange={(event) => setReceiptNo(event.target.value)} className="w-full rounded-lg border border-input bg-input-background px-3 py-2 text-sm outline-none focus:border-primary" required />
             </div>
 
@@ -336,7 +354,7 @@ export function POSKitchenOrders() {
           </div>
 
           <button type="submit" disabled={!canCompleteOrder || isCompleting} className="mt-5 w-full rounded-lg bg-primary px-4 py-3 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50">
-            {isCompleting ? "Completing..." : "Complete Receipt"}
+            {isCompleting ? "Recording..." : "Record Manual Deduction"}
           </button>
         </form>
 
@@ -344,11 +362,11 @@ export function POSKitchenOrders() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold text-foreground">Kitchen Receipt History</h2>
+              <h2 className="font-semibold text-foreground">Kitchen Ticket History</h2>
             </div>
             <div className="relative w-72">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search receipts..." className="w-full rounded-lg border border-input bg-input-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary" />
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search tickets..." className="w-full rounded-lg border border-input bg-input-background py-2 pl-9 pr-3 text-sm outline-none focus:border-primary" />
             </div>
           </div>
 
@@ -356,10 +374,12 @@ export function POSKitchenOrders() {
             <table className="w-full">
               <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Receipt</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Ticket</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">POS Order</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Recipe</th>
                   <th className="px-4 py-3 text-center text-xs font-medium text-foreground">Qty</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Modifiers</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Payment</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-foreground">Actions</th>
                 </tr>
@@ -368,21 +388,19 @@ export function POSKitchenOrders() {
                 {filteredOrders.map((order) => (
                   <tr key={order.id}>
                     <td className="px-4 py-3 text-sm font-medium text-primary">{order.receiptNo}</td>
+                    <td className="px-4 py-3 text-sm text-foreground">{order.posOrderNumber ?? "Manual"}</td>
                     <td className="px-4 py-3 text-sm text-foreground">{order.recipeName}</td>
                     <td className="px-4 py-3 text-center text-sm text-foreground">{order.quantity}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       {order.modifiers?.length ? order.modifiers.join(", ") : "-"}
                     </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{order.paymentStatus ?? "-"}</td>
                     <td className="px-4 py-3">
                       <span
                         className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs font-medium"
-                        style={
-                          order.status === "completed"
-                            ? { borderColor: "#008967", backgroundColor: "#D1F2E8", color: "#007A5E" }
-                            : { borderColor: "#FCA5A5", backgroundColor: "#FEE2E2", color: "#991B1B" }
-                        }
+                        style={statusStyle(order.status)}
                       >
-                        {order.status === "completed" ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                        {order.status === "completed" ? <CheckCircle className="h-3 w-3" /> : order.status === "voided" ? <XCircle className="h-3 w-3" /> : <ClipboardList className="h-3 w-3" />}
                         {order.status}
                       </span>
                     </td>
@@ -399,7 +417,7 @@ export function POSKitchenOrders() {
                 ))}
                 {filteredOrders.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-muted-foreground">No POS kitchen receipts yet</td>
+                    <td colSpan={8} className="px-4 py-10 text-center text-sm text-muted-foreground">No kitchen tickets yet</td>
                   </tr>
                 )}
               </tbody>
@@ -411,7 +429,7 @@ export function POSKitchenOrders() {
       {voidingOrderId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-xl">
-            <h2 className="text-lg font-bold text-foreground">Void Kitchen Receipt</h2>
+            <h2 className="text-lg font-bold text-foreground">Void Kitchen Ticket</h2>
             <p className="mt-2 text-sm text-muted-foreground">Voiding will restore the deducted ingredients and record a reversal movement.</p>
             <textarea value={voidReason} onChange={(event) => setVoidReason(event.target.value)} placeholder="Required void reason" className="mt-4 min-h-24 w-full rounded-lg border border-input bg-input-background px-3 py-2 text-sm outline-none focus:border-primary" />
             <div className="mt-4 flex gap-3">

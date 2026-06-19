@@ -21,6 +21,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import type { AuthenticatedUser } from '../auth/current-user.decorator';
 import { DiningTablesService } from './dining-tables.service';
 import { CreateDiningTableDto } from './dto/create-dining-table.dto';
+import { UpdateDiningTableDto } from './dto/update-dining-table.dto';
 import { UpdateDiningTableStatusDto } from './dto/update-dining-table-status.dto';
 
 @Controller('dining-tables')
@@ -55,6 +56,16 @@ export class DiningTablesController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: AuthenticatedUser) {
     return this.diningTablesService.findOne(id, user.businessId);
+  }
+
+  @Patch(':id')
+  @Roles('Admin', 'Manager')
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateDiningTableDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.diningTablesService.update(id, dto, user.businessId, user.role);
   }
 
   @Patch(':id/status')

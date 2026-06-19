@@ -1,23 +1,37 @@
-import { useEffect, useState } from 'react';
-import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { Plus, X, Search, ShoppingCart, CreditCard, Trash2, CheckCircle, Receipt, RotateCcw, Printer } from 'lucide-react';
 import {
-  useCreateRetailSaleMutation,
+  useCompleteRetailPOSOrderPaymentMutation,
+  useCreateRetailPOSOrderMutation,
   useRefundRetailSaleMutation,
   useRetailInventoryRecordsQuery,
   useRetailLocationsQuery,
   useRetailSalesQuery,
-} from '../lib/retail';
+} from '../../lib/retail';
+import { usePOSSettingsQuery } from '../../lib/domainQueries';
+import { usePOSCart } from '../../shared/pos';
+import { RetailThermalReceipt } from './receipt/RetailThermalReceipt';
+import {
+  calculateConfiguredCharges,
+  getPOSPayments,
+  getPOSPricing,
+} from '../../shared/pos/settings';
+import { createReceiptSnapshot } from '../../shared/receipts';
 
 export default function POSView({
   currentUser,
 }: {
   currentUser: { email: string; role: string } | null;
 }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const inventoryQuery = useRetailInventoryRecordsQuery();
   const salesQuery = useRetailSalesQuery();
   const locationsQuery = useRetailLocationsQuery();
-  const createSaleMutation = useCreateRetailSaleMutation();
+  const createPOSOrderMutation = useCreateRetailPOSOrderMutation();
+  const completePOSOrderPaymentMutation = useCompleteRetailPOSOrderPaymentMutation();
   const refundSaleMutation = useRefundRetailSaleMutation();
+  const posSettingsQuery = usePOSSettingsQuery({ module: 'RETAIL' });
   const inventory = inventoryQuery.data ?? [];
   const sales = salesQuery.data ?? [];
   const locations = locationsQuery.data ?? [];
@@ -26,18 +40,8 @@ export default function POSView({
   const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'returns'>('sales');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [cart, setCart] = useState<{
-    inventoryItemId: string;
-    name: string;
-    category: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    availableStock: number;
-  }[]>([]);
-  const [discount, setDiscount] = useState(0);
-  const [customer, setCustomer] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'GCash' | 'Card' | 'Bank Transfer'>('Cash');
+  const cart = usePOSCart();
+  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
   const [amountPaid, setAmountPaid] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
@@ -52,6 +56,24 @@ export default function POSView({
     }
   }, [locations, selectedLocationId]);
 
+  const pricingSettings = useMemo(
+    () => getPOSPricing(posSettingsQuery.data ?? []),
+    [posSettingsQuery.data],
+  );
+  const paymentSettings = useMemo(
+    () => getPOSPayments(posSettingsQuery.data ?? []),
+    [posSettingsQuery.data],
+  );
+  const availablePaymentMethods = paymentSettings.methods.length > 0
+    ? paymentSettings.methods
+    : ['Cash'];
+
+  useEffect(() => {
+    if (!availablePaymentMethods.includes(paymentMethod)) {
+      setPaymentMethod(availablePaymentMethods[0] ?? 'Cash');
+    }
+  }, [availablePaymentMethods, paymentMethod]);
+
   const availableItems = inventory.filter((item: any) => item.quantity > 0);
   const availableCategories = Array.from(new Set(availableItems.map((item: any) => item.category))).sort() as string[];
 
@@ -63,54 +85,101 @@ export default function POSView({
     return matchesCategory && matchesSearch;
   });
 
-  const subtotal = cart.reduce((sum, item) => sum + item.totalPrice, 0);
-  const tax = 0;
-  const total = subtotal - discount + tax;
+  const subtotal = cart.totals.subtotal;
+  const discount = cart.totals.discount;
+  const total = cart.totals.total;
   const change = amountPaid - total;
 
+  useEffect(() => {
+    const charges = calculateConfiguredCharges(subtotal, discount, pricingSettings);
+    cart.setTax(charges.tax);
+    cart.setServiceCharge(charges.serviceCharge);
+  }, [
+    cart,
+    discount,
+    pricingSettings.serviceChargeEnabled,
+    pricingSettings.serviceChargeRate,
+    pricingSettings.taxEnabled,
+    pricingSettings.taxRate,
+    subtotal,
+  ]);
+
   const handleAddToCart = (item: any) => {
-    const existing = cart.find(c => c.inventoryItemId === item.id);
+    const existing = cart.items.find(c => c.inventoryItemId === item.id);
     if (existing) {
       if (existing.quantity >= item.quantity) { alert('Insufficient stock!'); return; }
-      setCart(cart.map(c => c.inventoryItemId === item.id ? { ...c, quantity: c.quantity + 1, totalPrice: (c.quantity + 1) * c.unitPrice } : c));
+      cart.addItem({ inventoryItemId: item.id, name: item.name, category: item.category, unitPrice: item.price, availableStock: item.quantity });
     } else {
-      setCart([...cart, { inventoryItemId: item.id, name: item.name, category: item.category, quantity: 1, unitPrice: item.price, totalPrice: item.price, availableStock: item.quantity }]);
+      cart.addItem({ inventoryItemId: item.id, name: item.name, category: item.category, unitPrice: item.price, availableStock: item.quantity });
     }
   };
 
   const handleUpdateQuantity = (id: string, qty: number) => {
-    const cartItem = cart.find(c => c.inventoryItemId === id);
+    const cartItem = cart.items.find(c => c.id === id);
     if (!cartItem) return;
-    if (qty <= 0) { setCart(cart.filter(c => c.inventoryItemId !== id)); return; }
-    if (qty > cartItem.availableStock) { alert('Cannot exceed available stock!'); return; }
-    setCart(cart.map(c => c.inventoryItemId === id ? { ...c, quantity: qty, totalPrice: qty * c.unitPrice } : c));
+    if (qty <= 0) { cart.removeItem(id); return; }
+    if (typeof cartItem.availableStock === 'number' && qty > cartItem.availableStock) { alert('Cannot exceed available stock!'); return; }
+    cart.updateQuantity(id, qty);
   };
 
-  const handleClearCart = () => { setCart([]); setDiscount(0); setCustomer(''); setAmountPaid(0); };
+  const handleClearCart = () => { cart.clear(); setAmountPaid(0); };
 
   const handleProcessPayment = async () => {
-    if (cart.length === 0) { alert('Cart is empty!'); return; }
+    if (cart.items.length === 0) { alert('Cart is empty!'); return; }
     if (!selectedLocationId) { alert('Please select a location first'); return; }
     if (paymentMethod === 'Cash' && amountPaid < total) { alert('Insufficient payment amount!'); return; }
     setSaving(true);
     try {
-      const sale = await createSaleMutation.mutateAsync({
-        locationId: selectedLocationId,
-        items: cart.map(i => ({ inventoryItemId: i.inventoryItemId, quantity: i.quantity, unitPrice: i.unitPrice })),
-        discount: discount > 0 ? discount : undefined,
+      const order = await createPOSOrderMutation.mutateAsync(
+        cart.createPOSOrderPayload({
+          locationId: selectedLocationId,
+          orderType: 'RETAIL',
+          status: 'PENDING',
+        }),
+      );
+      const paidOrder = await completePOSOrderPaymentMutation.mutateAsync({
+        id: order.id,
         paymentMethod,
         amountPaid: paymentMethod === 'Cash' ? amountPaid : total,
-        customer: customer || undefined,
+        receiptData: createReceiptSnapshot({
+          orderNumber: order.orderNumber,
+          customerName: cart.customer.name || undefined,
+          paymentMethod,
+          items: cart.items,
+          totals: {
+            subtotal,
+            discount,
+            tax: cart.totals.tax,
+            serviceCharge: cart.totals.serviceCharge,
+            total,
+            amountPaid: paymentMethod === 'Cash' ? amountPaid : total,
+            change: paymentMethod === 'Cash' ? amountPaid - total : 0,
+          },
+        }),
       });
-      setLastTransaction(sale);
+      setLastTransaction({
+        ...paidOrder,
+        paymentMethod,
+        amountPaid: paymentMethod === 'Cash' ? amountPaid : total,
+        change: paymentMethod === 'Cash' ? amountPaid - total : 0,
+      });
       handleClearCart();
       setShowPaymentModal(false);
       setShowReceiptModal(true);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to process sale');
+      alert(err.message ?? 'Failed to process POS payment');
     } finally {
       setSaving(false);
     }
+  };
+
+  const openLastThermalReceipt = () => {
+    if (!lastReceipt?.id) return;
+    const next = new URLSearchParams(searchParams);
+    next.set('view', 'retail-thermal-receipt');
+    next.set('receiptId', lastReceipt.id);
+    next.delete('orderId');
+    setSearchParams(next);
   };
 
   const handleProcessReturn = async (saleId: string) => {
@@ -132,6 +201,31 @@ export default function POSView({
     return saleDate === new Date().toDateString() && s.status === 'COMPLETED';
   });
   const todayRevenue = todaySales.reduce((sum: number, s: any) => sum + s.total, 0);
+  const lastPayment = lastTransaction?.payments?.[0];
+  const lastReceipt = lastTransaction?.receipts?.[0];
+  const lastTransactionNumber = lastTransaction?.sale?.transactionNumber ?? lastTransaction?.orderNumber;
+  const lastPaymentMethod = lastPayment?.method ?? paymentMethod;
+  const lastAmountPaid = lastPayment?.amountPaid ?? 0;
+  const lastChange = lastPayment?.change ?? 0;
+  const lastReceiptSnapshot = lastTransaction
+    ? createReceiptSnapshot({
+        receiptNumber: lastReceipt?.receiptNumber,
+        transactionNumber: lastTransaction?.sale?.transactionNumber,
+        orderNumber: lastTransaction?.orderNumber,
+        customerName: lastTransaction?.customerName ?? undefined,
+        paymentMethod: lastPaymentMethod,
+        items: lastTransaction?.items ?? [],
+        totals: {
+          subtotal: lastTransaction?.subtotal ?? 0,
+          discount: lastTransaction?.discount ?? 0,
+          tax: lastTransaction?.tax ?? 0,
+          serviceCharge: lastTransaction?.serviceCharge ?? 0,
+          total: lastTransaction?.total ?? 0,
+          amountPaid: lastPayment?.amountPaid ?? lastTransaction?.amountPaid ?? 0,
+          change: lastPayment?.change ?? lastTransaction?.change ?? 0,
+        },
+      })
+    : null;
 
   if (loading) {
     return <div className="flex items-center justify-center h-64 text-muted-foreground">Loading POS…</div>;
@@ -240,27 +334,27 @@ export default function POSView({
             <div className="bg-white border border-border rounded-[14px] p-4 sticky top-0">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[18px] font-bold text-foreground">Current Sale</h3>
-                {cart.length > 0 && <button onClick={handleClearCart} className="text-destructive text-[12px] font-medium hover:underline">Clear All</button>}
+                {cart.items.length > 0 && <button onClick={handleClearCart} className="text-destructive text-[12px] font-medium hover:underline">Clear All</button>}
               </div>
 
               <div className="space-y-2 mb-4 max-h-[300px] overflow-y-auto">
-                {cart.length === 0 ? (
+                {cart.items.length === 0 ? (
                   <div className="text-center py-8">
                     <ShoppingCart className="size-12 text-muted mx-auto mb-2" />
                     <p className="text-muted-foreground text-[14px]">Cart is empty</p>
                   </div>
                 ) : (
-                  cart.map(item => (
-                    <div key={item.inventoryItemId} className="border border-border rounded-[8px] p-3">
+                  cart.items.map(item => (
+                    <div key={item.id} className="border border-border rounded-[8px] p-3">
                       <div className="flex items-start justify-between mb-2">
                         <p className="text-[13px] font-medium text-foreground flex-1">{item.name}</p>
-                        <button onClick={() => setCart(cart.filter(c => c.inventoryItemId !== item.inventoryItemId))} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 className="size-3" /></button>
+                        <button onClick={() => cart.removeItem(item.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded"><Trash2 className="size-3" /></button>
                       </div>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleUpdateQuantity(item.inventoryItemId, item.quantity - 1)} className="size-6 rounded bg-muted hover:bg-muted flex items-center justify-center text-foreground font-bold">-</button>
+                          <button onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)} className="size-6 rounded bg-muted hover:bg-muted flex items-center justify-center text-foreground font-bold">-</button>
                           <span className="text-[14px] font-medium text-foreground min-w-[20px] text-center">{item.quantity}</span>
-                          <button onClick={() => handleUpdateQuantity(item.inventoryItemId, item.quantity + 1)} className="size-6 rounded bg-muted hover:bg-muted flex items-center justify-center text-foreground font-bold">+</button>
+                          <button onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)} className="size-6 rounded bg-muted hover:bg-muted flex items-center justify-center text-foreground font-bold">+</button>
                         </div>
                         <p className="text-[14px] font-bold text-secondary">₱{item.totalPrice}</p>
                       </div>
@@ -269,15 +363,15 @@ export default function POSView({
                 )}
               </div>
 
-              {cart.length > 0 && (
+              {cart.items.length > 0 && (
                 <>
                   <div className="mb-3">
                     <label className="block text-[12px] font-medium text-muted-foreground mb-1">Customer (Optional)</label>
-                    <input type="text" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Customer name" className="w-full px-3 py-2 border border-border rounded-[6px] text-[13px] focus:outline-none focus:border-secondary" />
+                    <input type="text" value={cart.customer.name ?? ''} onChange={(e) => cart.setCustomer({ ...cart.customer, name: e.target.value })} placeholder="Customer name" className="w-full px-3 py-2 border border-border rounded-[6px] text-[13px] focus:outline-none focus:border-secondary" />
                   </div>
                   <div className="mb-4">
                     <label className="block text-[12px] font-medium text-muted-foreground mb-1">Discount (₱)</label>
-                    <input type="number" value={discount} onChange={(e) => setDiscount(Number(e.target.value))} min="0" max={subtotal} className="w-full px-3 py-2 border border-border rounded-[6px] text-[13px] focus:outline-none focus:border-secondary" />
+                    <input type="number" value={cart.discount} onChange={(e) => cart.setDiscount(Number(e.target.value))} min="0" max={subtotal} className="w-full px-3 py-2 border border-border rounded-[6px] text-[13px] focus:outline-none focus:border-secondary" />
                   </div>
                 </>
               )}
@@ -285,10 +379,12 @@ export default function POSView({
               <div className="border-t border-border pt-3 mb-4 space-y-2">
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Subtotal:</span><span className="font-medium text-foreground">₱{subtotal.toLocaleString()}</span></div>
                 {discount > 0 && <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Discount:</span><span className="font-medium text-destructive">-₱{discount.toLocaleString()}</span></div>}
+                {cart.totals.tax > 0 && <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Tax:</span><span className="font-medium text-foreground">₱{cart.totals.tax.toLocaleString()}</span></div>}
+                {cart.totals.serviceCharge > 0 && <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Service:</span><span className="font-medium text-foreground">₱{cart.totals.serviceCharge.toLocaleString()}</span></div>}
                 <div className="flex justify-between text-[18px] font-bold pt-2 border-t border-border"><span className="text-foreground">Total:</span><span className="text-secondary">₱{total.toLocaleString()}</span></div>
               </div>
 
-              <button onClick={() => { if (cart.length > 0) { setAmountPaid(paymentMethod === 'Cash' ? Math.ceil(total / 100) * 100 : total); setShowPaymentModal(true); } }} disabled={cart.length === 0} className="w-full bg-secondary text-white py-3 rounded-[8px] font-bold text-[16px] hover:bg-secondary transition-colors disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              <button onClick={() => { if (cart.items.length > 0) { setAmountPaid(paymentMethod === 'Cash' ? Math.ceil(total / 100) * 100 : total); setShowPaymentModal(true); } }} disabled={cart.items.length === 0} className="w-full bg-secondary text-white py-3 rounded-[8px] font-bold text-[16px] hover:bg-secondary transition-colors disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed flex items-center justify-center gap-2">
                 <CreditCard className="size-5" />
                 Proceed to Payment
               </button>
@@ -377,7 +473,7 @@ export default function POSView({
             <div className="mb-4">
               <p className="text-[14px] text-muted-foreground mb-1">Payment Method</p>
               <div className="grid grid-cols-2 gap-2">
-                {(['Cash', 'GCash', 'Card', 'Bank Transfer'] as const).map(method => (
+                {availablePaymentMethods.map(method => (
                   <button key={method} onClick={() => { setPaymentMethod(method); setAmountPaid(method === 'Cash' ? Math.ceil(total / 100) * 100 : total); }} className={`px-4 py-2 rounded-[6px] text-[13px] font-medium border ${paymentMethod === method ? 'bg-secondary text-white border-secondary' : 'bg-white text-foreground border-border hover:border-secondary'}`}>
                     {method}
                   </button>
@@ -417,9 +513,17 @@ export default function POSView({
             <div className="text-center mb-6">
               <CheckCircle className="size-16 text-success mx-auto mb-3" />
               <h3 className="text-[24px] font-bold text-foreground">Sale Completed!</h3>
-              <p className="text-[14px] text-muted-foreground">{lastTransaction.transactionNumber}</p>
+              <p className="text-[14px] text-muted-foreground">{lastTransactionNumber}</p>
+              {lastReceipt?.receiptNumber && (
+                <p className="text-[12px] text-muted-foreground">{lastReceipt.receiptNumber}</p>
+              )}
             </div>
-            <div className="border border-border rounded-[8px] p-4 mb-4">
+            {lastReceiptSnapshot && (
+              <div className="mb-4">
+                <RetailThermalReceipt receipt={lastReceiptSnapshot} issuedAt={lastTransaction.createdAt} />
+              </div>
+            )}
+            <div className="hidden">
               <p className="text-[12px] text-muted-foreground mb-2">{new Date(lastTransaction.createdAt).toLocaleString()}</p>
               <div className="space-y-1 mb-3">
                 {lastTransaction.items?.map((item: any, idx: number) => (
@@ -433,8 +537,8 @@ export default function POSView({
                 <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Subtotal:</span><span className="text-foreground">₱{lastTransaction.subtotal.toLocaleString()}</span></div>
                 {lastTransaction.discount > 0 && <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Discount:</span><span className="text-destructive">-₱{lastTransaction.discount.toLocaleString()}</span></div>}
                 <div className="flex justify-between text-[16px] font-bold pt-2 border-t border-border"><span className="text-foreground">Total:</span><span className="text-secondary">₱{lastTransaction.total.toLocaleString()}</span></div>
-                <div className="flex justify-between text-[13px] pt-2"><span className="text-muted-foreground">Payment:</span><span className="text-foreground">{lastTransaction.paymentMethod}</span></div>
-                {lastTransaction.paymentMethod === 'Cash' && (
+                <div className="flex justify-between text-[13px] pt-2"><span className="text-muted-foreground">Payment:</span><span className="text-foreground">{lastPaymentMethod}</span></div>
+                {lastPaymentMethod === 'Cash' && (
                   <>
                     <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Cash:</span><span className="text-foreground">₱{lastTransaction.amountPaid.toLocaleString()}</span></div>
                     <div className="flex justify-between text-[13px]"><span className="text-muted-foreground">Change:</span><span className="text-foreground">₱{lastTransaction.change.toLocaleString()}</span></div>
@@ -442,7 +546,17 @@ export default function POSView({
                 )}
               </div>
             </div>
-            <button onClick={() => setShowReceiptModal(false)} className="w-full bg-secondary text-white px-4 py-3 rounded-[8px] font-medium hover:bg-secondary">Done</button>
+            <div className="flex gap-3">
+              <button onClick={() => setShowReceiptModal(false)} className="flex-1 bg-muted text-foreground px-4 py-3 rounded-[8px] font-medium hover:bg-muted">Done</button>
+              <button onClick={openLastThermalReceipt} disabled={!lastReceipt?.id} className="inline-flex flex-1 items-center justify-center gap-2 border border-border text-foreground px-4 py-3 rounded-[8px] font-medium hover:border-secondary disabled:opacity-50">
+                <Receipt className="size-4" />
+                Open
+              </button>
+              <button onClick={() => window.print()} className="inline-flex flex-1 items-center justify-center gap-2 bg-secondary text-white px-4 py-3 rounded-[8px] font-medium hover:bg-secondary">
+                <Printer className="size-4" />
+                Print
+              </button>
+            </div>
           </div>
         </div>
       )}

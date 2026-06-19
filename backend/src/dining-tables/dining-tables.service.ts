@@ -9,6 +9,7 @@ import { DiningTableStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateDiningTableDto } from './dto/create-dining-table.dto';
+import { UpdateDiningTableDto } from './dto/update-dining-table.dto';
 
 @Injectable()
 export class DiningTablesService {
@@ -73,6 +74,29 @@ export class DiningTablesService {
       data: { status },
       include: this.tableInclude,
     });
+  }
+
+  async update(id: string, dto: UpdateDiningTableDto, businessId: string, role: string) {
+    if (role !== 'Admin' && role !== 'Manager') {
+      throw new ForbiddenException('Only Admin or Manager can update dining tables');
+    }
+    await this.findOne(id, businessId);
+    if (dto.locationId) {
+      await this.assertLocationInBusiness(dto.locationId, businessId);
+    }
+
+    try {
+      return await this.prisma.diningTable.update({
+        where: { id },
+        data: dto,
+        include: this.tableInclude,
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`Table "${dto.tableNumber}" already exists at this location`);
+      }
+      throw error;
+    }
   }
 
   async remove(id: string, businessId: string, role: string) {

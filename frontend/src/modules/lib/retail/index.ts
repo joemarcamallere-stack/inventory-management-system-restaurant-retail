@@ -4,5 +4,8 @@ export * from './locationQueries';
 export * from './purchaseOrderQueries';
 export * from './transferQueries';
 export * from './salesQueries';
+export * from './posOrderQueries';
+export * from './paymentReceiptQueries';
+export * from './reportQueries';
 export * from './bundleQueries';
 export * from './workspace';
