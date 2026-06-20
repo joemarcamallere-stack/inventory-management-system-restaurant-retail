@@ -26,7 +26,9 @@ describe('KitchenOrdersService', () => {
         async (callback: (client: typeof tx) => unknown) => callback(tx),
       ),
     };
-    const service = new KitchenOrdersService(prisma as any);
+    const service = new KitchenOrdersService(prisma as any, {
+      notifyLowStock: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     await service.updateStatus(
       'order-1',
@@ -59,7 +61,9 @@ describe('KitchenOrdersService', () => {
         async (callback: (client: typeof tx) => unknown) => callback(tx),
       ),
     };
-    const service = new KitchenOrdersService(prisma as any);
+    const service = new KitchenOrdersService(prisma as any, {
+      notifyLowStock: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     await expect(
       service.updateStatus(
@@ -81,7 +85,9 @@ describe('KitchenOrdersService', () => {
         async (callback: (client: typeof tx) => unknown) => callback(tx),
       ),
     };
-    const service = new KitchenOrdersService(prisma as any);
+    const service = new KitchenOrdersService(prisma as any, {
+      notifyLowStock: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     await expect(
       service.complete(
@@ -103,7 +109,9 @@ describe('KitchenOrdersService', () => {
       inventoryItem: { update: jest.fn() },
       stockMovement: { create: jest.fn() },
     };
-    const service = new KitchenOrdersService({} as any);
+    const service = new KitchenOrdersService({} as any, {
+      notifyLowStock: jest.fn().mockResolvedValue(undefined),
+    } as any);
     const recipe = {
       id: 'recipe-1',
       name: 'Burger',

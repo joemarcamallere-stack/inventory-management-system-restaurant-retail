@@ -9,17 +9,23 @@ import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateKitchenOrderDto } from './dto/create-kitchen-order.dto';
 import { VoidKitchenOrderDto } from './dto/void-kitchen-order.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class KitchenOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async complete(
     createKitchenOrderDto: CreateKitchenOrderDto,
     businessId: string,
     completedById?: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const lowStockCandidates: Parameters<NotificationsService['notifyLowStock']>[0] = [];
+    const created = await this.prisma.$transaction(async (tx) => {
+      lowStockCandidates.length = 0; // reset on (re)entry in case the tx retries
       const initialStatus =
         createKitchenOrderDto.status ?? KitchenOrderStatus.COMPLETED;
       if (initialStatus === KitchenOrderStatus.VOIDED) {
@@ -87,6 +93,7 @@ export class KitchenOrdersService {
           businessId,
           completedById,
           createKitchenOrderDto.excludedIngredientIds ?? [],
+          lowStockCandidates,
         );
       }
 
@@ -95,6 +102,10 @@ export class KitchenOrdersService {
         include: this.kitchenOrderInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    await this.notifications.notifyLowStock(lowStockCandidates).catch(() => undefined);
+
+    return created;
   }
 
   async updateStatus(
@@ -103,7 +114,9 @@ export class KitchenOrdersService {
     businessId: string,
     completedById?: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const lowStockCandidates: Parameters<NotificationsService['notifyLowStock']>[0] = [];
+    const updated = await this.prisma.$transaction(async (tx) => {
+      lowStockCandidates.length = 0; // reset on (re)entry in case the tx retries
       await tx.$queryRaw`
         SELECT id FROM "KitchenOrder"
         WHERE id = ${id}
@@ -141,6 +154,8 @@ export class KitchenOrdersService {
           order,
           businessId,
           completedById,
+          [],
+          lowStockCandidates,
         );
       }
 
@@ -159,6 +174,10 @@ export class KitchenOrdersService {
         include: this.kitchenOrderInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    await this.notifications.notifyLowStock(lowStockCandidates).catch(() => undefined);
+
+    return updated;
   }
 
   async findAll(
@@ -352,6 +371,7 @@ export class KitchenOrdersService {
     businessId: string,
     completedById?: string,
     excludedIngredientIds: string[] = [],
+    lowStockSink?: Parameters<NotificationsService['notifyLowStock']>[0],
   ) {
     const servingFactor = order.quantity / Math.max(recipe.servings, 1);
     const excludedIds = new Set(excludedIngredientIds);
@@ -381,6 +401,16 @@ export class KitchenOrdersService {
       await tx.inventoryItem.update({
         where: { id: ingredient.itemId },
         data: { quantity: newQuantity },
+      });
+      lowStockSink?.push({
+        id: ingredient.itemId,
+        name: ingredient.item.name,
+        unit: ingredient.item.unit,
+        previousQuantity,
+        newQuantity,
+        reorderPoint: ingredient.item.reorderPoint,
+        minStock: ingredient.item.minStock,
+        businessId,
       });
       await tx.stockMovement.create({
         data: {

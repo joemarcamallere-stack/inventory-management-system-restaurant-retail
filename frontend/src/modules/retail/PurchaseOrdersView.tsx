@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Plus, X, Search, Package, ShoppingCart, CheckCircle, XCircle, Clock, Eye, Users, Trash2 } from 'lucide-react';
 import {
   useApproveRetailPurchaseOrderMutation,
@@ -80,7 +81,8 @@ function blankNewItemForm() {
     unit: 'pcs',
     baleType: '',
     estimatedWeight: 0,
-    quantity: 1,
+    expectedPieces: 0,
+    quantity: 0,
     unitPrice: 0,
     sellingPrice: 0,
     reorderPoint: 0,
@@ -164,19 +166,33 @@ export default function PurchaseOrdersView({
     newItemForm.unitPrice > 0 &&
     (!!newItemForm.inventoryItemId || !!itemFinalCategory);
 
+  // Lightweight bale-margin check: a thrift bale costs a fixed amount but is resold
+  // as many sorted pieces. Recovery = expected sellable value ÷ what the bale(s) cost.
+  const baleCost = newItemForm.unitPrice * newItemForm.quantity;
+  const baleExpectedRevenue = isThrift
+    ? newItemForm.sellingPrice * newItemForm.expectedPieces * newItemForm.quantity
+    : 0;
+  const baleRecovery = baleCost > 0 ? baleExpectedRevenue / baleCost : 0;
+  const showBaleMargin =
+    isThrift &&
+    newItemForm.unitPrice > 0 &&
+    newItemForm.sellingPrice > 0 &&
+    newItemForm.expectedPieces > 0 &&
+    newItemForm.quantity > 0;
+
   const handleAddItemToPO = () => {
     const isThrift = newItemForm.productType === 'THRIFT';
     const itemName = isThrift ? newItemForm.baleType.trim() : newItemForm.name.trim();
     if (!itemName) {
-      alert(isThrift ? 'Please enter a Bale Type' : 'Please enter a Product Name');
+      toast.error(isThrift ? 'Please enter a Bale Type' : 'Please enter a Product Name');
       return;
     }
     if (!newItemForm.quantity || newItemForm.quantity <= 0) {
-      alert('Please enter a Quantity greater than zero');
+      toast.error('Please enter a Quantity greater than zero');
       return;
     }
     if (!newItemForm.unitPrice || newItemForm.unitPrice <= 0) {
-      alert('Please enter a Unit Cost greater than zero');
+      toast.error('Please enter a Unit Cost greater than zero');
       return;
     }
     const isNew = !newItemForm.inventoryItemId;
@@ -184,12 +200,12 @@ export default function PurchaseOrdersView({
     const finalSubcategory = newItemForm.newSubcategory.trim() || newItemForm.subcategory;
     // New items become inventory on PO creation, so they must be classified.
     if (isNew && !finalCategory) {
-      alert('Please select or enter a Category for the new item');
+      toast.error('Please select or enter a Category for the new item');
       return;
     }
     // A retail price below cost would mean selling at a loss — guard against typos.
     if (!isThrift && newItemForm.sellingPrice > 0 && newItemForm.sellingPrice < newItemForm.unitPrice) {
-      alert('Retail Price is lower than Unit Cost — please review the pricing.');
+      toast.error('Retail Price is lower than Unit Cost — please review the pricing.');
       return;
     }
     setPOForm({
@@ -220,17 +236,17 @@ export default function PurchaseOrdersView({
 
   const handleCreatePO = async () => {
     if (!poForm.supplierId) {
-      alert('Please select a supplier. For informal/cash buys, add a "Walk-in / Cash Purchase" supplier and select it.');
+      toast.error('Please select a supplier. For informal/cash buys, add a "Walk-in / Cash Purchase" supplier and select it.');
       return;
     }
     if (poForm.items.length === 0) {
-      alert('Add at least one item');
+      toast.error('Add at least one item');
       return;
     }
     const hasNewItems = poForm.items.some(i => !i.inventoryItemId);
     const location = locations[0];
     if (hasNewItems && !location) {
-      alert('Create a location before ordering a new item');
+      toast.error('Create a location before ordering a new item');
       return;
     }
     setSaving(true);
@@ -293,7 +309,7 @@ export default function PurchaseOrdersView({
       setPOForm({ supplierId: undefined, supplierName: '', paymentMethod: 'Bank Transfer', paymentTerms: '', expectedDelivery: '', notes: '', items: [] });
       setShowNewPOModal(false);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to create purchase order');
+      toast.error(err.message ?? 'Failed to create purchase order');
     } finally {
       setSaving(false);
     }
@@ -303,7 +319,7 @@ export default function PurchaseOrdersView({
     try {
       await submitPurchaseOrderMutation.mutateAsync(id);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to submit purchase order');
+      toast.error(err.message ?? 'Failed to submit purchase order');
     }
   };
 
@@ -313,13 +329,13 @@ export default function PurchaseOrdersView({
       setSelectedPOForAction(null);
       setShowPendingApprovalsModal(false);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to approve purchase order');
+      toast.error(err.message ?? 'Failed to approve purchase order');
     }
   };
 
   const handleRejectPO = async (id: string) => {
     if (!rejectionRemarks.trim()) {
-      alert('Please provide remarks for rejection');
+      toast.error('Please provide remarks for rejection');
       return;
     }
     try {
@@ -327,7 +343,7 @@ export default function PurchaseOrdersView({
       setRejectionRemarks('');
       setSelectedPOForAction(null);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to reject purchase order');
+      toast.error(err.message ?? 'Failed to reject purchase order');
     }
   };
 
@@ -335,7 +351,7 @@ export default function PurchaseOrdersView({
     try {
       await cancelPurchaseOrderMutation.mutateAsync(id);
     } catch (err: any) {
-      alert(err.message ?? 'Failed to cancel purchase order');
+      toast.error(err.message ?? 'Failed to cancel purchase order');
     }
   };
 
@@ -763,7 +779,7 @@ export default function PurchaseOrdersView({
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-[14px] font-medium text-[#323B42] mb-2">Estimated Weight (kg)</label>
-                      <input type="number" min="0" step="0.1" value={newItemForm.estimatedWeight} onChange={(e) => setNewItemForm({ ...newItemForm, estimatedWeight: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="Weight in kg" />
+                      <input type="number" min="0" step="0.1" value={newItemForm.estimatedWeight || ''} onChange={(e) => setNewItemForm({ ...newItemForm, estimatedWeight: parseFloat(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="Weight in kg" />
                     </div>
                     <div>
                       <label className="block text-[14px] font-medium text-[#323B42] mb-2">Grade / Condition</label>
@@ -775,13 +791,23 @@ export default function PurchaseOrdersView({
                       </select>
                     </div>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[14px] font-medium text-[#323B42] mb-2">Est. Sellable Pieces per Bale</label>
+                      <input type="number" min="0" value={newItemForm.expectedPieces || ''} onChange={(e) => setNewItemForm({ ...newItemForm, expectedPieces: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="Wearable pieces you expect to sell" />
+                    </div>
+                    <div className="flex items-end">
+                      <p className="text-[12px] text-[#6b7280] pb-2.5">Used only to check the bale will recover its cost — not saved on the item.</p>
+                    </div>
+                  </div>
                 </>
               )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Quantity *</label>
-                  <input type="number" min="1" value={newItemForm.quantity} onChange={(e) => setNewItemForm({ ...newItemForm, quantity: parseInt(e.target.value) || 1 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" />
+                  <input type="number" min="1" value={newItemForm.quantity || ''} onChange={(e) => setNewItemForm({ ...newItemForm, quantity: parseInt(e.target.value) || 0 })} className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]" placeholder="How many to order" />
                 </div>
                 <div>
                   <label className="block text-[14px] font-medium text-[#323B42] mb-2">Unit of Measure</label>
@@ -831,11 +857,35 @@ export default function PurchaseOrdersView({
                 </div>
               )}
 
-              {newItemForm.sellingPrice > 0 && newItemForm.unitPrice > 0 && newItemForm.sellingPrice > newItemForm.unitPrice && (
-                <div className="bg-[#E0F5F1] rounded-[8px] px-4 py-2 text-[13px] text-[#008967]">
-                  Margin: ₱{(newItemForm.sellingPrice - newItemForm.unitPrice).toLocaleString()} per unit
-                  {' '}(+{Math.round(((newItemForm.sellingPrice - newItemForm.unitPrice) / newItemForm.unitPrice) * 100)}%)
-                </div>
+              {isThrift ? (
+                showBaleMargin && (
+                  <div
+                    className="rounded-[8px] px-4 py-3 text-[13px]"
+                    style={{
+                      backgroundColor: baleRecovery >= 2 ? '#E0F5F1' : baleRecovery >= 1.5 ? '#FEF3C7' : '#FEE2E2',
+                      color: baleRecovery >= 2 ? '#008967' : baleRecovery >= 1.5 ? '#92400E' : '#991B1B',
+                    }}
+                  >
+                    <div className="flex items-center justify-between font-medium">
+                      <span>Bale cost: ₱{baleCost.toLocaleString()}</span>
+                      <span>Expected sellable value: ₱{baleExpectedRevenue.toLocaleString()} ({baleRecovery.toFixed(1)}×)</span>
+                    </div>
+                    <p className="mt-1">
+                      {baleRecovery >= 2
+                        ? 'Healthy ukay margin — comfortably above the 2× target.'
+                        : baleRecovery >= 1.5
+                          ? 'Tight — duds and unsold pieces will eat into this. Consider raising piece prices.'
+                          : 'Below 1.5× — you are likely to lose money on this bale once unsellables are removed.'}
+                    </p>
+                  </div>
+                )
+              ) : (
+                newItemForm.sellingPrice > 0 && newItemForm.unitPrice > 0 && newItemForm.sellingPrice > newItemForm.unitPrice && (
+                  <div className="bg-[#E0F5F1] rounded-[8px] px-4 py-2 text-[13px] text-[#008967]">
+                    Margin: ₱{(newItemForm.sellingPrice - newItemForm.unitPrice).toLocaleString()} per unit
+                    {' '}(+{Math.round(((newItemForm.sellingPrice - newItemForm.unitPrice) / newItemForm.unitPrice) * 100)}%)
+                  </div>
+                )
               )}
             </div>
             <div className="flex gap-3 mt-6">

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Edit2, Trash2, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
+import { Plus, Archive, ArchiveRestore, Search, ChevronRight, ChevronDown, Folder, FolderOpen, AlertTriangle, Package, PackagePlus, ShoppingCart, PackageCheck, Layers, X, Eye, TrendingUp, TrendingDown, RefreshCw, CheckCircle, Users } from 'lucide-react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import type {
   InventoryItem,
@@ -21,18 +21,16 @@ export function InventoryView() {
     filteredInventory: inventory,
     searchTerm,
     setSearchTerm,
-    handleEdit: onEdit,
-    handleDelete: onDelete,
+    showArchived,
+    setShowArchived,
+    handleArchive: onArchive,
+    handleReactivate: onReactivate,
     expandedCategories,
     expandedSubcategories,
     toggleCategory,
     toggleSubcategory,
-    showEditModal,
-    editingId,
     formData,
     setFormData,
-    handleSaveEdit: onSaveEdit,
-    handleCancelEdit: onCancelEdit,
     handleAdd,
     locations,
   } = useRetailWorkspace({
@@ -82,6 +80,7 @@ export function InventoryView() {
         <div>
           <h2 className="text-[30px] font-bold text-[#323B42]">Inventory</h2>
           <p className="text-[#323B42] text-[14px] mt-1">{totalItems} items total</p>
+          <p className="text-[#6b7280] text-[12px] mt-0.5">Edit item details in Product Management • adjust stock in Stock Adjustments • move stock in Transfers.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -94,6 +93,15 @@ export function InventoryView() {
               className="pl-10 pr-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] w-[300px] text-[14px] focus:outline-none focus:border-[#007A5E]"
             />
           </div>
+          <label className="flex items-center gap-2 px-3 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] text-[#323B42] cursor-pointer whitespace-nowrap">
+            <input
+              type="checkbox"
+              checked={showArchived}
+              onChange={(e) => setShowArchived(e.target.checked)}
+              className="accent-[#007A5E]"
+            />
+            Show archived
+          </label>
           {isAdmin && (
             <button
               onClick={() => setShowInitialStockModal(true)}
@@ -192,7 +200,7 @@ export function InventoryView() {
                               <div className="text-[13px] text-[#323B42]">
                                 Size: <span className="font-medium">{item.size}</span>
                               </div>
-                              <div>
+                              <div className="flex items-center gap-1.5">
                                 <span className={`px-2 py-1 rounded-full text-[11px] font-medium ${
                                   item.condition === 'Excellent' ? 'bg-[#E0F5F1] text-[#008967]' :
                                   item.condition === 'Good' ? 'bg-[#E0F2F2] text-[#007A5E]' :
@@ -201,6 +209,11 @@ export function InventoryView() {
                                 }`}>
                                   {item.condition}
                                 </span>
+                                {item.isActive === false && (
+                                  <span className="px-2 py-1 rounded-full text-[11px] font-medium bg-[#f3f4f6] text-[#6b7280]">
+                                    Archived
+                                  </span>
+                                )}
                               </div>
                               <div className="text-[13px]">
                                 <span className="text-[#6b7280]">Qty: </span>
@@ -209,20 +222,23 @@ export function InventoryView() {
                                 <span className="text-[#323B42] font-semibold">₱{item.price}</span>
                               </div>
                               <div className="flex items-center gap-1 justify-end">
-                                <button
-                                  onClick={() => onEdit(item)}
-                                  className="p-2 hover:bg-[#E0F2F2] rounded-[6px] text-[#007A5E] transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit2 className="size-4" />
-                                </button>
-                                <button
-                                  onClick={() => onDelete(item.id)}
-                                  className="p-2 hover:bg-[#ffe2e2] rounded-[6px] text-[#991b1b] transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="size-4" />
-                                </button>
+                                {item.isActive === false ? (
+                                  <button
+                                    onClick={() => onReactivate(item.id)}
+                                    className="p-2 hover:bg-[#E0F5F1] rounded-[6px] text-[#008967] transition-colors"
+                                    title="Reactivate"
+                                  >
+                                    <ArchiveRestore className="size-4" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() => onArchive(item.id)}
+                                    className="p-2 hover:bg-[#fef3c6] rounded-[6px] text-[#92400e] transition-colors"
+                                    title="Archive (deactivate)"
+                                  >
+                                    <Archive className="size-4" />
+                                  </button>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -232,168 +248,6 @@ export function InventoryView() {
                   </div>
                 );
               })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Item Modal */}
-      {showEditModal && editingId && (
-        <div className="fixed inset-0 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-[14px] p-6 w-[600px] max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[24px] font-bold text-[#323B42]">Edit Item</h3>
-              <button
-                onClick={onCancelEdit}
-                className="text-[#6b7280] hover:text-[#323B42] transition-colors"
-              >
-                <X className="size-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                  Item Name <span className="text-[#E7000B]">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  placeholder="Enter item name"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Category <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                    placeholder="e.g., Tops, Bottoms"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Subcategory <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.subcategory}
-                    onChange={(e) => setFormData({ ...formData, subcategory: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                    placeholder="e.g., T-Shirts, Jeans"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                  Target Customer <span className="text-[#E7000B]">*</span>
-                </label>
-                <select
-                  value={formData.targetCustomer}
-                  onChange={(e) => setFormData({ ...formData, targetCustomer: e.target.value as 'Male' | 'Female' | 'Unisex' })}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                >
-                  <option value="Male">Male</option>
-                  <option value="Female">Female</option>
-                  <option value="Unisex">Unisex</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Size <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.size}
-                    onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                    placeholder="e.g., M, L, XL"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Condition <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <select
-                    value={formData.condition}
-                    onChange={(e) => setFormData({ ...formData, condition: e.target.value as 'Excellent' | 'Good' | 'Fair' | 'Damaged' })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  >
-                    <option value="Excellent">Excellent</option>
-                    <option value="Good">Good</option>
-                    <option value="Fair">Fair</option>
-                    <option value="Damaged">Damaged</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Quantity <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 0 })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                    Price (₱) <span className="text-[#E7000B]">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[14px] font-medium text-[#323B42] mb-2">
-                  Location <span className="text-[#E7000B]">*</span>
-                </label>
-                <select
-                  value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] focus:outline-none focus:border-[#007A5E]"
-                >
-                  {locations.map((loc: any) => (
-                    <option key={loc.id} value={loc.name}>{loc.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={onCancelEdit}
-                className="flex-1 px-4 py-2 border border-[rgba(0,0,0,0.1)] rounded-[8px] text-[14px] font-medium text-[#323B42] hover:bg-[#F8FAFB] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={onSaveEdit}
-                className="flex-1 px-4 py-2 bg-[#007A5E] text-white rounded-[8px] text-[14px] font-medium hover:bg-[#008967] transition-colors"
-              >
-                Save Changes
-              </button>
             </div>
           </div>
         </div>

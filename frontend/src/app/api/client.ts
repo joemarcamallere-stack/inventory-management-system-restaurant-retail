@@ -5,6 +5,7 @@ import type {
   ApiInventoryItem,
   ApiKitchenOrder,
   ApiLocation,
+  ApiNotification,
   ApiPurchaseOrder,
   ApiRecipe,
   ApiRestaurantSetting,
@@ -456,6 +457,25 @@ export function rejectAdjustment(id: string, reason: string, module?: BusinessMo
     method: 'PATCH',
     body: JSON.stringify({ reason }),
   });
+}
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+
+export function getNotifications(params?: { unread?: boolean }) {
+  const suffix = params?.unread ? '?unread=true' : '';
+  return request<PagedResponse<ApiNotification>>(`/api/notifications${suffix}`).then((r) => r.data);
+}
+
+export function getUnreadNotificationCount() {
+  return request<number>('/api/notifications/unread-count');
+}
+
+export function markNotificationRead(id: string) {
+  return request<ApiNotification>(`/api/notifications/${id}/read`, { method: 'PATCH' });
+}
+
+export function markAllNotificationsRead() {
+  return request<{ success: boolean }>('/api/notifications/read-all', { method: 'PATCH' });
 }
 
 // ─── Bundles ─────────────────────────────────────────────────────────────────

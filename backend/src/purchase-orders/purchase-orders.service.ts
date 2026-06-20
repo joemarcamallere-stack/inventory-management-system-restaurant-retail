@@ -11,10 +11,14 @@ import { paginate, paginateQuery, PaginatedResult } from '../common/dto/paginati
 import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { ReceivePurchaseOrderDto } from './dto/receive-purchase-order.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PurchaseOrdersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     dto: CreatePurchaseOrderDto,
@@ -170,7 +174,17 @@ export class PurchaseOrdersService {
         'Only SUBMITTED orders can be approved',
       );
     }
-    return this.findOne(id, businessId, module);
+    const approved = await this.findOne(id, businessId, module);
+    // Best-effort: tell the submitter their PO was approved. Never block approval.
+    await this.notifications
+      .notifyPurchaseOrderApproved({
+        id: approved.id,
+        poNumber: approved.orderNumber,
+        createdById: approved.createdById,
+        businessId,
+      })
+      .catch(() => undefined);
+    return approved;
   }
 
   async receive(

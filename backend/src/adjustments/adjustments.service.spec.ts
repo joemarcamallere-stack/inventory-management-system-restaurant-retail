@@ -36,7 +36,9 @@ describe('AdjustmentsService', () => {
     } as any;
 
     return {
-      service: new AdjustmentsService(prisma),
+      service: new AdjustmentsService(prisma, {
+        notifyLowStock: jest.fn().mockResolvedValue(undefined),
+      } as any),
       prisma,
       tx,
     };

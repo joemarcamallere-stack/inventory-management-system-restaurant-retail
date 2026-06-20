@@ -8,7 +8,9 @@ describe('PurchaseOrdersService', () => {
       inventoryItem: { count: jest.fn().mockResolvedValue(0) },
       purchaseOrder: { create: jest.fn() },
     } as any;
-    const service = new PurchaseOrdersService(prisma);
+    const service = new PurchaseOrdersService(prisma, {
+      notifyPurchaseOrderApproved: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     await expect(
       service.create(
@@ -53,7 +55,9 @@ describe('PurchaseOrdersService', () => {
     const prisma = {
       $transaction: jest.fn((callback) => callback(tx)),
     } as any;
-    const service = new PurchaseOrdersService(prisma);
+    const service = new PurchaseOrdersService(prisma, {
+      notifyPurchaseOrderApproved: jest.fn().mockResolvedValue(undefined),
+    } as any);
 
     await expect(
       service.receive(

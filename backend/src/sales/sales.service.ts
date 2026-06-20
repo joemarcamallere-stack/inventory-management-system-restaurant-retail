@@ -8,10 +8,14 @@ import { BusinessModule, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateSaleDto } from './dto/create-sale.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class SalesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     dto: CreateSaleDto,
@@ -19,7 +23,9 @@ export class SalesService {
     module: BusinessModule,
     cashierId?: string,
   ) {
-    return this.prisma.$transaction(async (tx) => {
+    const lowStockCandidates: Parameters<NotificationsService['notifyLowStock']>[0] = [];
+    const saleResult = await this.prisma.$transaction(async (tx) => {
+      lowStockCandidates.length = 0; // reset on (re)entry in case the tx retries
       const itemIds = dto.items.map((i) => i.inventoryItemId);
 
       // Lock inventory rows before reading quantities
@@ -122,6 +128,17 @@ export class SalesService {
           },
         });
 
+        lowStockCandidates.push({
+          id: item.id,
+          name: item.name,
+          unit: item.unit,
+          previousQuantity,
+          newQuantity,
+          reorderPoint: item.reorderPoint,
+          minStock: item.minStock,
+          businessId,
+        });
+
         // Update local map so subsequent items use correct quantities
         itemMap.set(item.id, { ...item, quantity: newQuantity });
       }
@@ -142,6 +159,11 @@ export class SalesService {
 
       return sale;
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    // Best-effort low-stock alerts after the sale commits — never block the sale.
+    await this.notifications.notifyLowStock(lowStockCandidates).catch(() => undefined);
+
+    return saleResult;
   }
 
   async findAll(

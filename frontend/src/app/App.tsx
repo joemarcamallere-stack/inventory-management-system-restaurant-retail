@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
+import { NotificationBell } from './components/NotificationBell';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
 import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
@@ -268,7 +269,7 @@ export default function App() {
               </NavButton>
               <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
                 <TransfersIcon />
-                Transfers
+                Transfers & Adjustments
               </NavButton>
               <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
                 <MultilocationIcon />
@@ -317,6 +318,9 @@ export default function App() {
       </div>
 
       <div className="flex-1 h-full flex flex-col overflow-hidden">
+        <div className="flex items-center justify-end px-6 py-2.5 border-b border-[rgba(0,0,0,0.06)] bg-white">
+          <NotificationBell buttonClassName="text-[#6b7280] hover:text-[#323B42] hover:bg-[#F8FAFB]" />
+        </div>
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
             {currentView === 'dashboard' && (

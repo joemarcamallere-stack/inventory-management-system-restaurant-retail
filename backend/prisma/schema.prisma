@@ -37,6 +37,7 @@ enum NotificationType {
   BUNDLE_APPROVED
   BUNDLE_REJECTED
   KITCHEN_ORDER_READY
+  PURCHASE_ORDER_APPROVED
 }
 
 enum InventoryItemType {
@@ -214,6 +215,7 @@ model InventoryItem {
   reorderPoint       Float?
   expiryDate         DateTime?
   storageTemperature String?
+  isActive           Boolean             @default(true)
   dateAdded          DateTime            @default(now())
   locationId         String
   location           Location            @relation(fields: [locationId], references: [id])
@@ -236,6 +238,7 @@ model InventoryItem {
   @@index([businessId])
   @@index([businessId, itemType])
   @@index([businessId, locationId])
+  @@index([businessId, isActive])
 }
 
 model Recipe {

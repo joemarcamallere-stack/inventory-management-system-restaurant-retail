@@ -8,10 +8,14 @@ import { BusinessModule, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { paginate, paginateQuery, PaginatedResult } from '../common/dto/pagination.dto';
 import { CreateAdjustmentDto } from './dto/create-adjustment.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AdjustmentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async create(
     dto: CreateAdjustmentDto,
@@ -94,7 +98,9 @@ export class AdjustmentsService {
     if (!['Admin', 'Manager'].includes(role)) {
       throw new ForbiddenException('Only Admin or Manager can approve adjustments');
     }
-    return this.prisma.$transaction(async (tx) => {
+    const lowStockCandidates: Parameters<NotificationsService['notifyLowStock']>[0] = [];
+    const result = await this.prisma.$transaction(async (tx) => {
+      lowStockCandidates.length = 0; // reset on (re)entry in case the tx retries
       const adj = await tx.stockAdjustment.findFirst({
         where: { id, businessId, module },
         include: { items: true },
@@ -145,6 +151,17 @@ export class AdjustmentsService {
           data: { quantity: newQuantity },
         });
 
+        lowStockCandidates.push({
+          id: item.id,
+          name: item.name,
+          unit: item.unit,
+          previousQuantity,
+          newQuantity,
+          reorderPoint: item.reorderPoint,
+          minStock: item.minStock,
+          businessId,
+        });
+
         await tx.stockMovement.create({
           data: {
             type: 'ADJUSTMENT',
@@ -171,6 +188,11 @@ export class AdjustmentsService {
         include: this.adjustmentInclude,
       });
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+
+    // Best-effort low-stock alerts after the adjustment commits.
+    await this.notifications.notifyLowStock(lowStockCandidates).catch(() => undefined);
+
+    return result;
   }
 
   async reject(

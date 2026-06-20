@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEnum,
   IsISO8601,
   IsNumber,
@@ -126,4 +127,8 @@ export class CreateInventoryDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

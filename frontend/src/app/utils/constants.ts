@@ -5,7 +5,9 @@ export const categorySubcategories: { [key: string]: string[] } = {
   'Dresses': ['Casual Dresses', 'Formal Dresses'],
   'Outerwear': ['Jackets', 'Hoodies & Sweaters'],
   'Shoes': ['Sneakers', 'Boots', 'Sandals'],
-  'Accessories': ['Bags', 'Hats']
+  'Accessories': ['Bags', 'Hats'],
+  // Assorted/unsorted bales that don't fit one clothing type (e.g. "Mixed Clothing" bale)
+  'Mixed': ['Mixed Clothing', 'Mixed Kids Wear', 'Mixed Accessories', 'Mixed Shoes', 'Assorted Grade A', 'Assorted Grade B']
 };
 
 // Category subcategories mapping — brand-new general merchandise (mall/retail goods)

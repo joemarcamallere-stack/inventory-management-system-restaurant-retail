@@ -52,6 +52,7 @@ export interface ApiInventoryItem {
   reorderPoint?: number | null;
   expiryDate?: string | null;
   storageTemperature?: string | null;
+  isActive?: boolean;
   dateAdded: string;
   locationId: string;
   location?: ApiLocation;
@@ -335,7 +336,8 @@ export interface ApiCategory {
 export type RestaurantSettingKey =
   | 'CATEGORY_HIERARCHY'
   | 'STORAGE_TEMPERATURE_OPTIONS'
-  | 'PRODUCT_MERGE_METADATA';
+  | 'PRODUCT_MERGE_METADATA'
+  | 'RETAIL_PRODUCT_MERGE_METADATA';
 
 export interface ApiRestaurantSetting {
   key: RestaurantSettingKey;

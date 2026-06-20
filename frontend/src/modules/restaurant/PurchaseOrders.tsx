@@ -474,12 +474,6 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     }
   };
 
-  const openRejectOrderModal = (order: Order) => {
-    setRejectingOrder(order);
-    setRejectionNote(order.rejectionNote || "");
-    setShowRejectModal(true);
-  };
-
   const handleRejectOrder = async () => {
     const orderToReject = rejectingOrder || approvingOrder;
     if (!orderToReject) return;
@@ -734,24 +728,6 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      {order.status === "pending" && userRole === "admin" && (
-                        <>
-                          <button
-                            onClick={() => handleApproveOrder(order)}
-                            className="px-4 py-2 hover:bg-green-50 text-green-700 border border-green-200 rounded-xl transition-colors text-sm font-semibold"
-                            title="Approve and create GRN"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => openRejectOrderModal(order)}
-                            className="px-4 py-2 hover:bg-red-50 text-red-700 border border-red-200 rounded-xl transition-colors text-sm font-semibold"
-                            title="Reject Order"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
                       {order.status === "pending" && userRole !== "admin" && (
                         <button
                           onClick={() => handleCancelOrder(order.id)}
