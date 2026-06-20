@@ -630,16 +630,6 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Product Image */}
-            <div className="bg-card rounded-2xl p-6 shadow-sm border border-border">
-              <h2 className="text-xl font-bold text-foreground mb-6">Food Image</h2>
-              <div className="border-2 border-dashed border-input rounded-2xl p-3 text-center hover:border-primary transition-colors cursor-pointer">
-                <Apple className="w-12 h-12 text-muted-foreground mx-auto mb-6" />
-                <p className="text-sm text-muted-foreground mb-2">Click to upload</p>
-                <p className="text-xs text-muted-foreground">PNG, JPG up to 5MB</p>
-              </div>
-            </div>
-
             {/* Quick Stats */}
             <div className="bg-gradient-to-br from-primary to-secondary rounded-2xl p-6 text-white">
               <h3 className="font-semibold text-sm mb-6">Storage Tips</h3>
