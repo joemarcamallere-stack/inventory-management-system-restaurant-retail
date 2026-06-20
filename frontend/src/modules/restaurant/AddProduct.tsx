@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Apple, PhilippinePeso, Hash, Folder, Save, X, Calendar, Plus, FolderPlus, ShieldAlert } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Apple, PhilippinePeso, Hash, Folder, Save, X, Calendar, Plus, FolderPlus, ShieldAlert, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useSession } from "../../app/hooks/useSession";
 import {
@@ -7,6 +7,7 @@ import {
   useRestaurantCategoryHierarchyQuery,
   useRestaurantInventoryQuery,
   useRestaurantLocationsQuery,
+  useUpdateRestaurantInventoryMutation,
   useRestaurantStorageTemperatureOptionsQuery,
   useUpsertRestaurantCategoryHierarchyMutation,
   useUpsertRestaurantStorageTemperatureOptionsMutation,
@@ -24,6 +25,8 @@ const buildGeneratedSku = (name: string, id: number) => {
 
 type StoredProduct = {
   id: number;
+  backendId?: string;
+  locationId?: string;
   name: string;
   itemType?: string;
   sku: string;
@@ -39,6 +42,12 @@ type StoredProduct = {
   storageTemperature?: string;
 };
 
+const normalizeName = (value: string | undefined) => (value || "").trim().toLowerCase();
+
+const splitCategoryPath = (category: string | undefined) => {
+  const [main = "", sub = ""] = (category || "").split(" > ").map((part) => part.trim());
+  return { main, sub };
+};
 
 export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
   const { currentUser } = useSession();
@@ -63,6 +72,8 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
   const [newMainCategory, setNewMainCategory] = useState("");
   const [newSubCategory, setNewSubCategory] = useState("");
   const [categoryForSubCategory, setCategoryForSubCategory] = useState("");
+  const [selectedExistingProduct, setSelectedExistingProduct] = useState<StoredProduct | null>(null);
+  const [showNameSuggestions, setShowNameSuggestions] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     itemType: "INGREDIENT",
@@ -83,8 +94,25 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
   const { data: storageTemperatureOptions = [] } = useRestaurantStorageTemperatureOptionsQuery();
   const [newStorageTemperature, setNewStorageTemperature] = useState("");
   const createProduct = useCreateRestaurantInventoryMutation();
+  const updateProduct = useUpdateRestaurantInventoryMutation();
   const saveCategoryHierarchy = useUpsertRestaurantCategoryHierarchyMutation();
   const saveStorageTemperatureOptions = useUpsertRestaurantStorageTemperatureOptionsMutation();
+
+  const normalizedProductName = normalizeName(formData.name);
+  const matchingProducts = useMemo(() => {
+    if (!normalizedProductName) return [];
+    return products
+      .filter((product) =>
+        normalizeName(product.name).includes(normalizedProductName) ||
+        normalizeName(product.sku).includes(normalizedProductName)
+      )
+      .slice(0, 8);
+  }, [normalizedProductName, products]);
+  const exactProductMatch = useMemo(
+    () => products.find((product) => normalizeName(product.name) === normalizedProductName),
+    [normalizedProductName, products],
+  );
+  const productBeingUpdated = selectedExistingProduct ?? exactProductMatch ?? null;
 
   const createStoredProduct = async (product: StoredProduct) => {
       if (!locations[0]) throw new Error("Create a location before adding inventory");
@@ -105,6 +133,33 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
       });
   };
 
+  const updateStoredProduct = async (product: StoredProduct, addedStock: number) => {
+    if (!product.backendId) throw new Error("Selected inventory item is missing its backend ID");
+    const nextQuantity = (Number(product.stock) || 0) + addedStock;
+    const expiryDate = formData.expiryDate
+      ? new Date(`${formData.expiryDate}T00:00:00`).toISOString()
+      : undefined;
+
+    return updateProduct.mutateAsync({
+      id: product.backendId,
+      data: {
+        name: product.name,
+        itemType: product.itemType,
+        sku: product.sku || undefined,
+        category: product.category,
+        quantity: nextQuantity,
+        price: Number(formData.price) || product.price || 0,
+        unit: product.unit || formData.unit || "pcs",
+        minStock: formData.minStock ? Number(formData.minStock) : product.minStock,
+        maxStock: formData.maxStock ? Number(formData.maxStock) : product.maxStock,
+        reorderPoint: formData.reorderPoint ? Number(formData.reorderPoint) : product.reorderPoint,
+        expiryDate,
+        storageTemperature: formData.storageTemp || product.storageTemperature || undefined,
+        locationId: product.locationId || locations[0]?.id,
+      },
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -114,6 +169,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     const maxStock = formData.maxStock ? Number(formData.maxStock) : Math.max(stock * 2, 1);
     const reorderPoint = formData.reorderPoint ? Number(formData.reorderPoint) : undefined;
     const sku = formData.sku.trim() || buildGeneratedSku(formData.name, nextId);
+    const existingProduct = productBeingUpdated;
 
     const productToAdd: StoredProduct = {
       id: nextId,
@@ -133,10 +189,16 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
     };
 
     try {
-      await createStoredProduct(productToAdd);
+      if (existingProduct) {
+        await updateStoredProduct(existingProduct, stock);
+        toast.success(`Added ${stock} ${existingProduct.unit || formData.unit || "units"} to "${existingProduct.name}"`);
+      } else {
+        await createStoredProduct(productToAdd);
+        toast.success(`"${productToAdd.name}" added to inventory`);
+      }
       onClose?.();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create inventory item");
+      toast.error(error instanceof Error ? error.message : "Failed to save inventory item");
     }
   };
 
@@ -145,6 +207,37 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
       ...formData,
       [e.target.name]: e.target.value,
     });
+  };
+
+  const handleNameChange = (value: string) => {
+    setFormData({
+      ...formData,
+      name: value,
+      sku: selectedExistingProduct ? "" : formData.sku,
+    });
+    setSelectedExistingProduct(null);
+    setShowNameSuggestions(Boolean(value.trim()));
+  };
+
+  const handleSelectExistingProduct = (product: StoredProduct) => {
+    const { main, sub } = splitCategoryPath(product.category);
+    setSelectedExistingProduct(product);
+    setSelectedCategory(main);
+    setSelectedSubCategory(sub);
+    setFormData({
+      ...formData,
+      name: product.name,
+      itemType: product.itemType || "INGREDIENT",
+      sku: product.sku || "",
+      price: product.price ? product.price.toString() : formData.price,
+      minStock: product.minStock !== undefined ? product.minStock.toString() : "",
+      maxStock: product.maxStock !== undefined ? product.maxStock.toString() : "",
+      reorderPoint: product.reorderPoint !== undefined ? product.reorderPoint.toString() : "",
+      expiryDate: "",
+      storageTemp: product.storageTemperature || formData.storageTemp,
+      unit: product.unit || formData.unit,
+    });
+    setShowNameSuggestions(false);
   };
 
   const handleCategoryChange = (category: string) => {
@@ -213,16 +306,58 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                   <label htmlFor="name" className="block text-sm mb-2 text-foreground">
                     Name *
                   </label>
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={formData.name}
-                    onChange={handleChange}
-                    placeholder="e.g., Fresh Salmon Fillet"
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      id="name"
+                      name="name"
+                      type="text"
+                      value={formData.name}
+                      onFocus={() => setShowNameSuggestions(Boolean(formData.name.trim()))}
+                      onBlur={() => setTimeout(() => setShowNameSuggestions(false), 120)}
+                      onChange={(event) => handleNameChange(event.target.value)}
+                      placeholder="Search or type item name"
+                      autoComplete="off"
+                      className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                      required
+                    />
+                    {showNameSuggestions && (matchingProducts.length > 0 || (!exactProductMatch && formData.name.trim())) && (
+                      <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-56 overflow-y-auto rounded-xl border border-border bg-card shadow-lg">
+                        {matchingProducts.length > 0 && (
+                          <div className="divide-y divide-border">
+                            {matchingProducts.map((product) => (
+                              <button
+                                key={product.backendId || product.id}
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleSelectExistingProduct(product)}
+                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm text-foreground transition-colors hover:bg-muted/60"
+                              >
+                                <span className="min-w-0 truncate">
+                                  {product.name}{product.sku ? ` (${product.sku})` : ""}
+                                </span>
+                                <span className="shrink-0 text-xs text-muted-foreground">
+                                  {product.stock} {product.unit}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {!exactProductMatch && formData.name.trim() && (
+                          <div className="flex items-center gap-2 px-4 py-3 text-sm text-primary">
+                            <Plus className="h-4 w-4" />
+                            New item will be created: <span className="font-semibold">{formData.name.trim()}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  {productBeingUpdated && (
+                    <div className="mt-2 flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/10 px-3 py-2 text-xs text-primary">
+                      <Check className="h-4 w-4" />
+                      Existing inventory item selected. Saving will add to current stock instead of creating a duplicate.
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -234,7 +369,8 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     name="itemType"
                     value={formData.itemType}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
+                    disabled={Boolean(productBeingUpdated)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                     required
                   >
                     <option value="INGREDIENT">Ingredient</option>
@@ -255,7 +391,8 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     value={formData.sku}
                     onChange={handleChange}
                     placeholder="Leave blank to auto-generate"
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
+                    disabled={Boolean(productBeingUpdated)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all disabled:cursor-not-allowed disabled:opacity-60"
                   />
                 </div>
 
@@ -268,8 +405,9 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     <select
                       value={selectedCategory}
                       onChange={(e) => handleCategoryChange(e.target.value)}
-                      className="flex-1 px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                      required
+                      disabled={Boolean(productBeingUpdated)}
+                      className="flex-1 px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      required={!productBeingUpdated}
                     >
                       <option value="">Select category</option>
                       {Object.keys(categoryHierarchy).map((cat) => (
@@ -281,7 +419,8 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     <button
                       type="button"
                       onClick={() => setShowCategoryModal(true)}
-                      className="px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors flex items-center gap-2"
+                      disabled={Boolean(productBeingUpdated)}
+                      className="px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary/90 transition-colors flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Add Category"
                     >
                       <Plus className="w-4 h-4" />
@@ -298,8 +437,9 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     <select
                       value={selectedSubCategory}
                       onChange={(e) => setSelectedSubCategory(e.target.value)}
-                      className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
-                      required
+                      disabled={Boolean(productBeingUpdated)}
+                      className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      required={!productBeingUpdated}
                     >
                       <option value="">Select {(selectedCategory || '').toLowerCase()} type</option>
                       {categoryHierarchy[selectedCategory]?.map((subCat) => (
@@ -323,8 +463,13 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     value={formData.expiryDate}
                     onChange={handleChange}
                     className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all"
-                    required
+                    required={!productBeingUpdated}
                   />
+                  {productBeingUpdated && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Optional when adding stock to an existing item. Enter a new date only if this batch should update the item expiry.
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -419,7 +564,8 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                     name="unit"
                     value={formData.unit}
                     onChange={handleChange}
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer"
+                    disabled={Boolean(productBeingUpdated)}
+                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl focus:outline-none focus:ring-1 focus:ring-primary/50 focus:border-primary transition-all appearance-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                     required
                   >
                     <option value="">Select unit</option>
@@ -520,7 +666,7 @@ export function AddProduct({ onClose }: { onClose?: () => void } = {}) {
                 className="w-full bg-gradient-to-r from-primary to-secondary text-white py-3 text-sm rounded-2xl hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 font-medium flex items-center justify-center gap-2"
               >
                 <Save className="w-5 h-5" />
-                Save Food Item
+                {productBeingUpdated ? "Add Stock to Existing Item" : "Save Food Item"}
               </button>
               <button
                 type="button"
