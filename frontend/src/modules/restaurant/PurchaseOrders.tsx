@@ -1017,8 +1017,8 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
                     </div>
                   );
                 })()}
-                <div className="bg-muted/30 rounded-xl overflow-hidden">
-                  <table className="w-full">
+                <div className="bg-muted/30 rounded-xl overflow-x-auto">
+                  <table className="w-full min-w-[1040px]">
                     <thead className="bg-muted/50 border-b border-border">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Product Name</th>
