@@ -40,7 +40,7 @@ export const mapRetailPurchaseOrder = (order: ApiPurchaseOrder): PurchaseOrder =
       DRAFT: 'Pending',
       SUBMITTED: 'Pending',
       APPROVED: 'Approved',
-      PARTIALLY_RECEIVED: 'Approved',
+      PARTIALLY_RECEIVED: 'Partially Received',
       RECEIVED: 'Received',
       REJECTED: 'Rejected',
       CANCELLED: 'Cancelled',

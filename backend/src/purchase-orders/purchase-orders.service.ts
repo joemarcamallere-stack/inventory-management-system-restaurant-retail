@@ -324,7 +324,7 @@ export class PurchaseOrdersService {
         where: { purchaseOrderId: po.id },
       });
       const isComplete = updatedItems.every(
-        (item) => item.receivedQty + item.rejectedQty >= item.quantity,
+        (item) => item.receivedQty >= item.quantity,
       );
 
       const result = await tx.purchaseOrder.updateMany({

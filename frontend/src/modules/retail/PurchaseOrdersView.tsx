@@ -21,7 +21,9 @@ const STATUS_LABEL: Record<string, string> = {
   DRAFT: 'Draft',
   SUBMITTED: 'Submitted',
   APPROVED: 'Approved',
+  PARTIALLY_RECEIVED: 'Partially Received',
   RECEIVED: 'Received',
+  REJECTED: 'Rejected',
   CANCELLED: 'Cancelled',
 };
 
@@ -29,7 +31,9 @@ const STATUS_CLASS: Record<string, string> = {
   DRAFT: 'bg-[#f3f4f6] text-[#6b7280]',
   SUBMITTED: 'bg-[#fff4e6] text-[#FFA500]',
   APPROVED: 'bg-[#E0F2F2] text-[#007A5E]',
+  PARTIALLY_RECEIVED: 'bg-[#fff4e6] text-[#d08700]',
   RECEIVED: 'bg-[#E0F5F1] text-[#008967]',
+  REJECTED: 'bg-[#ffe2e2] text-[#E7000B]',
   CANCELLED: 'bg-[#ffe2e2] text-[#E7000B]',
 };
 
@@ -363,6 +367,7 @@ export default function PurchaseOrdersView({
     total: orders.length,
     pending: orders.filter(o => ['DRAFT', 'SUBMITTED'].includes(o.status)).length,
     approved: orders.filter(o => o.status === 'APPROVED').length,
+    partial: orders.filter(o => o.status === 'PARTIALLY_RECEIVED').length,
     received: orders.filter(o => o.status === 'RECEIVED').length,
   };
 
@@ -921,10 +926,11 @@ export default function PurchaseOrdersView({
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-5 gap-4 mb-6">
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Total Orders</p><p className="text-[#323B42] text-[24px] font-bold">{stats.total}</p></div>
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Pending</p><p className="text-[#FFA500] text-[24px] font-bold">{stats.pending}</p></div>
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Approved</p><p className="text-[#007A5E] text-[24px] font-bold">{stats.approved}</p></div>
+        <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Partially Received</p><p className="text-[#d08700] text-[24px] font-bold">{stats.partial}</p></div>
         <div className="bg-white border border-[rgba(0,0,0,0.1)] rounded-[14px] p-4"><p className="text-[#323B42] text-[12px] mb-1">Received</p><p className="text-[#008967] text-[24px] font-bold">{stats.received}</p></div>
       </div>
 
@@ -937,7 +943,9 @@ export default function PurchaseOrdersView({
             <option value="DRAFT">Draft</option>
             <option value="SUBMITTED">Submitted</option>
             <option value="APPROVED">Approved</option>
+            <option value="PARTIALLY_RECEIVED">Partially Received</option>
             <option value="RECEIVED">Received</option>
+            <option value="REJECTED">Rejected</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
         </div>

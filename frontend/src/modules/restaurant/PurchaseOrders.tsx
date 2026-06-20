@@ -46,6 +46,8 @@ type OrderItem = {
   sku?: string;
   productName: string;
   quantity: number;
+  receivedQty?: number;
+  rejectedQty?: number;
   unitPrice: number;
   category: string;
   subCategory: string;
@@ -144,6 +146,32 @@ const getOrderCreator = (order: Order, users: UserSummary[]) => {
 
 const getOrderCreatorRole = (order: Order) => order.createdByRole || "unknown";
 
+const getReceivingStatusLabel = (item: OrderItem) => {
+  const receivedQty = item.receivedQty ?? 0;
+  const rejectedQty = item.rejectedQty ?? 0;
+  if (receivedQty >= item.quantity) return "Fully Received";
+  if (receivedQty > 0) return "Partially Received";
+  if (rejectedQty > 0) return "Rejected";
+  return "Pending";
+};
+
+const getReceivingTotals = (order: Order) =>
+  order.orderItems.reduce(
+    (totals, item) => {
+      const receivedQty = item.receivedQty ?? 0;
+      const rejectedQty = item.rejectedQty ?? 0;
+      return {
+        ordered: totals.ordered + item.quantity,
+        received: totals.received + receivedQty,
+        rejected: totals.rejected + rejectedQty,
+        remaining: totals.remaining + Math.max(item.quantity - receivedQty - rejectedQty, 0),
+        receivedValue: totals.receivedValue + receivedQty * item.unitPrice,
+        orderedValue: totals.orderedValue + item.quantity * item.unitPrice,
+      };
+    },
+    { ordered: 0, received: 0, rejected: 0, remaining: 0, receivedValue: 0, orderedValue: 0 },
+  );
+
 export function PurchaseOrders() {
   const { currentUser: sessionUser } = useSession();
   const userRole = sessionUser?.role === "Admin" ? "admin" : "staff";
@@ -178,7 +206,17 @@ export function PurchaseOrders() {
   const { data: orders = [] } = useRestaurantPurchaseOrdersQuery<Order[]>();
   const { data: users = [] } = useRestaurantUsersQuery();
 
-  const statuses = ["all", "pending", "approved", "received", "partial", "rejected", "cancelled"];
+  const statuses = ["all", "pending", "approved", "partial", "received", "rejected", "cancelled"];
+  const statusLabels: Record<string, string> = {
+    all: "All Status",
+    pending: "Pending",
+    approved: "Approved",
+    partial: "Partially Received",
+    received: "Received",
+    rejected: "Rejected",
+    cancelled: "Cancelled",
+    completed: "Completed",
+  };
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = (order.id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -212,7 +250,7 @@ export function PurchaseOrders() {
     if (!Icon || !style) {
       return (
         <span className="px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1" style={{ backgroundColor: "#E5E7EB", color: "#374151", borderColor: "#9CA3AF" }}>
-          {status.charAt(0).toUpperCase() + status.slice(1)}
+          {statusLabels[status] ?? status.charAt(0).toUpperCase() + status.slice(1)}
         </span>
       );
     }
@@ -220,7 +258,7 @@ export function PurchaseOrders() {
     return (
       <span className="px-3 py-1 rounded-full text-xs font-medium border inline-flex items-center gap-1" style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}>
         <Icon className="w-5 h-5" />
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+        {statusLabels[status] ?? status.charAt(0).toUpperCase() + status.slice(1)}
       </span>
     );
   };
@@ -229,7 +267,8 @@ export function PurchaseOrders() {
     { label: "Total Orders", value: orders.length, color: "#009BA5" },
     { label: "Pending", value: orders.filter(o => o.status === "pending").length, color: "#F59E0B" },
     { label: "Approved", value: orders.filter(o => o.status === "approved").length, color: "#007A5E" },
-    { label: "Partial", value: orders.filter(o => o.status === "partial").length, color: "#F59E0B" },
+    { label: "Partially Received", value: orders.filter(o => o.status === "partial").length, color: "#F59E0B" },
+    { label: "Received", value: orders.filter(o => o.status === "received").length, color: "#007A5E" },
     { label: "Rejected", value: orders.filter(o => o.status === "rejected").length, color: "#DC2626" },
   ];
 
@@ -255,10 +294,10 @@ export function PurchaseOrders() {
       border: "#008967",
     },
     {
-      label: "Partial",
+      label: "Partially Received",
       status: "partial",
       value: orders.filter(o => o.status === "partial").length,
-      description: "Partially received or accepted",
+      description: "Some ordered goods have been received",
       icon: AlertCircle,
       color: "#9A3412",
       bg: "#FED7AA",
@@ -438,7 +477,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
     csvContent += `Created At:,${order.createdAt || order.date}\n`;
     csvContent += `Order Date:,${order.date}\n`;
     csvContent += `Expected Delivery:,${order.expectedDelivery}\n`;
-    csvContent += `Status:,${order.status}\n\n`;
+    csvContent += `Status:,${statusLabels[order.status] ?? order.status}\n\n`;
     if (order.rejectionNote) {
       csvContent += `Rejection Note:,${order.rejectionNote}\n`;
       csvContent += `Rejected By:,${order.rejectedBy || "Admin"}\n`;
@@ -589,7 +628,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
         {stats.map((stat, index) => (
           <div key={index} className="bg-card rounded-2xl p-6 shadow-sm border border-border">
             <p className="text-muted-foreground text-sm mb-1">{stat.label}</p>
@@ -656,7 +695,7 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
             >
               {statuses.map((status) => (
                 <option key={status} value={status}>
-                  {status === "all" ? "All Status" : status.charAt(0).toUpperCase() + status.slice(1)}
+                  {statusLabels[status] ?? status.charAt(0).toUpperCase() + status.slice(1)}
                 </option>
               ))}
             </select>
@@ -955,38 +994,87 @@ if (!currentItem.productName.trim() || !currentItem.quantity.trim() || !currentI
               {/* Order Items Table */}
               <div className="border-t border-border pt-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4">Order Items</h3>
+                {(() => {
+                  const receivingTotals = getReceivingTotals(selectedOrder);
+                  return (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="rounded-xl border border-border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground mb-1">Ordered</p>
+                        <p className="text-xl font-bold text-foreground">{receivingTotals.ordered}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground mb-1">Received</p>
+                        <p className="text-xl font-bold text-primary">{receivingTotals.received}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground mb-1">Rejected</p>
+                        <p className="text-xl font-bold text-red-700">{receivingTotals.rejected}</p>
+                      </div>
+                      <div className="rounded-xl border border-border bg-muted/30 p-4">
+                        <p className="text-xs text-muted-foreground mb-1">Remaining</p>
+                        <p className="text-xl font-bold text-amber-700">{receivingTotals.remaining}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="bg-muted/30 rounded-xl overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-muted/50 border-b border-border">
                       <tr>
                         <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Product Name</th>
-                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Quantity</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Ordered</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Received</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Rejected</th>
+                        <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Remaining</th>
                         <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Unit</th>
                         <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Unit Price</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-foreground">Receiving Status</th>
                         <th className="px-4 py-3 text-right text-sm font-medium text-foreground">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {selectedOrder.orderItems.map((item, index) => (
+                      {selectedOrder.orderItems.map((item, index) => {
+                        const receivedQty = item.receivedQty ?? 0;
+                        const rejectedQty = item.rejectedQty ?? 0;
+                        const remainingQty = Math.max(item.quantity - receivedQty - rejectedQty, 0);
+                        return (
                         <tr key={index} className="hover:bg-muted/20">
                           <td className="px-4 py-3 text-foreground">{item.productName}</td>
                           <td className="px-4 py-3 text-right text-foreground">{item.quantity}</td>
+                          <td className="px-4 py-3 text-right text-primary font-medium">{receivedQty}</td>
+                          <td className="px-4 py-3 text-right text-red-700 font-medium">{rejectedQty}</td>
+                          <td className="px-4 py-3 text-right text-amber-700 font-medium">{remainingQty}</td>
                           <td className="px-4 py-3 text-left text-foreground">{item.unit}</td>
                           <td className="px-4 py-3 text-right text-foreground">₱{item.unitPrice.toFixed(2)}</td>
-                          <td className="px-4 py-3 text-right font-medium text-foreground">
-                            ₱{(item.quantity * item.unitPrice).toFixed(2)}
-                          </td>
+                          <td className="px-4 py-3 text-left text-foreground">{getReceivingStatusLabel(item)}</td>
+                            <td className="px-4 py-3 text-right font-medium text-foreground">
+                              ₱{(receivedQty * item.unitPrice).toFixed(2)}
+                              <span className="block text-xs text-muted-foreground">
+                                out of ₱{(item.quantity * item.unitPrice).toFixed(2)}
+                              </span>
+                            </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                     <tfoot className="bg-muted/50 border-t border-border">
                       <tr>
-                        <td colSpan={3} className="px-4 py-3 text-right font-semibold text-foreground">
-                          Grand Total:
-                        </td>
-                        <td className="px-4 py-3 text-right text-xl font-bold text-primary">
-                          ₱{selectedOrder.total.toFixed(2)}
-                        </td>
+                        {(() => {
+                          const receivingTotals = getReceivingTotals(selectedOrder);
+                          return (
+                            <>
+                              <td colSpan={8} className="px-4 py-3 text-right font-semibold text-foreground">
+                                Grand Total Received:
+                              </td>
+                              <td className="px-4 py-3 text-right text-xl font-bold text-primary">
+                                ₱{receivingTotals.receivedValue.toFixed(2)}
+                                <span className="block text-sm font-medium text-muted-foreground">
+                                  out of ₱{receivingTotals.orderedValue.toFixed(2)}
+                                </span>
+                              </td>
+                            </>
+                          );
+                        })()}
                       </tr>
                     </tfoot>
                   </table>

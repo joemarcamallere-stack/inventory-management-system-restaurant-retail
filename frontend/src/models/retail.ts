@@ -20,7 +20,7 @@ export interface PurchaseOrder {
   orderNumber: string;
   supplier: string;
   date: string;
-  status: 'Pending' | 'Approved' | 'Received' | 'Rejected' | 'Cancelled';
+  status: 'Pending' | 'Approved' | 'Partially Received' | 'Received' | 'Rejected' | 'Cancelled';
   items: { name: string; quantity: number; price: number }[];
   totalAmount: number;
   paymentMethod?: 'Cash' | 'Bank Transfer' | 'Check' | 'Credit Terms';

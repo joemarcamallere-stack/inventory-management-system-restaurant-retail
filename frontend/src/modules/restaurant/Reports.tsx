@@ -39,6 +39,19 @@ const statusPill = (status: string) => {
   return map[status?.toLowerCase()] ?? 'bg-gray-100 text-gray-600';
 };
 
+const purchaseOrderStatusLabel = (status?: string) => {
+  const map: Record<string, string> = {
+    pending: 'Pending',
+    approved: 'Approved',
+    partial: 'Partially Received',
+    received: 'Received',
+    rejected: 'Rejected',
+    cancelled: 'Cancelled',
+  };
+  const key = status?.toLowerCase() ?? 'pending';
+  return map[key] ?? (status || 'Pending');
+};
+
 const formatAuditDate = (value?: string) => {
   if (!value) return '';
   const date = new Date(value);
@@ -723,7 +736,7 @@ export function Reports() {
                         <td className="py-3 text-sm text-muted-foreground">{o.createdBy || '—'}</td>
                         <td className="py-3">
                           <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${statusPill(o.status)}`}>
-                            {o.status || 'pending'}
+                            {purchaseOrderStatusLabel(o.status)}
                           </span>
                         </td>
                         <td className="py-3 text-sm font-medium text-foreground text-right">{formatCurrency(o.total)}</td>

@@ -66,41 +66,52 @@ const toDateInput = (value?: string | null) => {
 };
 
 export function mapRestaurantPurchaseOrders(orders: ApiPurchaseOrder[]) {
-  return orders.map((order) => ({
-    id: order.id,
-    backendId: order.id,
-    supplier: order.supplier?.name ?? '',
-    supplierId: order.supplierId,
-    date: toDateInput(order.createdAt),
-    items: order.items?.length ?? 0,
-    orderItems: (order.items ?? []).map((item) => ({
-      backendId: item.id,
-      productId: item.inventoryItemId,
-      backendInventoryId: item.inventoryItemId,
-      productName: item.name,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      category: item.inventoryItem?.category ?? '',
-      subCategory: item.inventoryItem?.subcategory ?? '',
-      unit: item.inventoryItem?.unit ?? 'pcs',
-    })),
-    total: order.totalAmount,
-    status:
-      ({
-        DRAFT: 'pending',
-        SUBMITTED: 'pending',
-        APPROVED: 'approved',
-        PARTIALLY_RECEIVED: 'partial',
-        RECEIVED: 'received',
-        REJECTED: 'rejected',
-        CANCELLED: 'cancelled',
-      } as Record<string, string>)[order.status] ?? order.status.toLowerCase(),
-    expectedDelivery: toDateInput(order.expectedDelivery),
-    createdBy: order.createdBy?.email ?? order.createdBy?.name ?? '',
-    createdAt: order.createdAt,
-    rejectionNote: order.rejectionReason,
-    backendStatus: order.status,
-  }));
+  return orders.map((order) => {
+    const effectiveStatus =
+      order.status === 'RECEIVED' &&
+      (order.items ?? []).some((item) => item.receivedQty < item.quantity)
+        ? 'PARTIALLY_RECEIVED'
+        : order.status;
+
+    return {
+      id: order.id,
+      backendId: order.id,
+      supplier: order.supplier?.name ?? '',
+      supplierId: order.supplierId,
+      date: toDateInput(order.createdAt),
+      items: order.items?.length ?? 0,
+      orderItems: (order.items ?? []).map((item) => ({
+        backendId: item.id,
+        productId: item.inventoryItemId,
+        backendInventoryId: item.inventoryItemId,
+        productName: item.name,
+        quantity: item.quantity,
+        receivedQty: item.receivedQty,
+        rejectedQty: item.rejectedQty,
+        unitPrice: item.unitPrice,
+        category: item.inventoryItem?.category ?? '',
+        subCategory: item.inventoryItem?.subcategory ?? '',
+        unit: item.inventoryItem?.unit ?? 'pcs',
+      })),
+      total: order.totalAmount,
+      status:
+        ({
+          DRAFT: 'pending',
+          SUBMITTED: 'pending',
+          APPROVED: 'approved',
+          PARTIALLY_RECEIVED: 'partial',
+          RECEIVED: 'received',
+          REJECTED: 'rejected',
+          CANCELLED: 'cancelled',
+        } as Record<string, string>)[effectiveStatus] ??
+        effectiveStatus.toLowerCase(),
+      expectedDelivery: toDateInput(order.expectedDelivery),
+      createdBy: order.createdBy?.email ?? order.createdBy?.name ?? '',
+      createdAt: order.createdAt,
+      rejectionNote: order.rejectionReason,
+      backendStatus: order.status,
+    };
+  });
 }
 
 export function mapRestaurantSuppliers(suppliers: ApiSupplier[]) {

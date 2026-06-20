@@ -41,6 +41,19 @@ const goToPurchaseOrders = () => {
   window.dispatchEvent(new CustomEvent('restaurant-navigate', { detail: 'restaurant-purchase-orders' }));
 };
 
+const purchaseOrderStatusLabel = (status?: string) => {
+  const map: Record<string, string> = {
+    pending: "Pending",
+    approved: "Approved",
+    partial: "Partially Received",
+    received: "Received",
+    rejected: "Rejected",
+    cancelled: "Cancelled",
+  };
+  const key = status?.toLowerCase() ?? "pending";
+  return map[key] ?? (status || "Pending");
+};
+
 export function Dashboard() {
   const { currentUser } = useSession();
   const userRole = currentUser?.role === "Admin" ? "admin" : "staff";
@@ -176,7 +189,7 @@ export function Dashboard() {
     })),
     ...purchaseOrders.slice(0, 3).map((order, index) => ({
       id: `po-${order.id}`,
-      action: `Purchase order ${order.status}`,
+      action: `Purchase order ${purchaseOrderStatusLabel(order.status)}`,
       item: order.id,
       time: order.date ? `${order.date}T0${8 + index}:00:00` : "local record",
       type: "order",
