@@ -4,14 +4,22 @@ export const BUSINESS_PROFILE_KEY = 'business.profile';
 export const POS_PRICING_KEY = 'pos.pricing';
 export const POS_RECEIPT_KEY = 'pos.receipt';
 export const POS_PAYMENTS_KEY = 'pos.payments';
+export const POS_FEATURES_KEY = 'pos.features';
+export const POS_DISCOUNTS_KEY = 'pos.discounts';
 
 export type BusinessProfileSetting = {
   displayName: string;
+  businessDescription: string;
+  logo: string;
   address: string;
+  email: string;
   phone: string;
   tin: string;
   receiptHeader: string;
   receiptFooter: string;
+  operatingHours: string;
+  currency: string;
+  themeColor: string;
 };
 
 export type POSPricingSetting = {
@@ -31,13 +39,31 @@ export type POSPaymentSetting = {
   methods: string[];
 };
 
+export type POSFeatureSetting = {
+  customerRecommendations: boolean;
+  tableManagement: boolean;
+  refundProcessing: boolean;
+  voidTransactions: boolean;
+  discounts: boolean;
+};
+
+export type POSDiscountSetting = {
+  discounts: Array<{ id: string; name: string; percentage: number }>;
+};
+
 export const defaultBusinessProfile: BusinessProfileSetting = {
   displayName: 'Bukolabs.io',
+  businessDescription: '',
+  logo: '',
   address: '',
+  email: '',
   phone: '',
   tin: '',
   receiptHeader: 'Official Receipt',
   receiptFooter: 'Thank you for your purchase.',
+  operatingHours: '9:00 AM - 10:00 PM',
+  currency: 'PHP',
+  themeColor: '#008967',
 };
 
 export const defaultPOSPricing: POSPricingSetting = {
@@ -54,7 +80,22 @@ export const defaultPOSReceipt: POSReceiptSetting = {
 };
 
 export const defaultPOSPayments: POSPaymentSetting = {
-  methods: ['Cash', 'GCash', 'Card', 'Bank Transfer'],
+  methods: ['Cash', 'GCash', 'Maya', 'Bank Transfer'],
+};
+
+export const defaultPOSFeatures: POSFeatureSetting = {
+  customerRecommendations: true,
+  tableManagement: true,
+  refundProcessing: true,
+  voidTransactions: true,
+  discounts: true,
+};
+
+export const defaultPOSDiscounts: POSDiscountSetting = {
+  discounts: [
+    { id: 'senior', name: 'Senior Citizen', percentage: 20 },
+    { id: 'pwd', name: 'PWD', percentage: 20 },
+  ],
 };
 
 export function getBusinessProfile(settings: ApiBusinessSetting[] = []) {
@@ -89,6 +130,27 @@ export function getPOSPayments(settings: ApiPOSSetting[] = []) {
     methods: Array.isArray(value?.methods) && value.methods.length > 0
       ? value.methods
       : defaultPOSPayments.methods,
+  };
+}
+
+export function getPOSFeatures(settings: ApiPOSSetting[] = []) {
+  return {
+    ...defaultPOSFeatures,
+    ...readSetting<Partial<POSFeatureSetting>>(settings, POS_FEATURES_KEY),
+  };
+}
+
+export function getPOSDiscounts(settings: ApiPOSSetting[] = []) {
+  const value = readSetting<Partial<POSDiscountSetting>>(settings, POS_DISCOUNTS_KEY);
+  return {
+    ...defaultPOSDiscounts,
+    ...value,
+    discounts: Array.isArray(value?.discounts)
+      ? value.discounts.map((discount) => ({
+          ...discount,
+          percentage: Number(discount.percentage) || 0,
+        }))
+      : defaultPOSDiscounts.discounts,
   };
 }
 

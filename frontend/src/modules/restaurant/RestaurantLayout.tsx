@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import logoImage from "../../imports/ims-logo.png";
 import "./restaurantLegacyTheme.css";
+import { POSShell } from "../shared/pos/shell/POSShell";
 
 const navItems = [
   { view: "restaurant-dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ["Admin", "Manager", "Staff"] },
@@ -42,6 +43,36 @@ const navItems = [
   { view: "user-management", icon: Users, label: "User Management", roles: ["Admin"] },
 ] as const;
 
+const restaurantPOSViews = new Set([
+  "restaurant-pos-dashboard",
+  "restaurant-staff-accounts",
+  "restaurant-create-order",
+  "restaurant-payment",
+  "restaurant-receipt",
+  "restaurant-order-list",
+  "restaurant-table-management",
+  "restaurant-kitchen-queue",
+  "restaurant-pos-settings",
+  "restaurant-store-information",
+  "restaurant-store-settings",
+  "restaurant-pos-categories",
+  "restaurant-pos-products",
+  "restaurant-pos-ingredients",
+  "restaurant-reports",
+]);
+
+const restaurantPOSNavItems = [
+  { view: "restaurant-pos-dashboard", icon: LayoutDashboard, label: "Dashboard", roles: ["Admin", "Manager", "Staff", "Cashier", "KitchenStaff"], activeViews: ["restaurant-pos-dashboard"] },
+  { view: "restaurant-create-order", icon: ReceiptText, label: "Create Order", roles: ["Admin", "Manager", "Staff", "Cashier"], activeViews: ["restaurant-create-order", "restaurant-payment", "restaurant-receipt"] },
+  { view: "restaurant-order-list", icon: ReceiptText, label: "Transaction", roles: ["Admin", "Manager", "Staff", "Cashier"], activeViews: ["restaurant-order-list"] },
+  { view: "restaurant-table-management", icon: LayoutDashboard, label: "Tables", roles: ["Admin", "Manager", "Staff"], activeViews: ["restaurant-table-management"] },
+  { view: "restaurant-kitchen-queue", icon: ChefHat, label: "Kitchen", roles: ["Admin", "Manager", "Staff", "KitchenStaff"], activeViews: ["restaurant-kitchen-queue"] },
+  { view: "restaurant-reports", icon: FileText, label: "Reports", roles: ["Admin", "Manager", "Staff"], activeViews: ["restaurant-reports"] },
+  { view: "restaurant-pos-settings", icon: PackageSearch, label: "POS Settings", roles: ["Admin", "Manager"], activeViews: ["restaurant-pos-settings"] },
+] as const;
+
+const restaurantIMSNavItems = navItems.filter((item) => !restaurantPOSViews.has(item.view));
+
 type Props = {
   currentView: string;
   user: { email: string; role: string } | null;
@@ -62,7 +93,9 @@ export function RestaurantLayout({
   children,
 }: Props) {
   const userRole = user?.role ?? "Staff";
-  const visibleItems = navItems.filter((item) => item.roles.includes(userRole as any));
+  const isPOSWorkspace = restaurantPOSViews.has(currentView);
+  const visibleItems = (isPOSWorkspace ? restaurantPOSNavItems : restaurantIMSNavItems)
+    .filter((item) => item.roles.includes(userRole as any));
   const [dataError, setDataError] = useState("");
 
   useEffect(() => {
@@ -77,6 +110,20 @@ export function RestaurantLayout({
       window.removeEventListener("api-error", handleError);
     };
   }, []);
+
+  if (isPOSWorkspace) {
+    return (
+      <POSShell
+        module="RESTAURANT"
+        currentView={currentView}
+        user={user}
+        onNavigate={onNavigate}
+        onLogout={onLogout}
+      >
+        {children}
+      </POSShell>
+    );
+  }
 
   return (
     <div className="restaurant-legacy flex h-screen bg-background">
@@ -106,10 +153,22 @@ export function RestaurantLayout({
           </div>
         )}
 
+        <div className="px-4 pt-4">
+          <button
+            type="button"
+            onClick={() => onNavigate(isPOSWorkspace ? "restaurant-dashboard" : "restaurant-pos-dashboard")}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-sidebar-border bg-sidebar-accent/60 px-4 py-2.5 text-sm font-semibold text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          >
+            {isPOSWorkspace ? <Package className="w-4 h-4" /> : <Store className="w-4 h-4" />}
+            {isPOSWorkspace ? "Inventory Workspace" : "POS Workspace"}
+          </button>
+        </div>
+
         <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-none [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {visibleItems.map((item) => {
             const Icon = item.icon;
-            const isActive = currentView === item.view;
+            const activeViews = "activeViews" in item ? item.activeViews : [item.view];
+            const isActive = activeViews.includes(currentView as never);
             return (
               <button
                 key={item.view}

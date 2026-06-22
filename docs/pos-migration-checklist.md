@@ -119,14 +119,15 @@ Gate 4b status: passed for the current migration scope. Restaurant POS history/r
 Functional parity (4b) is done. This phase targets POS-faithful screen boundaries, workflow, and layout — not backend rework, not literal Bukolabs filenames/colors. IMS backend, auth, API client, and design tokens stay as-is.
 
 Step 1 - Move consolidated `RestaurantPOSView.tsx` cart/order/payment/receipt logic into shared hooks/state under `modules/shared/pos`:
-- [ ] Extract logic so screen-splitting in Step 2 is mechanical, not a rewrite.
+- [x] Shared cart, settings, receipt snapshot, payment/receipt, and POS order hooks exist under shared/lib modules.
+- [x] Move the restaurant order-entry implementation into `restaurant/pos/create-order/CreateOrderView.tsx`; keep `RestaurantPOSView.tsx` only as a legacy route alias.
 
 Step 2 - Build POS-faithful `XxxView.tsx` screen boundaries (IMS's existing naming convention, not literal Bukolabs filenames):
-- [ ] Restaurant: `CreateOrderView.tsx` -> `PaymentView.tsx` -> `ReceiptView.tsx` as a local step flow (replacing the single screen + modals).
-- [ ] `OrderListView.tsx`, `TableManagementView.tsx` (already separate), `KitchenQueueView.tsx`, `ReportsView.tsx`, `SettingsView.tsx` (one consolidated settings screen, confirmed intentional).
-- [ ] Retail: mirror the same `XxxView.tsx` pattern under `modules/retail/pos` for whichever screens Bukolabs separated on the retail side.
-- [ ] `POSDashboardView.tsx` (already ported) confirmed out of scope for this fidelity pass.
-- [ ] Wire every view to existing IMS API client/hooks — no new backend endpoints.
+- [x] Restaurant: `CreateOrderView.tsx` -> `PaymentView.tsx` -> `ReceiptView.tsx` as a local step flow (replacing the single screen + modals).
+- [x] `OrderListView.tsx`, `TableManagementView.tsx` (already separate), `KitchenQueueView.tsx`, `ReportsView.tsx`, `SettingsView.tsx` (one consolidated settings screen, confirmed intentional).
+- [x] Retail: mirror the same `XxxView.tsx` pattern under `modules/retail/pos` for whichever screens Bukolabs separated on the retail side.
+- [x] `POSDashboardView.tsx` (already ported) confirmed out of scope for this fidelity pass.
+- [x] Wire every view to existing IMS API client/hooks — no new backend endpoints.
 
 Step 3 - Layout/spacing/workflow fidelity, IMS tokens retained (not Bukolabs literal hex/px):
 - [ ] Match Bukolabs' spacing, layout structure, and interaction order per screen using IMS's existing design tokens.
@@ -139,7 +140,7 @@ Step 5 - Shell and login (separate, still open from earlier discussion, not requ
 
 Step 6 - SuperAdmin: deferred and still gated on tenancy-scope decision (see Slice F).
 
-Gate 4c status: not started.
+Gate 4c status: structurally passed. POS-faithful screen boundaries and IMS-hook wiring are in place; visual QA/layout polish remains.
 
 ## Phase 5 - Refunds, Voids, Settings, And Reporting Hardening
 
@@ -171,11 +172,13 @@ Direction: keep the IMS backend/API/transaction model, but expose Bukolabs-style
 - [x] Add retail POS-faithful screen homes: `RetailCreateOrder`, `RetailOrderList`, and `RetailThermalReceipt` route surface.
 - [x] Wire sidebar/dashboard navigation to POS-faithful screen names while preserving old route aliases.
 - [x] Split restaurant checkout internals further so payment/receipt are true continuation screens, not just dedicated history/work-queue surfaces.
+- [x] Move restaurant Create Order implementation into the dedicated `create-order/CreateOrderView.tsx`; keep `RestaurantPOSView.tsx` as a compatibility alias only.
+- [x] Move retail Create Order implementation into the dedicated `create-order/RetailCreateOrderView.tsx`; keep `POSView.tsx` as a compatibility alias only.
 - [x] Make retail `RetailThermalReceipt` a real receipt review/print screen backed by stored IMS receipts.
 - [ ] Tighten visual fidelity screen-by-screen against Bukolabs layouts where it helps POS-team continuity.
 - [x] Add a screen-by-screen acceptance checklist for POS team review.
 
-Gate 7 status: in progress. Screen structure, navigation, restaurant continuation flow, retail thermal receipt review, and acceptance checklist are in place; deeper visual fidelity remains.
+Gate 7 status: structurally passed. Screen structure, navigation, restaurant continuation flow, retail thermal receipt review, dedicated restaurant/retail Create Order ownership, and acceptance checklist are in place; deeper side-by-side visual fidelity remains.
 
 ## Phase 8 - Team Workflow Safety
 

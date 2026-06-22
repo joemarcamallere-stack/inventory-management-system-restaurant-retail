@@ -367,6 +367,19 @@ export interface ApiRecipe {
   updatedAt?: string;
 }
 
+export interface ApiIngredientAlternative {
+  id: string;
+  parentIngredientId: string;
+  parentIngredientName: string;
+  alternativeIngredientId: string;
+  alternativeIngredientName: string;
+  additionalPrice: number;
+  isAvailable: boolean;
+  businessId: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export type KitchenOrderStatus =
   | 'PENDING'
   | 'PREPARING'
@@ -406,6 +419,7 @@ export interface ApiCategory {
   id: string;
   name: string;
   module: BusinessModule;
+  description?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }

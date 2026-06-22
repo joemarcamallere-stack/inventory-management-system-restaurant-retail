@@ -8,10 +8,11 @@ export default function RestaurantPOSDashboardView({
   return (
     <POSDashboard
       module="RESTAURANT"
-      title="Restaurant POS Dashboard"
+      title="Dashboard"
       onCreateOrder={() => onNavigate('restaurant-create-order')}
       onOpenReports={() => onNavigate('restaurant-reports')}
       onOpenKitchen={() => onNavigate('restaurant-kitchen-queue')}
+      showCreateOrder={false}
     />
   );
 }

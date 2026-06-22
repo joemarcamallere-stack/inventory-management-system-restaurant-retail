@@ -13,7 +13,7 @@ export default function POSOrderHistoryView() {
   return (
     <SharedPOSOrderHistoryView
       module="RESTAURANT"
-      title="Restaurant POS History"
+      title="Transaction History"
       onRefundSale={refundSale.mutateAsync}
       onVoidOrder={voidOrder.mutateAsync}
       onMarkReceiptPrinted={markReceiptPrinted.mutateAsync}

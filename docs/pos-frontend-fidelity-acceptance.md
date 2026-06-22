@@ -4,114 +4,128 @@ This checklist is for POS-team review. The target is not to copy the Bukolabs ba
 
 Reference repo: `C:\Users\Joemar S. Camallere\Documents\POS\Bukolabs-POS`
 
+## Fidelity Pass - 2026-06-19
+
+- Source pass completed against the cloned Bukolabs POS repo above.
+- IMS now keeps separate POS-team screen homes while legacy aliases remain wrappers.
+- IMS shell navigation now separates POS and inventory/admin workspaces so POS operators see a Bukolabs-style POS menu instead of the full IMS inventory menu.
+- Backend fidelity is IMS-native, not Bukolabs-native: orders flow through `POSOrder -> Payment -> Receipt -> Sale`, and stock deduction remains payment-time only.
+- Bukolabs post-login reference screenshots were captured from `http://localhost:5190/` using the provided restaurant and retail admin accounts. Screenshots are in `tmp/pos-fidelity/logged-in/`.
+- Visual acceptance is not final POS-team signoff yet. The reference screenshots are ready for side-by-side comparison, but IMS still needs the same real-data browser review before this can be marked fully accepted.
+
 ## Restaurant POS
 
 ### POS Dashboard
 
-- [ ] Opens from `restaurant-pos-dashboard`.
-- [ ] New Order action opens `restaurant-create-order`.
-- [ ] Reports action opens `restaurant-reports`.
-- [ ] Kitchen action opens `restaurant-kitchen-queue`.
-- [ ] Shows sales, open orders, kitchen, and table signals.
+- [x] Opens from `restaurant-pos-dashboard`.
+- [x] New Order action opens `restaurant-create-order`.
+- [x] Reports action opens `restaurant-reports`.
+- [x] Kitchen action opens `restaurant-kitchen-queue`.
+- [x] Shows sales, open orders, kitchen, and table signals.
 
 ### Create Order
 
-- [ ] Opens from `restaurant-create-order`.
-- [ ] Supports menu search and category filtering.
-- [ ] Supports dine-in and takeout.
-- [ ] Supports table selection for dine-in/mixed orders.
-- [ ] Supports cart quantity edits and item removal.
-- [ ] Supports per-item notes/customizations.
-- [ ] Supports senior/PWD/promo/custom discounts.
-- [ ] Pay Now can complete the transaction immediately.
-- [ ] Save and Continue to Payment creates an unpaid POS order and opens Payment.
-- [ ] Uses IMS `POSOrder` without deducting stock until payment completion.
+- [x] Opens from `restaurant-create-order`.
+- [x] Supports menu search and category filtering.
+- [x] Supports dine-in and takeout.
+- [x] Supports table selection for dine-in/mixed orders.
+- [x] Supports cart quantity edits and item removal.
+- [x] Supports per-item notes/customizations.
+- [x] Supports senior/PWD/promo/custom discounts.
+- [x] Pay Now can complete the transaction immediately.
+- [x] Save and Continue to Payment creates an unpaid POS order and opens Payment.
+- [x] Uses IMS `POSOrder` without deducting stock until payment completion.
 
 ### Payment
 
-- [ ] Opens from `restaurant-payment`.
-- [ ] Can load a selected order via `orderId`.
-- [ ] Lists unpaid restaurant orders.
-- [ ] Allows payment method selection from POS settings.
-- [ ] Supports cash amount and change calculation.
-- [ ] Confirm Payment completes the IMS transaction.
-- [ ] After payment, navigates to `restaurant-receipt` with receipt context.
+- [x] Opens from `restaurant-payment`.
+- [x] Can load a selected order via `orderId`.
+- [x] Lists unpaid restaurant orders.
+- [x] Allows payment method selection from POS settings.
+- [x] Supports cash amount and change calculation.
+- [x] Confirm Payment completes the IMS transaction.
+- [x] After payment, navigates to `restaurant-receipt` with receipt context.
 
 ### Receipt
 
-- [ ] Opens from `restaurant-receipt`.
-- [ ] Can load a selected receipt via `receiptId` or `orderId`.
-- [ ] Shows printable receipt preview.
-- [ ] Supports receipt print.
-- [ ] Lists recent restaurant receipts for reprint/review.
+- [x] Opens from `restaurant-receipt`.
+- [x] Can load a selected receipt via `receiptId` or `orderId`.
+- [x] Shows printable receipt preview.
+- [x] Supports receipt print.
+- [x] Lists recent restaurant receipts for reprint/review.
 
 ### Order List
 
-- [ ] Opens from `restaurant-order-list`.
-- [ ] Lists restaurant POS orders.
-- [ ] Supports receipt review/reprint.
-- [ ] Supports refund for paid orders.
-- [ ] Supports void for unpaid orders.
+- [x] Opens from `restaurant-order-list`.
+- [x] Lists restaurant POS orders.
+- [x] Supports receipt review/reprint.
+- [x] Supports refund for paid orders.
+- [x] Supports void for unpaid orders.
 
 ### Kitchen Queue
 
-- [ ] Opens from `restaurant-kitchen-queue`.
-- [ ] Shows POS-linked kitchen tickets.
-- [ ] Keeps manual recipe deduction distinct from POS tickets.
-- [ ] Supports expected kitchen statuses.
+- [x] Opens from `restaurant-kitchen-queue`.
+- [x] Shows POS-linked kitchen tickets.
+- [x] Keeps manual recipe deduction distinct from POS tickets.
+- [x] Supports expected kitchen statuses.
 
 ### Table Management
 
-- [ ] Opens from `restaurant-table-management`.
-- [ ] Shows table status, capacity, location, and floor.
-- [ ] Supports create/edit/delete/status management.
-- [ ] Reflects occupied/released state from POS order lifecycle.
+- [x] Opens from `restaurant-table-management`.
+- [x] Shows table status, capacity, location, and floor.
+- [x] Supports create/edit/delete/status management.
+- [x] Reflects occupied/released state from POS order lifecycle.
 
 ## Retail POS
 
 ### Retail POS Dashboard
 
-- [ ] Opens from `pos-dashboard`.
-- [ ] New Order action opens `retail-create-order`.
-- [ ] Reports action opens `reports`.
-- [ ] Shows sales, orders, and payment/item signals.
+- [x] Opens from `pos-dashboard`.
+- [x] New Order action opens `retail-create-order`.
+- [x] Reports action opens `reports`.
+- [x] Shows sales, orders, and payment/item signals.
 
 ### Retail Create Order
 
-- [ ] Opens from `retail-create-order`.
-- [ ] Supports product search and category filtering.
-- [ ] Supports cart quantity edits and item removal.
-- [ ] Supports customer name and discount.
-- [ ] Completes checkout through IMS `POSOrder -> Payment -> Receipt -> Sale`.
-- [ ] Deducts stock only after payment completion.
-- [ ] Sale-complete modal can open the stored thermal receipt.
+- [x] Opens from `retail-create-order`.
+- [x] Supports product search and category filtering.
+- [x] Supports cart quantity edits and item removal.
+- [x] Supports customer name and discount.
+- [x] Completes checkout through IMS `POSOrder -> Payment -> Receipt -> Sale`.
+- [x] Deducts stock only after payment completion.
+- [x] Sale-complete modal can open the stored thermal receipt.
 
 ### Retail Order List
 
-- [ ] Opens from `retail-order-list`.
-- [ ] Lists retail POS orders.
-- [ ] Supports receipt review/reprint.
-- [ ] Supports refund for paid orders.
-- [ ] Supports void for unpaid orders if any exist.
+- [x] Opens from `retail-order-list`.
+- [x] Lists retail POS orders.
+- [x] Supports receipt review/reprint.
+- [x] Supports refund for paid orders.
+- [x] Supports void for unpaid orders if any exist.
 
 ### Retail Thermal Receipt
 
-- [ ] Opens from `retail-thermal-receipt`.
-- [ ] Can load selected receipt via `receiptId`.
-- [ ] Lists recent retail receipts.
-- [ ] Shows printable thermal receipt preview.
-- [ ] Supports print.
+- [x] Opens from `retail-thermal-receipt`.
+- [x] Can load selected receipt via `receiptId`.
+- [x] Lists recent retail receipts.
+- [x] Shows printable thermal receipt preview.
+- [x] Supports print.
 
 ### Retail Reports
 
-- [ ] Opens from `reports`.
-- [ ] Shows server-side summary, trend, item, payment, location, cashier, and order-type breakdowns.
-- [ ] Supports CSV export.
+- [x] Opens from `reports`.
+- [x] Shows server-side summary, trend, item, payment, location, cashier, and order-type breakdowns.
+- [x] Supports CSV export.
 
 ## Cross-Cutting
 
-- [ ] Role navigation lands cashiers on the correct POS workflow.
-- [ ] Old aliases remain non-breaking while POS-team screen names are adopted.
-- [ ] Screens use IMS API/auth/module scoping.
-- [ ] No Bukolabs raw SQL, Supabase config, duplicate UI kit, or backend runtime is imported.
+- [x] POS admin shell shows Bukolabs-style Dashboard, Staff Accounts, Transactions, Reports, Store, Temporary, and Logout navigation.
+- [x] Restaurant Staff Accounts opens from `restaurant-staff-accounts`.
+- [x] Retail Staff Accounts opens from `pos-staff-accounts`.
+- [x] Staff Accounts supports list, search, role/status filtering, create, edit, reset password, activate/deactivate, and delete through IMS `/api/users`.
+- [x] Role navigation lands cashiers on the correct POS workflow.
+- [x] Old aliases remain non-breaking while POS-team screen names are adopted.
+- [x] POS and inventory/admin screens are separated into distinct workspaces in the app shell.
+- [x] Screens use IMS API/auth/module scoping.
+- [x] No Bukolabs raw SQL, Supabase config, duplicate UI kit, or backend runtime is imported.
 - [ ] Final acceptance is tested with real migrated sample data.

@@ -19,6 +19,7 @@ import {
 import logoImage from '../imports/ims-logo.png';
 import LoginPage from './components/LoginPage';
 import { RestaurantLayout } from '../modules/restaurant/RestaurantLayout';
+import { POSShell } from '../modules/shared/pos/shell/POSShell';
 import { useSession } from './hooks/useSession';
 import { useViewNavigation, type ViewType } from './hooks/useViewNavigation';
 import { useRetailInventoryQuery } from '../modules/lib/retail';
@@ -48,6 +49,8 @@ const RestaurantPurchaseOrders = lazy(() => import('../modules/restaurant/Purcha
 const RestaurantGoodsReceived = lazy(() => import('../modules/restaurant/GoodsReceived').then(m => ({ default: m.GoodsReceived })));
 const RestaurantPOSDashboardView = lazy(() => import('../modules/restaurant/pos/dashboard/POSDashboardView'));
 const RestaurantPOSSettingsView = lazy(() => import('../modules/restaurant/pos/settings/POSSettingsView'));
+const POSStaffAccountsView = lazy(() => import('../modules/shared/pos/staff/POSStaffAccountsView'));
+const POSAdminManagementView = lazy(() => import('../modules/shared/pos/admin/POSAdminManagementView'));
 const RestaurantCreateOrderView = lazy(() => import('../modules/restaurant/pos/create-order/CreateOrderView'));
 const RestaurantPaymentView = lazy(() => import('../modules/restaurant/pos/payment/PaymentView'));
 const RestaurantReceiptView = lazy(() => import('../modules/restaurant/pos/receipt/ReceiptView'));
@@ -68,6 +71,7 @@ const retailViewRoles: Partial<Record<ViewType, string[]>> = {
   'product-management': ['Admin', 'Manager'],
   'pos-dashboard': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
   'pos-settings': ['Admin', 'Manager'],
+  'pos-staff-accounts': ['Admin'],
   pos: ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
   'retail-create-order': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
   'retail-order-list': ['Admin', 'Manager', 'Staff', 'Cashier', 'RetailStaff'],
@@ -95,6 +99,12 @@ const restaurantViewRoles: Partial<Record<ViewType, string[]>> = {
   'restaurant-goods-received': ['Admin', 'Manager', 'Staff'],
   'restaurant-pos-dashboard': ['Admin', 'Manager', 'Staff', 'Cashier', 'KitchenStaff'],
   'restaurant-pos-settings': ['Admin', 'Manager'],
+  'restaurant-staff-accounts': ['Admin'],
+  'restaurant-store-information': ['Admin'],
+  'restaurant-store-settings': ['Admin'],
+  'restaurant-pos-categories': ['Admin'],
+  'restaurant-pos-products': ['Admin'],
+  'restaurant-pos-ingredients': ['Admin'],
   'restaurant-pos-history': ['Admin', 'Manager', 'Staff', 'Cashier'],
   'restaurant-create-order': ['Admin', 'Manager', 'Staff', 'Cashier'],
   'restaurant-payment': ['Admin', 'Manager', 'Staff', 'Cashier'],
@@ -129,6 +139,23 @@ const restaurantDefaultViewByRole: Record<string, ViewType> = {
   RetailStaff: 'restaurant-dashboard',
 };
 
+const retailPOSViews = new Set<ViewType>([
+  'pos-dashboard',
+  'pos-settings',
+  'pos-staff-accounts',
+  'pos',
+  'retail-create-order',
+  'retail-order-list',
+  'retail-thermal-receipt',
+  'sales-history',
+  'reports',
+]);
+
+const retailPOSActiveViews: Partial<Record<ViewType, ViewType[]>> = {
+  'retail-create-order': ['retail-create-order', 'pos'],
+  'retail-order-list': ['retail-order-list', 'sales-history'],
+};
+
 function canAccessView(view: ViewType, role: string, module: 'RETAIL' | 'RESTAURANT') {
   const roles = module === 'RESTAURANT' ? restaurantViewRoles[view] : retailViewRoles[view];
   return Boolean(roles?.includes(role));
@@ -149,6 +176,7 @@ export default function App() {
   const [activeModule, setActiveModule] = useState<'RETAIL' | 'RESTAURANT'>('RETAIL');
   const resolvedActiveModule = hasRestaurantModule && !hasRetailModule ? 'RESTAURANT' : activeModule;
   const currentRole = currentUser?.role ?? 'Staff';
+  const isRetailPOSWorkspace = resolvedActiveModule === 'RETAIL' && retailPOSViews.has(currentView);
 
   const { data: navInventory = [] } = useRetailInventoryQuery(isLoggedIn && hasRetailModule);
   const retailNavStats = useMemo(
@@ -258,6 +286,18 @@ export default function App() {
           return <RestaurantPOSDashboardView onNavigate={(view) => navigateToView(view)} />;
         case 'restaurant-pos-settings':
           return <RestaurantPOSSettingsView />;
+        case 'restaurant-staff-accounts':
+          return <POSStaffAccountsView module="RESTAURANT" currentUser={currentUser} />;
+        case 'restaurant-store-information':
+          return <POSAdminManagementView module="RESTAURANT" page="store-information" />;
+        case 'restaurant-store-settings':
+          return <POSAdminManagementView module="RESTAURANT" page="store-settings" />;
+        case 'restaurant-pos-categories':
+          return <POSAdminManagementView module="RESTAURANT" page="categories" />;
+        case 'restaurant-pos-products':
+          return <POSAdminManagementView module="RESTAURANT" page="products" />;
+        case 'restaurant-pos-ingredients':
+          return <POSAdminManagementView module="RESTAURANT" page="ingredients" />;
         case 'restaurant-pos-history':
         case 'restaurant-order-list':
           return <RestaurantOrderListView />;
@@ -306,6 +346,56 @@ export default function App() {
     );
   }
 
+  const retailContent = (
+    <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
+      {currentView === 'dashboard' && (
+        <DashboardView />
+      )}
+      {currentView === 'stock-alerts' && (
+        <StockAlertsView />
+      )}
+      {currentView === 'inventory' && (
+        <InventoryView />
+      )}
+      {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
+      {currentView === 'pos-dashboard' && <RetailPOSDashboardView onNavigate={(view) => navigateToView(view)} />}
+      {currentView === 'pos-settings' && <RetailPOSSettingsView />}
+      {currentView === 'pos-staff-accounts' && <POSStaffAccountsView module="RETAIL" currentUser={currentUser} />}
+      {currentView === 'pos' && <POSView currentUser={currentUser} />}
+      {currentView === 'retail-create-order' && <RetailCreateOrderView currentUser={currentUser} />}
+      {currentView === 'retail-order-list' && <RetailOrderListView />}
+      {currentView === 'sales-history' && <RetailOrderListView />}
+      {currentView === 'retail-thermal-receipt' && <RetailReceiptView />}
+      {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
+      {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
+      {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
+      {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
+      {currentView === 'multilocation' && <MultilocationView />}
+      {currentView === 'reports' && (
+        <ReportsView />
+      )}
+      {currentView === 'user-management' && (
+        <UserManagementView
+          currentUser={currentUser}
+        />
+      )}
+    </Suspense>
+  );
+
+  if (isRetailPOSWorkspace) {
+    return (
+      <POSShell
+        module="RETAIL"
+        currentView={currentView}
+        user={currentUser}
+        onNavigate={(view) => navigateToView(view as ViewType)}
+        onLogout={handleLogout}
+      >
+        {retailContent}
+      </POSShell>
+    );
+  }
+
   return (
     <div className="bg-[#F8FAFB] h-screen w-screen overflow-hidden flex" style={{ fontFamily: 'Inter, sans-serif' }}>
       <div className="h-full w-[256px] flex flex-col" style={{ background: '#003534' }}>
@@ -343,110 +433,122 @@ export default function App() {
         <nav className="flex-1 px-6 pb-4 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {resolvedActiveModule === 'RETAIL' && (
             <>
-              {canAccessView('dashboard', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
-                  <DashboardIcon />
-                  Dashboard
-                </NavButton>
-              )}
-              {canAccessView('stock-alerts', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
-                  <StockAlertsIcon />
-                  Stock Alerts
-                  {retailNavStockAlerts.length > 0 && (
-                    <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
-                      {retailNavStockAlerts.length}
-                    </span>
+              <WorkspaceSwitchButton
+                isPOSWorkspace={isRetailPOSWorkspace}
+                onClick={() => navigateToView(isRetailPOSWorkspace ? 'dashboard' : 'pos-dashboard')}
+              />
+
+              {isRetailPOSWorkspace ? (
+                <>
+                  {canAccessView('pos-dashboard', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'pos-dashboard'} onClick={() => navigateToView('pos-dashboard')}>
+                      <DashboardIcon />
+                      Dashboard
+                    </NavButton>
                   )}
-                </NavButton>
-              )}
-              {canAccessView('inventory', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
-                  <InventoryIcon />
-                  Inventory
-                  {retailNavStats.totalItems > 0 && (
-                    <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
-                      {retailNavStats.totalItems}
-                    </span>
+                  {canAccessView('retail-create-order', currentRole, 'RETAIL') && (
+                    <NavButton active={(retailPOSActiveViews['retail-create-order'] ?? ['retail-create-order']).includes(currentView)} onClick={() => navigateToView('retail-create-order')}>
+                      <POSIcon />
+                      Create Order
+                    </NavButton>
                   )}
-                </NavButton>
-              )}
-              {canAccessView('product-management', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
-                  <ProductManagementIcon />
-                  Product Management
-                </NavButton>
-              )}
-              {canAccessView('pos-dashboard', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'pos-dashboard'} onClick={() => navigateToView('pos-dashboard')}>
-                  <DashboardIcon />
-                  POS Dashboard
-                </NavButton>
-              )}
-              {canAccessView('retail-create-order', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'retail-create-order' || currentView === 'pos'} onClick={() => navigateToView('retail-create-order')}>
-                  <POSIcon />
-                  Create Order
-                </NavButton>
-              )}
-              {canAccessView('pos-settings', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'pos-settings'} onClick={() => navigateToView('pos-settings')}>
-                  <Settings2 className="size-5" />
-                  POS Settings
-                </NavButton>
-              )}
-              {canAccessView('purchase-orders', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
-                  <PurchaseOrdersIcon />
-                  Purchase Orders
-                </NavButton>
-              )}
-              {canAccessView('products-received', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'products-received'} onClick={() => navigateToView('products-received')}>
-                  <ProductsReceivedIcon />
-                  Products Received
-                </NavButton>
-              )}
-              {canAccessView('item-bundling', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
-                  <ItemBundlingIcon />
-                  Item Bundling
-                </NavButton>
-              )}
-              {canAccessView('retail-order-list', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'retail-order-list' || currentView === 'sales-history'} onClick={() => navigateToView('retail-order-list')}>
-                  <SalesHistoryIcon />
-                  Order List
-                </NavButton>
-              )}
-              {canAccessView('retail-thermal-receipt', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'retail-thermal-receipt'} onClick={() => navigateToView('retail-thermal-receipt')}>
-                  <SalesHistoryIcon />
-                  Thermal Receipt
-                </NavButton>
-              )}
-              {canAccessView('transfers', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
-                  <TransfersIcon />
-                  Transfers
-                </NavButton>
-              )}
-              {canAccessView('multilocation', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
-                  <MultilocationIcon />
-                  Multilocation
-                </NavButton>
-              )}
-              {canAccessView('reports', currentRole, 'RETAIL') && (
-                <NavButton active={currentView === 'reports'} onClick={() => navigateToView('reports')}>
-                  <ReportsIcon />
-                  Reports
-                </NavButton>
+                  {canAccessView('retail-order-list', currentRole, 'RETAIL') && (
+                    <NavButton active={(retailPOSActiveViews['retail-order-list'] ?? ['retail-order-list']).includes(currentView)} onClick={() => navigateToView('retail-order-list')}>
+                      <SalesHistoryIcon />
+                      Transactions
+                    </NavButton>
+                  )}
+                  {canAccessView('retail-thermal-receipt', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'retail-thermal-receipt'} onClick={() => navigateToView('retail-thermal-receipt')}>
+                      <Receipt className="size-5" />
+                      Thermal Receipt
+                    </NavButton>
+                  )}
+                  {canAccessView('reports', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'reports'} onClick={() => navigateToView('reports')}>
+                      <ReportsIcon />
+                      Reports
+                    </NavButton>
+                  )}
+                  {canAccessView('pos-settings', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'pos-settings'} onClick={() => navigateToView('pos-settings')}>
+                      <Settings2 className="size-5" />
+                      POS Settings
+                    </NavButton>
+                  )}
+                </>
+              ) : (
+                <>
+                  {canAccessView('dashboard', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'dashboard'} onClick={() => navigateToView('dashboard')}>
+                      <DashboardIcon />
+                      Dashboard
+                    </NavButton>
+                  )}
+                  {canAccessView('stock-alerts', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'stock-alerts'} onClick={() => navigateToView('stock-alerts')}>
+                      <StockAlertsIcon />
+                      Stock Alerts
+                      {retailNavStockAlerts.length > 0 && (
+                        <span className="ml-auto bg-[#009BA5] text-white text-xs rounded-full px-2 py-0.5">
+                          {retailNavStockAlerts.length}
+                        </span>
+                      )}
+                    </NavButton>
+                  )}
+                  {canAccessView('inventory', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'inventory'} onClick={() => navigateToView('inventory')}>
+                      <InventoryIcon />
+                      Inventory
+                      {retailNavStats.totalItems > 0 && (
+                        <span className="ml-auto bg-[rgba(255,255,255,0.2)] text-white text-xs rounded-full px-2 py-0.5">
+                          {retailNavStats.totalItems}
+                        </span>
+                      )}
+                    </NavButton>
+                  )}
+                  {canAccessView('product-management', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'product-management'} onClick={() => navigateToView('product-management')}>
+                      <ProductManagementIcon />
+                      Product Management
+                    </NavButton>
+                  )}
+                  {canAccessView('purchase-orders', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'purchase-orders'} onClick={() => navigateToView('purchase-orders')}>
+                      <PurchaseOrdersIcon />
+                      Purchase Orders
+                    </NavButton>
+                  )}
+                  {canAccessView('products-received', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'products-received'} onClick={() => navigateToView('products-received')}>
+                      <ProductsReceivedIcon />
+                      Products Received
+                    </NavButton>
+                  )}
+                  {canAccessView('item-bundling', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'item-bundling'} onClick={() => navigateToView('item-bundling')}>
+                      <ItemBundlingIcon />
+                      Item Bundling
+                    </NavButton>
+                  )}
+                  {canAccessView('transfers', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'transfers'} onClick={() => navigateToView('transfers')}>
+                      <TransfersIcon />
+                      Transfers
+                    </NavButton>
+                  )}
+                  {canAccessView('multilocation', currentRole, 'RETAIL') && (
+                    <NavButton active={currentView === 'multilocation'} onClick={() => navigateToView('multilocation')}>
+                      <MultilocationIcon />
+                      Multilocation
+                    </NavButton>
+                  )}
+                </>
               )}
             </>
           )}
 
-          {currentUser?.role === 'Admin' && (
+          {currentUser?.role === 'Admin' && !isRetailPOSWorkspace && (
             <NavButton active={currentView === 'user-management'} onClick={() => navigateToView('user-management')}>
               <UserManagementIcon />
               User Management
@@ -489,41 +591,30 @@ export default function App() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-          <Suspense fallback={<div className="flex items-center justify-center h-full text-gray-400 text-sm">Loading...</div>}>
-            {currentView === 'dashboard' && (
-              <DashboardView />
-            )}
-            {currentView === 'stock-alerts' && (
-              <StockAlertsView />
-            )}
-            {currentView === 'inventory' && (
-              <InventoryView />
-            )}
-            {currentView === 'product-management' && <ProductManagementView currentUser={currentUser} />}
-            {currentView === 'pos-dashboard' && <RetailPOSDashboardView onNavigate={(view) => navigateToView(view)} />}
-            {currentView === 'pos-settings' && <RetailPOSSettingsView />}
-            {currentView === 'pos' && <POSView currentUser={currentUser} />}
-            {currentView === 'retail-create-order' && <RetailCreateOrderView currentUser={currentUser} />}
-            {currentView === 'retail-order-list' && <RetailOrderListView />}
-            {currentView === 'sales-history' && <RetailOrderListView />}
-            {currentView === 'retail-thermal-receipt' && <RetailReceiptView />}
-            {currentView === 'purchase-orders' && <PurchaseOrdersView currentUser={currentUser} />}
-            {currentView === 'products-received' && <ProductsReceivedView currentUser={currentUser} />}
-            {currentView === 'item-bundling' && <ItemBundlingView currentUser={currentUser} />}
-            {currentView === 'transfers' && <TransfersView currentUser={currentUser} />}
-            {currentView === 'multilocation' && <MultilocationView />}
-            {currentView === 'reports' && (
-              <ReportsView />
-            )}
-            {currentView === 'user-management' && (
-              <UserManagementView
-                currentUser={currentUser}
-              />
-            )}
-          </Suspense>
+          {retailContent}
         </div>
       </div>
     </div>
+  );
+}
+
+function WorkspaceSwitchButton({
+  isPOSWorkspace,
+  onClick,
+}: {
+  isPOSWorkspace: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-3 mt-2 flex w-full items-center justify-center gap-2 rounded-[10px] border border-[rgba(255,255,255,0.16)] bg-[rgba(255,255,255,0.08)] px-3 py-2.5 text-[14px] font-semibold text-white transition-colors hover:bg-[rgba(255,255,255,0.14)]"
+      style={{ fontFamily: 'Inter, sans-serif' }}
+    >
+      {isPOSWorkspace ? <Package className="size-4" /> : <Store className="size-4" />}
+      {isPOSWorkspace ? 'Inventory Workspace' : 'POS Workspace'}
+    </button>
   );
 }
 

@@ -9,6 +9,7 @@ import {
   getBundles,
   getDiningTables,
   getGoodsReceipts,
+  getIngredientAlternatives,
   getInventory,
   getKitchenOrders,
   getLocations,
@@ -42,6 +43,7 @@ import type {
   ApiBusinessSetting,
   ApiDiningTable,
   ApiGoodsReceipt,
+  ApiIngredientAlternative,
   ApiInventoryItem,
   ApiKitchenOrder,
   ApiLocation,
@@ -92,6 +94,7 @@ export const domainQueryKeys = {
   payments: ['payments'] as const,
   receipts: ['receipts'] as const,
   reports: ['reports'] as const,
+  ingredientAlternatives: ['ingredient-alternatives'] as const,
 };
 
 const domainInvalidationDependencies = new Map<string, QueryKey[]>([
@@ -136,6 +139,7 @@ const domainInvalidationDependencies = new Map<string, QueryKey[]>([
   ['reports', [domainQueryKeys.sales]],
   ['bundles', [domainQueryKeys.inventory]],
   ['recipes', [domainQueryKeys.kitchenOrders]],
+  ['ingredient-alternatives', [domainQueryKeys.inventory]],
   ['kitchen-orders', [
     domainQueryKeys.inventory,
     domainQueryKeys.stockMovements,
@@ -452,6 +456,16 @@ export function useRecipesQuery<TData = ApiRecipe[]>(
   return useQuery({
     queryKey: [...domainQueryKeys.recipes, params ?? {}],
     queryFn: () => getRecipes(params),
+    ...options,
+  });
+}
+
+export function useIngredientAlternativesQuery<TData = ApiIngredientAlternative[]>(
+  options?: SelectOptions<ApiIngredientAlternative[], TData>,
+) {
+  return useQuery({
+    queryKey: domainQueryKeys.ingredientAlternatives,
+    queryFn: getIngredientAlternatives,
     ...options,
   });
 }

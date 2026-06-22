@@ -3,6 +3,7 @@ import type {
   ApiCategory,
   ApiDiningTable,
   ApiGoodsReceipt,
+  ApiIngredientAlternative,
   ApiInventoryItem,
   ApiKitchenOrder,
   ApiLocation,
@@ -188,6 +189,30 @@ export function deleteRecipe(id: string) {
   });
 }
 
+export function getIngredientAlternatives() {
+  return request<ApiIngredientAlternative[]>('/api/ingredient-alternatives');
+}
+
+export function createIngredientAlternative(data: unknown) {
+  return request<ApiIngredientAlternative>('/api/ingredient-alternatives', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateIngredientAlternative(id: string, data: unknown) {
+  return request<ApiIngredientAlternative>(`/api/ingredient-alternatives/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteIngredientAlternative(id: string) {
+  return request<ApiIngredientAlternative>(`/api/ingredient-alternatives/${id}`, {
+    method: 'DELETE',
+  });
+}
+
 export function getKitchenOrders(params?: { status?: KitchenOrderStatus }) {
   const query = new URLSearchParams();
   if (params?.status) query.set('status', params.status);
@@ -317,6 +342,19 @@ export function createCategory(data: unknown) {
   return request<ApiCategory>('/api/categories', {
     method: 'POST',
     body: JSON.stringify(data),
+  });
+}
+
+export function updateCategory(id: string, data: unknown) {
+  return request<ApiCategory>(`/api/categories/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteCategory(id: string) {
+  return request<void>(`/api/categories/${id}`, {
+    method: 'DELETE',
   });
 }
 

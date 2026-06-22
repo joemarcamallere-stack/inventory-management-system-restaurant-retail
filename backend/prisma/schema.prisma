@@ -73,6 +73,7 @@ model Business {
   posOrders          POSOrder[]
   payments           Payment[]
   receipts           Receipt[]
+  ingredientAlternatives IngredientAlternative[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 }
@@ -259,6 +260,8 @@ model InventoryItem {
   stockMovements     StockMovement[]
   recipeIngredients  RecipeIngredient[]
   menuRecipes        Recipe[]              @relation("RecipeMenuItem")
+  ingredientAlternativeParents IngredientAlternative[] @relation("IngredientAlternativeParent")
+  ingredientAlternativeReplacements IngredientAlternative[] @relation("IngredientAlternativeReplacement")
   purchaseOrderItems PurchaseOrderItem[]
   goodsReceiptItems  GoodsReceiptItem[]
   transferItems      TransferItem[]
@@ -325,6 +328,25 @@ model RecipeIngredient {
 
   @@unique([recipeId, itemId])
   @@index([itemId])
+}
+
+model IngredientAlternative {
+  id                      String        @id @default(uuid())
+  parentIngredientId      String
+  parentIngredient        InventoryItem @relation("IngredientAlternativeParent", fields: [parentIngredientId], references: [id], onDelete: Cascade)
+  alternativeIngredientId String
+  alternativeIngredient   InventoryItem @relation("IngredientAlternativeReplacement", fields: [alternativeIngredientId], references: [id], onDelete: Cascade)
+  additionalPrice         Float         @default(0)
+  isAvailable             Boolean       @default(true)
+  businessId              String
+  business                Business      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+
+  @@unique([businessId, parentIngredientId, alternativeIngredientId])
+  @@index([businessId])
+  @@index([parentIngredientId])
+  @@index([alternativeIngredientId])
 }
 
 enum DiningTableStatus {

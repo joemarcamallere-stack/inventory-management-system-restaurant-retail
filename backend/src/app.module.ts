@@ -27,6 +27,7 @@ import { POSSettingsModule } from './pos-settings/pos-settings.module';
 import { POSOrdersModule } from './pos-orders/pos-orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ReceiptsModule } from './receipts/receipts.module';
+import { IngredientAlternativesModule } from './ingredient-alternatives/ingredient-alternatives.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { ReceiptsModule } from './receipts/receipts.module';
     POSOrdersModule,
     PaymentsModule,
     ReceiptsModule,
+    IngredientAlternativesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
